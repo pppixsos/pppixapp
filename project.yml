@@ -72,8 +72,6 @@ targets:
         product: FirebaseCore
       - package: Firebase
         product: FirebaseMessaging
-      - target: PPPIXBlockExtension
-      - target: PPPIXActivityMonitor
 
     settings:
       base:
@@ -140,7 +138,18 @@ targets:
         DEVELOPMENT_TEAM: ""
 
 schemes:
+  # Scheme principal - SEM extensões (para build no simulador)
   PPPIX:
+    build:
+      targets:
+        PPPIX: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+  # Scheme completo - COM extensões (para build no device real)
+  PPPIX-Full:
     build:
       targets:
         PPPIX: all
