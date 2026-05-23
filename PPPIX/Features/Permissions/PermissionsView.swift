@@ -14,7 +14,6 @@ struct PermissionsView: View {
             ScrollView {
                 VStack(spacing: 16) {
 
-                    // Header
                     VStack(spacing: 8) {
                         Image(systemName: "checkmark.shield.fill")
                             .font(.system(size: 44))
@@ -34,7 +33,6 @@ struct PermissionsView: View {
                     }
                     .padding(.top, 8)
 
-                    // Permissões iOS
                     PermissionRow(
                         icon: "bell.badge.fill",
                         color: Color(hex: "#FF6600"),
@@ -59,9 +57,11 @@ struct PermissionsView: View {
                         title: "Localização em Background",
                         description: "Permite enviar posição mesmo com tela bloqueada",
                         status: viewModel.locationBgStatus,
+                        actionLabel: "Ajustes",
                         onGrant: { viewModel.requestLocationAlways() }
                     )
 
+                    #if !targetEnvironment(simulator)
                     PermissionRow(
                         icon: "hourglass",
                         color: Color(hex: "#6633FF"),
@@ -70,6 +70,7 @@ struct PermissionsView: View {
                         status: viewModel.screenTimeStatus,
                         onGrant: { Task { await viewModel.requestScreenTime() } }
                     )
+                    #endif
 
                     PermissionRow(
                         icon: "arrow.clockwise.circle.fill",
@@ -85,7 +86,6 @@ struct PermissionsView: View {
                         }
                     )
 
-                    // Declaração de privacidade
                     Button {
                         showDisclosure = true
                     } label: {
@@ -117,22 +117,10 @@ struct PermissionsView: View {
             }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("""
-O PPPIX usa o Screen Time EXCLUSIVAMENTE para bloquear apps que você mesmo selecionar.
-
-A localização GPS é coletada SOMENTE quando você aciona a senha de emergência, para envio aos seus contatos de confiança.
-
-O app NÃO lê, monitora ou transmite o conteúdo de outros aplicativos.
-
-Seus dados nunca são vendidos ou compartilhados com terceiros.
-
-Política de privacidade: privacidade.pppix.online
-""")
+            Text("O PPPIX usa o Screen Time EXCLUSIVAMENTE para bloquear apps que você mesmo selecionar. A localização é coletada SOMENTE no alerta de emergência. Seus dados nunca são vendidos.")
         }
     }
 }
-
-// MARK: - PermissionRow
 
 private struct PermissionRow: View {
     let icon: String
@@ -187,8 +175,6 @@ private struct PermissionRow: View {
     }
 }
 
-// MARK: - ViewModel
-
 enum PermissionStatus { case granted, pending, denied }
 
 @MainActor
@@ -219,13 +205,17 @@ final class PermissionsViewModel: ObservableObject {
 
     private func checkLocation() {
         let status = locationManager.authorizationStatus
-        locationStatus = (status == .authorizedWhenInUse || status == .authorizedAlways) ? .granted : .pending
+        locationStatus   = (status == .authorizedWhenInUse || status == .authorizedAlways) ? .granted : .pending
         locationBgStatus = status == .authorizedAlways ? .granted : .pending
     }
 
     private func checkScreenTime() {
+        #if !targetEnvironment(simulator)
         let authStatus = AuthorizationCenter.shared.authorizationStatus
         screenTimeStatus = authStatus == .approved ? .granted : .pending
+        #else
+        screenTimeStatus = .pending
+        #endif
     }
 
     private func checkBackgroundRefresh() {
@@ -241,9 +231,7 @@ final class PermissionsViewModel: ObservableObject {
 
     func requestLocation() {
         locationManager.requestWhenInUseAuthorization()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            self.checkLocation()
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.checkLocation() }
     }
 
     func requestLocationAlways() {
@@ -253,9 +241,13 @@ final class PermissionsViewModel: ObservableObject {
     }
 
     func requestScreenTime() async {
+        #if !targetEnvironment(simulator)
         await ScreenTimeManager.shared.requestAuthorization()
         checkScreenTime()
+        #endif
     }
 }
 
+#if !targetEnvironment(simulator)
 import FamilyControls
+#endif
