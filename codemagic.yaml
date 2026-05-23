@@ -1,0 +1,43 @@
+workflows:
+  ios-build:
+    name: PPPIX iOS Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+
+    environment:
+      xcode: 15.4
+      cocoapods: default
+
+    scripts:
+      - name: Instalar XcodeGen
+        script: brew install xcodegen
+
+      - name: Gerar .xcodeproj
+        script: xcodegen generate --spec project.yml
+
+      - name: Instalar dependências SPM
+        script: |
+          xcodebuild -resolvePackageDependencies \
+            -project PPPIX.xcodeproj \
+            -scheme PPPIX
+
+      - name: Build para simulador (teste)
+        script: |
+          xcodebuild \
+            -project PPPIX.xcodeproj \
+            -scheme PPPIX \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -configuration Debug \
+            build \
+            CODE_SIGNING_ALLOWED=NO
+
+    artifacts:
+      - build/**/*.app
+
+    publishing:
+      email:
+        recipients:
+          - pixpppapp@gmail.com
+        notify:
+          success: true
+          failure: true
