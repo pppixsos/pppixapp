@@ -13,10 +13,12 @@ struct PPPIXTextField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(Color(white: 0.6))
+            if !title.isEmpty {
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(white: 0.6))
+            }
 
             TextField(placeholder, text: $text)
                 .keyboardType(keyboardType)
@@ -49,10 +51,12 @@ struct PPPIXSecureField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(Color(white: 0.6))
+            if !title.isEmpty {
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(white: 0.6))
+            }
 
             HStack {
                 Group {
@@ -109,7 +113,7 @@ struct PPPIXButton: View {
                 } else {
                     Text(title)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(style == .secondary ? Color(hex: "#3366FF") : .white)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -126,20 +130,17 @@ struct PPPIXButton: View {
         case .primary:
             return LinearGradient(
                 colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                startPoint: .leading,
-                endPoint: .trailing
+                startPoint: .leading, endPoint: .trailing
             )
         case .secondary:
             return LinearGradient(
-                colors: [Color(hex: "#1A1A2E"), Color(hex: "#1A1A2E")],
-                startPoint: .leading,
-                endPoint: .trailing
+                colors: [Color(hex: "#141422"), Color(hex: "#141422")],
+                startPoint: .leading, endPoint: .trailing
             )
         case .destructive:
             return LinearGradient(
                 colors: [Color(hex: "#FF3333"), Color(hex: "#CC0000")],
-                startPoint: .leading,
-                endPoint: .trailing
+                startPoint: .leading, endPoint: .trailing
             )
         }
     }
@@ -163,19 +164,6 @@ struct PPPIXCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(Color(white: 0.1), lineWidth: 1)
             )
-    }
-}
-
-// MARK: - Loading overlay
-
-struct LoadingOverlay: View {
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea()
-            ProgressView()
-                .tint(.white)
-                .scaleEffect(1.5)
-        }
     }
 }
 
@@ -217,9 +205,9 @@ extension Color {
         }
         self.init(
             .sRGB,
-            red:   Double(r) / 255,
+            red: Double(r) / 255,
             green: Double(g) / 255,
-            blue:  Double(b)  / 255,
+            blue: Double(b) / 255,
             opacity: Double(a) / 255
         )
     }
