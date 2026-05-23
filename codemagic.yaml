@@ -15,11 +15,12 @@ workflows:
       - name: Gerar .xcodeproj
         script: xcodegen generate --spec project.yml
 
-      - name: Instalar dependências SPM
+      - name: Resolver pacotes SPM
         script: |
-          xcodebuild -resolvePackageDependencies \
-            -project PPPIX.xcodeproj \
-            -scheme PPPIX
+          xcodebuild -project PPPIX.xcodeproj \
+            -scheme PPPIX \
+            -resolvePackageDependencies \
+            -derivedDataPath DerivedData
 
       - name: Build para simulador (teste)
         script: |
@@ -28,11 +29,12 @@ workflows:
             -scheme PPPIX \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             -configuration Debug \
+            -derivedDataPath DerivedData \
             build \
             CODE_SIGNING_ALLOWED=NO
 
     artifacts:
-      - build/**/*.app
+      - DerivedData/Build/**/*.app
 
     publishing:
       email:
