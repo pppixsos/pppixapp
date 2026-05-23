@@ -30,7 +30,7 @@ struct LockScreenView: View {
                             )
                         )
 
-                    Text(""\(appName)" está bloqueado")
+                    Text("\(appName) esta bloqueado")
                         .font(.title3.bold())
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)

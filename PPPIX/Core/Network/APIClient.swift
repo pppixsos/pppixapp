@@ -142,11 +142,7 @@ final class APIClient {
     }
 
     private func UIDeviceName() -> String {
-        #if os(iOS)
-        return UIKit.UIDevice.current.name
-        #else
-        return "iOS Device"
-        #endif
+        return "iPhone"
     }
 
     // MARK: - HTTP Primitives

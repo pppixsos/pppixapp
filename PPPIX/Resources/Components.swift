@@ -33,7 +33,7 @@ struct PPPIXTextField: View {
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(Color(white: 0.15), lineWidth: 1)
                 )
-                .onChange(of: text) { _, newValue in
+                .onChange(of: text) { newValue in
                     onChange?(newValue)
                 }
         }
