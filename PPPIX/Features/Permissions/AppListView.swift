@@ -1,16 +1,11 @@
 import SwiftUI
-import FamilyControls
-import ManagedSettings
 
 struct AppListView: View {
 
-    @StateObject private var screenTime = ScreenTimeManager.shared
-    @State private var showPicker = false
-    @State private var activitySelection = FamilyActivitySelection()
-    @State private var isAuthorizing = false
     @State private var errorMessage = ""
     @State private var showPrivacyDisclosure = false
     @State private var savedSelection = false
+    @State private var isAuthorizing = false
 
     var body: some View {
         ZStack {
@@ -19,7 +14,6 @@ struct AppListView: View {
             ScrollView {
                 VStack(spacing: 20) {
 
-                    // Header
                     VStack(spacing: 8) {
                         Image(systemName: "apps.iphone.badge.plus")
                             .font(.system(size: 44))
@@ -39,49 +33,45 @@ struct AppListView: View {
                     }
                     .padding(.top, 8)
 
-                    // Como funciona
-                    HowItWorksCard()
+                    PPPIXCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Como funciona", systemImage: "info.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(Color(hex: "#3366FF"))
 
-                    // Status Screen Time
-                    ScreenTimeStatusCard(
-                        isAuthorized: screenTime.isAuthorized,
-                        isAuthorizing: isAuthorizing
-                    ) {
-                        Task { await requestAuthorization() }
-                    }
-
-                    if screenTime.isAuthorized {
-                        // Botão selecionar apps
-                        PPPIXButton(title: "Selecionar Apps para Proteger") {
-                            showPrivacyDisclosure = true
-                        }
-
-                        if savedSelection {
-                            HStack(spacing: 8) {
-                                Image(systemName: "checkmark.shield.fill")
-                                    .foregroundColor(Color(hex: "#44FF88"))
-                                Text("Proteção ativa! Os apps selecionados estão protegidos com senha.")
-                                    .font(.footnote)
-                                    .foregroundColor(Color(hex: "#44FF88"))
+                            VStack(alignment: .leading, spacing: 8) {
+                                HowItWorksStep(number: "1", text: "Você seleciona os apps financeiros que deseja proteger")
+                                HowItWorksStep(number: "2", text: "Ao tentar abrir o app, o iOS exibe uma tela de bloqueio")
+                                HowItWorksStep(number: "3", text: "O app só abre após digitar a senha correta no PPPIX")
                             }
-                            .padding(12)
-                            .background(Color(hex: "#44FF88").opacity(0.1))
-                            .cornerRadius(10)
-                        }
-
-                        // Remover bloqueios
-                        PPPIXButton(title: "Remover Todos os Bloqueios", style: .destructive) {
-                            screenTime.unblockAll()
-                            savedSelection = false
-                            activitySelection = FamilyActivitySelection()
                         }
                     }
 
-                    if !errorMessage.isEmpty {
-                        ErrorBanner(message: errorMessage)
+                    #if targetEnvironment(simulator)
+                    PPPIXCard {
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(Color(hex: "#FF9900"))
+                                .font(.system(size: 32))
+                            Text("Simulador detectado")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            Text("O Screen Time (bloqueio de apps) só funciona em iPhone físico. No dispositivo real você poderá selecionar os apps para proteger.")
+                                .font(.caption)
+                                .foregroundColor(Color(white: 0.6))
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.vertical, 8)
                     }
+                    #else
+                    ScreenTimeSection(
+                        isAuthorizing: $isAuthorizing,
+                        savedSelection: $savedSelection,
+                        showPrivacyDisclosure: $showPrivacyDisclosure,
+                        errorMessage: $errorMessage
+                    )
+                    #endif
 
-                    // Nota sobre iOS
                     iOSNoteCard()
 
                     Spacer(minLength: 32)
@@ -92,54 +82,6 @@ struct AppListView: View {
         }
         .navigationTitle("Apps Protegidos")
         .navigationBarTitleDisplayMode(.inline)
-        .familyActivityPicker(isPresented: $showPicker, selection: $activitySelection)
-        .onChange(of: activitySelection) { _, newSelection in
-            screenTime.blockApps(newSelection)
-            savedSelection = true
-        }
-        .alert("Declaração de Privacidade", isPresented: $showPrivacyDisclosure) {
-            Button("Entendi e Aceito") { showPicker = true }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("O PPPIX usa o Screen Time do iOS EXCLUSIVAMENTE para bloquear os apps que você mesmo selecionar. O app não lê, monitora ou transmite o conteúdo de outros aplicativos. Seus dados nunca são vendidos ou compartilhados.")
-        }
-        .task {
-            checkAuthorizationStatus()
-        }
-    }
-
-    private func checkAuthorizationStatus() {
-        let status = AuthorizationCenter.shared.authorizationStatus
-        screenTime.isAuthorized = (status == .approved)
-    }
-
-    private func requestAuthorization() async {
-        isAuthorizing = true
-        await screenTime.requestAuthorization()
-        isAuthorizing = false
-        if !screenTime.isAuthorized {
-            errorMessage = "Permissão negada. Vá em Ajustes > Tempo de Uso para conceder."
-        }
-    }
-}
-
-// MARK: - Sub-views
-
-private struct HowItWorksCard: View {
-    var body: some View {
-        PPPIXCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Como funciona", systemImage: "info.circle.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Color(hex: "#3366FF"))
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HowItWorksStep(number: "1", text: "Você seleciona os apps financeiros que deseja proteger")
-                    HowItWorksStep(number: "2", text: "Ao tentar abrir o app, o iOS exibe uma tela de bloqueio")
-                    HowItWorksStep(number: "3", text: "O app só abre após digitar a senha correta no PPPIX")
-                }
-            }
-        }
     }
 }
 
@@ -161,50 +103,6 @@ private struct HowItWorksStep: View {
     }
 }
 
-private struct ScreenTimeStatusCard: View {
-    let isAuthorized: Bool
-    let isAuthorizing: Bool
-    let onRequest: () -> Void
-
-    var body: some View {
-        PPPIXCard {
-            HStack(spacing: 14) {
-                Image(systemName: isAuthorized ? "checkmark.shield.fill" : "shield.slash.fill")
-                    .font(.system(size: 32))
-                    .foregroundColor(isAuthorized ? Color(hex: "#44FF88") : Color(hex: "#FF6600"))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Screen Time (Tempo de Uso)")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                    Text(isAuthorized ? "Autorizado ✓ — Pronto para bloquear apps" : "Necessário para bloquear apps")
-                        .font(.caption)
-                        .foregroundColor(isAuthorized ? Color(hex: "#44FF88") : Color(white: 0.5))
-                }
-                Spacer()
-
-                if !isAuthorized {
-                    Button {
-                        onRequest()
-                    } label: {
-                        if isAuthorizing {
-                            ProgressView().tint(.white).scaleEffect(0.8)
-                        } else {
-                            Text("Autorizar")
-                                .font(.caption.bold())
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color(hex: "#3366FF"))
-                                .cornerRadius(8)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 private struct iOSNoteCard: View {
     var body: some View {
         PPPIXCard {
@@ -212,10 +110,115 @@ private struct iOSNoteCard: View {
                 Label("Diferença do Android", systemImage: "apple.logo")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(Color(white: 0.7))
-                Text("No iOS, o bloqueio usa o Screen Time da Apple (mesmo sistema do controle parental). Quando você tenta abrir um app protegido, o iOS exibe uma tela com opção de abrir o PPPIX para digitar a senha.")
+                Text("No iOS, o bloqueio usa o Screen Time da Apple. Quando você tenta abrir um app protegido, o iOS exibe uma tela com opção de abrir o PPPIX para digitar a senha.")
                     .font(.caption)
                     .foregroundColor(Color(white: 0.5))
             }
         }
     }
 }
+
+#if !targetEnvironment(simulator)
+import FamilyControls
+import ManagedSettings
+
+private struct ScreenTimeSection: View {
+    @Binding var isAuthorizing: Bool
+    @Binding var savedSelection: Bool
+    @Binding var showPrivacyDisclosure: Bool
+    @Binding var errorMessage: String
+
+    @StateObject private var screenTime = ScreenTimeManager.shared
+    @State private var activitySelection = FamilyActivitySelection()
+
+    var body: some View {
+        VStack(spacing: 12) {
+            // Status
+            PPPIXCard {
+                HStack(spacing: 14) {
+                    Image(systemName: screenTime.isAuthorized ? "checkmark.shield.fill" : "shield.slash.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(screenTime.isAuthorized ? Color(hex: "#44FF88") : Color(hex: "#FF6600"))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Screen Time")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text(screenTime.isAuthorized ? "Autorizado ✓" : "Necessário para bloquear apps")
+                            .font(.caption)
+                            .foregroundColor(screenTime.isAuthorized ? Color(hex: "#44FF88") : Color(white: 0.5))
+                    }
+                    Spacer()
+
+                    if !screenTime.isAuthorized {
+                        Button {
+                            Task { await requestAuth() }
+                        } label: {
+                            if isAuthorizing {
+                                ProgressView().tint(.white).scaleEffect(0.8)
+                            } else {
+                                Text("Autorizar")
+                                    .font(.caption.bold())
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color(hex: "#3366FF"))
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if screenTime.isAuthorized {
+                PPPIXButton(title: "Selecionar Apps para Proteger") {
+                    showPrivacyDisclosure = true
+                }
+
+                if savedSelection {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .foregroundColor(Color(hex: "#44FF88"))
+                        Text("Proteção ativa!")
+                            .font(.footnote)
+                            .foregroundColor(Color(hex: "#44FF88"))
+                    }
+                    .padding(12)
+                    .background(Color(hex: "#44FF88").opacity(0.1))
+                    .cornerRadius(10)
+                }
+
+                PPPIXButton(title: "Remover Todos os Bloqueios", style: .destructive) {
+                    screenTime.unblockAll()
+                    savedSelection = false
+                }
+            }
+
+            if !errorMessage.isEmpty {
+                ErrorBanner(message: errorMessage)
+            }
+        }
+        .familyActivityPicker(isPresented: $showPrivacyDisclosure, selection: $activitySelection)
+        .onChange(of: activitySelection) { _, newSelection in
+            screenTime.blockApps(newSelection)
+            savedSelection = true
+        }
+        .task { screenTime.isAuthorized = AuthorizationCenter.shared.authorizationStatus == .approved }
+        .alert("Declaração de Privacidade", isPresented: $showPrivacyDisclosure) {
+            Button("Entendi e Aceito") {}
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("O PPPIX usa o Screen Time EXCLUSIVAMENTE para bloquear os apps que você mesmo selecionar.")
+        }
+    }
+
+    private func requestAuth() async {
+        isAuthorizing = true
+        await screenTime.requestAuthorization()
+        isAuthorizing = false
+        if !screenTime.isAuthorized {
+            errorMessage = "Permissão negada. Vá em Ajustes > Tempo de Uso."
+        }
+    }
+}
+#endif
