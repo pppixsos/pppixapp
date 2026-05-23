@@ -1,8 +1,6 @@
 import SwiftUI
+import CoreLocation
 
-/// Equivalente ao LockScreenActivity.kt do Android.
-/// No iOS é apresentado como tela de desbloqueio quando o usuário abre o PPPIX
-/// após tentar abrir um app bloqueado pelo Screen Time.
 struct LockScreenView: View {
 
     @Environment(\.dismiss) private var dismiss
@@ -16,13 +14,11 @@ struct LockScreenView: View {
 
     var body: some View {
         ZStack {
-            // Dark background
             Color(hex: "#05050F").ignoresSafeArea()
 
             VStack(spacing: 32) {
                 Spacer()
 
-                // Lock icon
                 VStack(spacing: 16) {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 56))
@@ -44,7 +40,6 @@ struct LockScreenView: View {
                         .foregroundColor(Color(white: 0.5))
                 }
 
-                // Password field
                 VStack(spacing: 16) {
                     PPPIXSecureField(
                         title: "Senha",
@@ -90,17 +85,14 @@ struct LockScreenView: View {
 
                 Spacer()
 
-                // Footer
                 Text("PPPIX • Segurança Financeira")
                     .font(.caption2)
                     .foregroundColor(Color(white: 0.2))
                     .padding(.bottom, 20)
             }
         }
-        .interactiveDismissDisabled() // Não permite fechar por swipe
+        .interactiveDismissDisabled()
     }
-
-    // MARK: - Verify
 
     private func verifyPassword() async {
         guard !password.isEmpty else {
@@ -111,7 +103,6 @@ struct LockScreenView: View {
         isLoading = true
         errorMessage = ""
 
-        // Pega localização
         let coord = await LocationService.shared.getCurrentLocation()
 
         do {
@@ -123,25 +114,21 @@ struct LockScreenView: View {
 
             switch resp.action {
             case "open_bank":
-                // Senha correta — desbloqueia normalmente
                 onUnlocked?()
                 dismiss()
 
             case "open_ppix":
-                // Abre configurações do PPPIX
                 onUnlocked?()
                 dismiss()
                 NotificationCenter.default.post(name: .openPPPIXSettings, object: nil)
 
             case "open_bank_alert":
-                // Senha de emergência — desbloqueia + envia alerta silencioso
                 onUnlocked?()
                 sendSilentAlert(coord: coord)
                 dismiss()
 
             default:
                 if resp.limitExceeded {
-                    // Backend já enviou alerta por excesso de tentativas
                     onUnlocked?()
                     dismiss()
                 } else {
@@ -158,31 +145,21 @@ struct LockScreenView: View {
         isLoading = false
     }
 
-    // MARK: - Silent Alert (idêntico ao sendSilentAlert do Android)
-
     private func sendSilentAlert(coord: CLLocationCoordinate2D?) {
         let myEmail = SessionManager.shared.userEmail
         let userName = SessionManager.shared.userName
 
         Task {
             do {
-                // 1. Contatos aceitos
                 let connections = (try? await APIClient.shared.getAcceptedConnections()) ?? []
                 let recipientIds = connections.map { $0.userId(myEmail: myEmail) }.filter { $0 > 0 }
 
-                // 2. Veículo ativo
                 let vehicles = (try? await APIClient.shared.getVehicles()) ?? []
                 let vehicle = vehicles.first(where: { $0.is_active }) ?? vehicles.first
                 let vehiclePayload = vehicle.map {
-                    VehicleInfoPayload(
-                        model: $0.model,
-                        license_plate: $0.license_plate,
-                        color: $0.color,
-                        year: $0.year
-                    )
+                    VehicleInfoPayload(model: $0.model, license_plate: $0.license_plate, color: $0.color, year: $0.year)
                 }
 
-                // 3. Monta e envia
                 let body = SendAlertRequest(
                     alert_type: "emergency_password",
                     priority: "critical",
@@ -196,16 +173,11 @@ struct LockScreenView: View {
                     ),
                     recipient_ids: recipientIds
                 )
-
                 _ = try await APIClient.shared.sendAlert(body: body)
-            } catch {
-                // Alerta silencioso — falha silenciosa
-            }
+            } catch {}
         }
     }
 }
-
-import CoreLocation
 
 extension Notification.Name {
     static let openPPPIXSettings = Notification.Name("pppix.openSettings")
