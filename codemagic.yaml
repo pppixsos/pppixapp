@@ -22,7 +22,7 @@ workflows:
             -resolvePackageDependencies \
             -derivedDataPath DerivedData
 
-    - name: Build para simulador (teste)
+      - name: Build para simulador (teste)
         script: |
           xcodebuild \
             -project PPPIX.xcodeproj \
