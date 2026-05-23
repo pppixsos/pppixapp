@@ -21,17 +21,17 @@ workflows:
             -scheme PPPIX \
             -resolvePackageDependencies
 
-      - name: Build para simulador (teste)
+      - name: Build para device (sem assinar)
         script: |
           xcodebuild \
             -project PPPIX.xcodeproj \
             -scheme PPPIX \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'generic/platform=iOS' \
             -configuration Debug \
-            ONLY_ACTIVE_ARCH=YES \
             build \
             CODE_SIGNING_ALLOWED=NO \
-            SKIP_INSTALL=NO
+            CODE_SIGNING_REQUIRED=NO \
+            ONLY_ACTIVE_ARCH=NO
 
     artifacts:
       - ~/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
