@@ -28,12 +28,18 @@ workflows:
             -scheme PPPIX \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             -configuration Debug \
+            -derivedDataPath build \
             build \
-            CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Zipar .app
+        script: |
+          APP=$(find build -name "*.app" | head -1)
+          echo "App encontrado: $APP"
+          zip -r PPPIX_simulator.zip "$APP"
 
     artifacts:
-      - build.log
+      - PPPIX_simulator.zip
 
     publishing:
       email:
