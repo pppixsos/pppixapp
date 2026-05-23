@@ -1,6 +1,5 @@
 import CoreLocation
 
-/// Equivalente ao getLocation() suspendCancellableCoroutine do Android.
 final class LocationService: NSObject {
 
     static let shared = LocationService()
@@ -8,8 +7,6 @@ final class LocationService: NSObject {
 
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
-
-    // MARK: - One-shot location fetch
 
     func getCurrentLocation() async -> CLLocationCoordinate2D? {
         guard CLLocationManager.locationServicesEnabled() else { return nil }
@@ -23,8 +20,6 @@ final class LocationService: NSObject {
             manager.requestLocation()
         }
     }
-
-    // MARK: - Permission request
 
     func requestPermission() {
         manager.requestWhenInUseAuthorization()
