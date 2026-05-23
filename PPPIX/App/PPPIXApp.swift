@@ -16,31 +16,26 @@ struct PPPIXApp: App {
     }
 }
 
-// MARK: - AppDelegate
-
 class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        // Firebase
-        FirebaseApp.configure()
 
-        // Push notifications
-        UNUserNotificationCenter.current().delegate = self
-        Messaging.messaging().delegate = self
+        // Firebase — protegido contra crash no simulador
+        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let _ = NSDictionary(contentsOfFile: path) {
+            FirebaseApp.configure()
+            UNUserNotificationCenter.current().delegate = self
+            Messaging.messaging().delegate = self
+            application.registerForRemoteNotifications()
+        }
 
-        // Registra para push remoto (necessário para APNs / FCM)
-        application.registerForRemoteNotifications()
-
-        // Background tasks
         BackgroundTaskManager.shared.registerTasks()
-
         return true
     }
 
-    // APNs token → repassa ao Firebase
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
@@ -52,11 +47,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-// MARK: - UNUserNotificationCenterDelegate
-
 extension AppDelegate: UNUserNotificationCenterDelegate {
 
-    // Mostra notificação mesmo com app em foreground
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -67,7 +59,6 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound, .badge])
     }
 
-    // Usuário tocou na notificação
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -89,48 +80,28 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         let alertType = userInfo["alert_type"] as? String ?? ""
         let senderEmail = userInfo["sender_email"] as? String ?? ""
         let myEmail = SessionManager.shared.userEmail
-
-        // Ignora alertas enviados por mim mesmo
-        guard !senderEmail.lowercased().isEmpty,
-              senderEmail.lowercased() != myEmail.lowercased() else { return }
-
-        let isEmergency = alertType == "emergency_password"
-            || alertType == "wrong_password"
-            || alertType.contains("emergency")
-            || alertType.contains("alert")
-
+        guard !senderEmail.isEmpty, senderEmail.lowercased() != myEmail.lowercased() else { return }
+        let isEmergency = alertType.contains("emergency") || alertType.contains("alert") || alertType == "wrong_password"
         if isEmergency {
             let alertId = (userInfo["alert_id"] as? String).flatMap(Int.init) ?? 0
             EmergencyAudioService.shared.playSiren()
-            NotificationCenter.default.post(
-                name: .incomingEmergencyAlert,
-                object: nil,
-                userInfo: ["alert_id": alertId]
-            )
+            NotificationCenter.default.post(name: .incomingEmergencyAlert, object: nil, userInfo: ["alert_id": alertId])
         }
     }
 }
 
-// MARK: - MessagingDelegate (FCM)
-
 extension AppDelegate: MessagingDelegate {
-
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
         SessionManager.shared.fcmToken = token
-        // Registra no backend se já estiver logado
         if SessionManager.shared.isLoggedIn {
-            Task {
-                try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
-            }
+            Task { try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios") }
         }
     }
 }
 
-// MARK: - Notification Names
-
 extension Notification.Name {
-    static let openAlertDetail       = Notification.Name("pppix.openAlertDetail")
+    static let openAlertDetail        = Notification.Name("pppix.openAlertDetail")
     static let incomingEmergencyAlert = Notification.Name("pppix.incomingEmergencyAlert")
     static let sessionExpired         = Notification.Name("pppix.sessionExpired")
 }
