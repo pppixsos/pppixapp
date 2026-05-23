@@ -19,23 +19,22 @@ workflows:
         script: |
           xcodebuild -project PPPIX.xcodeproj \
             -scheme PPPIX \
-            -resolvePackageDependencies \
-            -derivedDataPath DerivedData
+            -resolvePackageDependencies
 
       - name: Build para simulador (teste)
         script: |
           xcodebuild \
             -project PPPIX.xcodeproj \
-            -target PPPIX \
+            -scheme PPPIX \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             -configuration Debug \
-            -derivedDataPath DerivedData \
             ONLY_ACTIVE_ARCH=YES \
             build \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            SKIP_INSTALL=NO
 
     artifacts:
-      - DerivedData/Build/**/*.app
+      - ~/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
 
     publishing:
       email:
