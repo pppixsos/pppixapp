@@ -8,7 +8,7 @@ workflows:
       xcode: 16.2
       cocoapods: default
       groups:
-        - pppix
+        - PPPIX
       vars:
         BUNDLE_ID: "tech.pppix.app"
         XCODE_SCHEME: "PPPIX"
