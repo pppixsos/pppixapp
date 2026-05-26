@@ -46,13 +46,30 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
 
+      - name: Install Codemagic CLI and fetch provisioning profile
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          pip3 install codemagic-cli-tools
+          export APP_STORE_CONNECT_KEY_IDENTIFIER=$KEY_ID
+          export APP_STORE_CONNECT_ISSUER_ID=$ISSUER_ID
+          export APP_STORE_CONNECT_PRIVATE_KEY=$(echo "$API_KEY" | base64 --decode)
+          app-store-connect fetch-signing-files \
+            --type IOS_APP_STORE \
+            --bundle-id tech.pppix.app \
+            --create \
+            --certificate-key /tmp/pppix.key
+          xcode-project use-profiles
+
       - name: Resolve SPM
         run: |
           xcodebuild -project PPPIX.xcodeproj \
             -scheme PPPIX \
             -resolvePackageDependencies
 
-      - name: Archive with signing
+      - name: Archive
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -63,10 +80,6 @@ jobs:
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)" \
-            DEVELOPMENT_TEAM=K5SWZ92Z64 \
-            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
             -authenticationKeyID ${KEY_ID} \
@@ -87,10 +100,6 @@ jobs:
             <string>app-store-connect</string>
             <key>teamID</key>
             <string>K5SWZ92Z64</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>signingCertificate</key>
-            <string>Apple Distribution</string>
           </dict>
           </plist>
           PLIST
