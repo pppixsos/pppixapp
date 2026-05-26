@@ -27,7 +27,6 @@ final class APIClient {
     // MARK: - Passwords
 
     func getPasswords() async throws -> [SavedPasswordsResponse] {
-        // API pode retornar lista [] ou paginado {results:[]}
         let data = try await rawGet("passwords/")
         if let list = try? JSONDecoder().decode([SavedPasswordsResponse].self, from: data) {
             return list
@@ -205,7 +204,7 @@ final class APIClient {
         return request
     }
 
-    // MARK: - Execute with auto token refresh (espelho do OkHttp interceptor)
+    // MARK: - Execute with auto token refresh
 
     private func executeWithRefresh(_ request: inout URLRequest, auth: Bool = true) async throws -> Data {
         let (data, response) = try await session.data(for: request)
@@ -213,11 +212,9 @@ final class APIClient {
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
 
         if http.statusCode == 401 && auth {
-            // Tenta refresh
             guard let newToken = try? await refreshAccessToken() else {
                 throw APIError.unauthorized
             }
-            // Refaz a request com novo token
             request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
             let (retryData, retryResp) = try await session.data(for: request)
             guard let retryHttp = retryResp as? HTTPURLResponse else { throw APIError.invalidResponse }
@@ -267,11 +264,50 @@ final class APIClient {
         }
     }
 
+    /// Parseia erros da API Django que podem vir em vários formatos:
+    /// {"detail": "..."}, {"message": "..."}, {"field": ["erro"]}, {"non_field_errors": ["..."]}
     private func parseErrorMessage(_ data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+
+        // Formato simples
         if let detail = json["detail"] as? String { return detail }
         if let msg = json["message"] as? String { return msg }
+        if let error = json["error"] as? String { return error }
+
+        // non_field_errors: ["mensagem"]
+        if let nonField = json["non_field_errors"] as? [String], let first = nonField.first {
+            return first
+        }
+
+        // Erros de campo: {"to_user_email": ["Usuário não encontrado"]}
+        // Pega o primeiro erro de qualquer campo
+        for (key, value) in json {
+            if let arr = value as? [String], let first = arr.first {
+                // Traduz nomes de campo técnicos para português amigável
+                let fieldName = friendlyFieldName(key)
+                return "\(fieldName): \(first)"
+            }
+            if let str = value as? String {
+                let fieldName = friendlyFieldName(key)
+                return "\(fieldName): \(str)"
+            }
+        }
+
         return nil
+    }
+
+    private func friendlyFieldName(_ key: String) -> String {
+        switch key {
+        case "to_user_email": return "Email"
+        case "email": return "Email"
+        case "password": return "Senha"
+        case "cpf": return "CPF"
+        case "phone": return "Telefone"
+        case "birth_date": return "Data de nascimento"
+        case "cep": return "CEP"
+        case "username": return "Nome de usuário"
+        default: return key.replacingOccurrences(of: "_", with: " ").capitalized
+        }
     }
 }
 
@@ -291,7 +327,7 @@ enum APIError: LocalizedError {
         switch self {
         case .unauthorized:           return "Sessão expirada. Faça login novamente."
         case .badRequest(let msg):    return msg
-        case .notFound:               return "Recurso não encontrado."
+        case .notFound:               return "Usuário não encontrado. Verifique o email."
         case .serverError:            return "Erro no servidor. Tente novamente."
         case .decodingError(let msg): return "Erro ao processar resposta: \(msg)"
         case .unknown(let msg):       return msg
