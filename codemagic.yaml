@@ -13,7 +13,7 @@ workflows:
       groups:
         - PPPIX
       ios_signing:
-        distribution_type: development
+        distribution_type: ad_hoc
         bundle_identifier: tech.pppix.app
       vars:
         BUNDLE_ID: "tech.pppix.app"
@@ -43,16 +43,13 @@ workflows:
           xcodebuild \
             -project $XCODE_PROJECT \
             -scheme $XCODE_SCHEME \
-            -configuration Debug \
+            -configuration Release \
             -archivePath build/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=K5SWZ92Z64 \
             archive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+            -allowProvisioningUpdates
 
       - name: Exportar IPA
         script: |
@@ -62,7 +59,7 @@ workflows:
           <plist version="1.0">
           <dict>
             <key>method</key>
-            <string>development</string>
+            <string>ad-hoc</string>
             <key>teamID</key>
             <string>K5SWZ92Z64</string>
             <key>compileBitcode</key>
@@ -74,10 +71,7 @@ workflows:
             -archivePath build/PPPIX.xcarchive \
             -exportPath build/ios/ipa \
             -exportOptionsPlist /tmp/ExportOptions.plist \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+            -allowProvisioningUpdates
 
     artifacts:
       - build/ios/ipa/*.ipa
