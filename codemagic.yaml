@@ -4,11 +4,17 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
 
+    integrations:
+      app_store_connect: Codemagic
+
     environment:
       xcode: 16.2
       cocoapods: default
       groups:
         - PPPIX
+      ios_signing:
+        distribution_type: development
+        bundle_identifier: tech.pppix.app
       vars:
         BUNDLE_ID: "tech.pppix.app"
         XCODE_SCHEME: "PPPIX"
@@ -21,26 +27,16 @@ workflows:
       - name: Gerar .xcodeproj
         script: xcodegen generate --spec project.yml
 
-      - name: Atualizar Team ID no projeto
+      - name: Atualizar Team ID
         script: |
-          sed -i '' "s/DEVELOPMENT_TEAM = \"\"/DEVELOPMENT_TEAM = K5SWZ92Z64/g" PPPIX.xcodeproj/project.pbxproj
-          sed -i '' "s/DEVELOPMENT_TEAM = ;/DEVELOPMENT_TEAM = K5SWZ92Z64;/g" PPPIX.xcodeproj/project.pbxproj
+          sed -i '' 's/DEVELOPMENT_TEAM = ""/DEVELOPMENT_TEAM = K5SWZ92Z64/g' PPPIX.xcodeproj/project.pbxproj || true
+          sed -i '' 's/DEVELOPMENT_TEAM = ;/DEVELOPMENT_TEAM = K5SWZ92Z64;/g' PPPIX.xcodeproj/project.pbxproj || true
 
       - name: Resolver pacotes SPM
         script: |
           xcodebuild -project PPPIX.xcodeproj \
             -scheme PPPIX \
             -resolvePackageDependencies
-
-      - name: Configurar assinatura
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files \
-            --type IOS_APP_DEVELOPMENT \
-            --bundle-id $BUNDLE_ID \
-            --create
-          keychain add-certificates
-          xcode-project use-profiles
 
       - name: Build e Archive
         script: |
@@ -49,24 +45,46 @@ workflows:
             -scheme $XCODE_SCHEME \
             -configuration Debug \
             -archivePath build/PPPIX.xcarchive \
+            -destination "generic/platform=iOS" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=K5SWZ92Z64 \
             archive \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
 
       - name: Exportar IPA
         script: |
-          xcode-project build-ipa \
-            --project $XCODE_PROJECT \
-            --scheme $XCODE_SCHEME
+          cat > /tmp/ExportOptions.plist << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>teamID</key>
+            <string>K5SWZ92Z64</string>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/PPPIX.xcarchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist /tmp/ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
 
     artifacts:
       - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
 
     publishing:
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        auth: integration
         submit_to_testflight: true
       email:
         recipients:
