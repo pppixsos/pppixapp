@@ -9,8 +9,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 16.2
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+      - name: Check available Xcode versions
+        run: ls /Applications/ | grep Xcode
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -46,17 +46,6 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
 
-      - name: Fetch Provisioning Profile
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          app-store-connect fetch-signing-files \
-            --type IOS_APP_STORE \
-            --bundle-id tech.pppix.app \
-            --create || true
-          xcode-project use-profiles --project PPPIX.xcodeproj || true
-
       - name: Resolve SPM
         run: |
           xcodebuild -project PPPIX.xcodeproj \
@@ -70,7 +59,7 @@ jobs:
             -scheme PPPIX \
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
-            -destination "generic/platform=iOS" \
+            -destination "generic/platform=iOS Simulator" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             archive
