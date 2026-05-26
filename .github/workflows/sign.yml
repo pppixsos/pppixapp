@@ -57,12 +57,12 @@ jobs:
           export APP_STORE_CONNECT_KEY_IDENTIFIER=$KEY_ID
           export APP_STORE_CONNECT_ISSUER_ID=$ISSUER_ID
           export APP_STORE_CONNECT_PRIVATE_KEY=$(echo "$API_KEY" | base64 --decode)
-          CERT_KEY=$(echo "$PRIVATE_KEY" | base64 --decode)
+          CERT_KEY_CONTENT=$(echo "$PRIVATE_KEY" | base64 --decode)
           app-store-connect fetch-signing-files \
             --type IOS_APP_STORE \
             --bundle-id tech.pppix.app \
             --create \
-            --certificate-key "@/tmp/pppix.key"
+            --certificate-key "$CERT_KEY_CONTENT"
           xcode-project use-profiles
 
       - name: Resolve SPM
