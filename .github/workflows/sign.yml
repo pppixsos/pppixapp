@@ -85,6 +85,11 @@ jobs:
           echo '--- project.yml signing ---'
           grep -E 'CODE_SIGN|PROVISIONING' project.yml
 
+      - name: Remove LaunchScreen storyboard reference from xcodeproj
+        run: |
+          find . -name "*.pbxproj" -exec sed -i '' '/LaunchScreen\.storyboard/d' {} \;
+          echo "Storyboard references removed"
+
       - name: Resolve SPM
         run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX -resolvePackageDependencies -clonedSourcePackagesDirPath $RUNNER_TEMP/spm
 
