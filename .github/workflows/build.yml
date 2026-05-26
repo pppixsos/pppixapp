@@ -28,31 +28,42 @@ jobs:
           echo "$PRIVATE_KEY" | base64 --decode > /tmp/pppix.key
           echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/pppix.mobileprovision
 
-          # Converter certificado DER para PEM
+          # Converter para PEM
           openssl x509 -inform DER -in /tmp/distribution.cer -out /tmp/distribution.pem
 
-          # Baixar e instalar certificado intermediário Apple WWDR G3
+          # Baixar WWDR G3
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
           openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem
 
-          # Criar p12 com a cadeia completa
-          cat /tmp/distribution.pem /tmp/AppleWWDRCAG3.pem > /tmp/chain.pem
-          openssl pkcs12 -export -out /tmp/pppix.p12 \
+          # Criar p12 com cadeia completa
+          openssl pkcs12 -export \
+            -out /tmp/pppix.p12 \
             -inkey /tmp/pppix.key \
             -in /tmp/distribution.pem \
             -certfile /tmp/AppleWWDRCAG3.pem \
             -passout pass:pppix123
 
-          # Criar e configurar keychain
+          # Verificar o p12
+          echo "Verificando p12:"
+          openssl pkcs12 -in /tmp/pppix.p12 -passin pass:pppix123 -nokeys 2>/dev/null | openssl x509 -noout -subject -issuer
+
+          # Criar keychain
           security create-keychain -p temppass123 build.keychain
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
           security default-keychain -s build.keychain
           security unlock-keychain -p temppass123 build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
 
-          # Importar p12 com cadeia completa
-          security import /tmp/pppix.p12 -k build.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/productbuild
+          # Importar p12
+          security import /tmp/pppix.p12 -k build.keychain -P pppix123 \
+            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild \
+            -f pkcs12
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
+
+          # Verificar identidade
+          echo "Identidades disponíveis:"
+          security find-identity -v build.keychain
+          echo "Identidades codesigning:"
           security find-identity -v -p codesigning build.keychain
 
           # Instalar perfil
@@ -64,7 +75,7 @@ jobs:
           ")
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
           cp /tmp/pppix.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
-          echo "Profile installed: $UUID"
+          echo "Profile UUID: $UUID"
           echo "KEYCHAIN_PATH=$HOME/Library/Keychains/build.keychain-db" >> $GITHUB_ENV
 
       - name: Setup API Key
@@ -90,39 +101,47 @@ jobs:
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
             archive
 
-      - name: Export IPA
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      - name: Re-sign IPA manually
         run: |
           security unlock-keychain -p temppass123 build.keychain
-          cat > /tmp/ExportOptions.plist << PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store-connect</string>
-            <key>teamID</key>
-            <string>K5SWZ92Z64</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>signingCertificate</key>
-            <string>Apple Distribution</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>tech.pppix.app</key>
-              <string>PPPIX AppStore</string>
-            </dict>
-          </dict>
-          </plist>
-          PLIST
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
-            -exportPath $RUNNER_TEMP/PPPIX_ipa \
-            -exportOptionsPlist /tmp/ExportOptions.plist
+          
+          # Extrair app do archive
+          APP_PATH=$(find $RUNNER_TEMP/PPPIX.xcarchive -name "*.app" | head -1)
+          echo "App path: $APP_PATH"
+          
+          # Copiar perfil para o app
+          cp /tmp/pppix.mobileprovision "$APP_PATH/embedded.mobileprovision"
+          
+          # Obter entitlements do perfil
+          python3 << PYEOF
+          import plistlib, subprocess
+          out = subprocess.check_output(['security', 'cms', '-D', '-i', '/tmp/pppix.mobileprovision'])
+          plist = plistlib.loads(out)
+          entitlements = plist.get('Entitlements', {})
+          with open('/tmp/entitlements.plist', 'wb') as f:
+              plistlib.dump(entitlements, f)
+          print("Entitlements saved")
+          PYEOF
+          
+          # Assinar com Apple Distribution
+          IDENTITY="Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
+          /usr/bin/codesign --force --sign "$IDENTITY" \
+            --keychain $KEYCHAIN_PATH \
+            --entitlements /tmp/entitlements.plist \
+            --timestamp \
+            "$APP_PATH"
+          
+          # Verificar assinatura
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -E "Authority|TeamID|Identifier"
+          
+          # Criar IPA
+          mkdir -p $RUNNER_TEMP/PPPIX_ipa/Payload
+          cp -r "$APP_PATH" $RUNNER_TEMP/PPPIX_ipa/Payload/
+          cd $RUNNER_TEMP/PPPIX_ipa
+          zip -r PPPIX.ipa Payload/
+          echo "IPA created!"
 
-      - name: Verificar assinatura
+      - name: Verificar assinatura final
         run: |
           unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1
           codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | grep -E "Authority|TeamID|Identifier|Signed"
