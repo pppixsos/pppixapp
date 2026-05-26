@@ -18,13 +18,15 @@ jobs:
       - name: Generate .xcodeproj
         run: xcodegen generate --spec project.yml
 
-      - name: Install certificate
+      - name: Install certificate and provisioning profile
         env:
           DIST_CERT: ${{ secrets.DISTRIBUTION_CERT_BASE64 }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY_BASE64 }}
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
         run: |
           echo "$DIST_CERT" | base64 --decode > /tmp/distribution.cer
           echo "$PRIVATE_KEY" | base64 --decode > /tmp/pppix.key
+          echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/pppix.mobileprovision
           openssl x509 -inform DER -in /tmp/distribution.cer -out /tmp/distribution.pem
           openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/pppix.key -in /tmp/distribution.pem -passout pass:pppix123
           security create-keychain -p temppass123 build.keychain
@@ -33,6 +35,15 @@ jobs:
           security import /tmp/pppix.p12 -k build.keychain -P pppix123 -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k temppass123 build.keychain
           security find-identity -v -p codesigning
+          UUID=$(python3 -c "
+          import plistlib, subprocess
+          out = subprocess.check_output(['security', 'cms', '-D', '-i', '/tmp/pppix.mobileprovision'])
+          plist = plistlib.loads(out)
+          print(plist['UUID'])
+          ")
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
+          cp /tmp/pppix.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
+          echo "Profile installed: $UUID"
 
       - name: Setup API Key
         env:
@@ -41,61 +52,6 @@ jobs:
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
-
-      - name: Fetch provisioning profile
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-        run: |
-          pip3 install PyJWT cryptography --break-system-packages
-          python3 << PYEOF
-          import jwt, time, json, urllib.request, os, base64
-          key_id = os.environ['KEY_ID']
-          issuer_id = os.environ['ISSUER_ID']
-          with open(os.path.expanduser(f'~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8')) as f:
-              private_key = f.read()
-          payload = {
-              'iss': issuer_id,
-              'iat': int(time.time()),
-              'exp': int(time.time()) + 1200,
-              'aud': 'appstoreconnect-v1'
-          }
-          token = jwt.encode(payload, private_key, algorithm='ES256', headers={'kid': key_id})
-          headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
-          req = urllib.request.Request(
-              'https://api.appstoreconnect.apple.com/v1/profiles?filter[profileType]=IOS_APP_STORE&limit=10',
-              headers=headers
-          )
-          with urllib.request.urlopen(req) as resp:
-              data = json.loads(resp.read())
-          profiles = data.get('data', [])
-          print(f'Found {len(profiles)} profiles')
-          for p in profiles:
-              name = p['attributes']['name']
-              ptype = p['attributes']['profileType']
-              state = p['attributes']['profileState']
-              print(f'  - {name} ({ptype}) [{state}]')
-              if ptype == 'IOS_APP_STORE' and state == 'ACTIVE':
-                  profile_data = p['attributes']['profileContent']
-                  with open('/tmp/pppix.mobileprovision', 'wb') as f:
-                      f.write(base64.b64decode(profile_data))
-                  print('Profile saved!')
-                  break
-          PYEOF
-          if [ -f /tmp/pppix.mobileprovision ]; then
-            UUID=$(python3 -c "
-          import plistlib, subprocess
-          out = subprocess.check_output(['security', 'cms', '-D', '-i', '/tmp/pppix.mobileprovision'])
-          plist = plistlib.loads(out)
-          print(plist['UUID'])
-          ")
-            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
-            cp /tmp/pppix.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
-            echo "Profile installed: $UUID"
-          else
-            echo "No profile found!"
-          fi
 
       - name: Resolve SPM
         run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX -resolvePackageDependencies
@@ -114,11 +70,8 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=K5SWZ92Z64 \
+            PROVISIONING_PROFILE_SPECIFIER="PPPIX AppStore" \
             OTHER_CODE_SIGN_FLAGS="--keychain /Users/runner/Library/Keychains/build.keychain-db" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
-            -authenticationKeyID ${KEY_ID} \
-            -authenticationKeyIssuerID ${ISSUER_ID} \
             archive
 
       - name: Export IPA
@@ -139,6 +92,11 @@ jobs:
             <string>manual</string>
             <key>signingCertificate</key>
             <string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>tech.pppix.app</key>
+              <string>PPPIX AppStore</string>
+            </dict>
           </dict>
           </plist>
           PLIST
