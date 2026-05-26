@@ -42,9 +42,15 @@ targets:
         CFBundleIdentifier: tech.pppix.app
         CFBundleShortVersionString: "1.0.0"
         CFBundleVersion: "1"
+        CFBundleIconName: AppIcon
         UILaunchStoryboardName: LaunchScreen
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIBackgroundModes:
           - fetch
           - remote-notification
@@ -67,6 +73,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app
         DEVELOPMENT_TEAM: K5SWZ92Z64
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Debug:
           CODE_SIGN_STYLE: Automatic
