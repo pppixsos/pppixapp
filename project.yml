@@ -24,14 +24,23 @@ targets:
     bundleId: tech.pppix.app
     sources:
       - path: PPPIX/App
+        excludes:
+          - "**/*.storyboard"
       - path: PPPIX/Core
+        excludes:
+          - "**/*.storyboard"
       - path: PPPIX/Features
+        excludes:
+          - "**/*.storyboard"
       - path: PPPIX/Services
+        excludes:
+          - "**/*.storyboard"
       - path: PPPIX/Resources
         excludes:
           - "**/*.plist"
           - "**/*.mp3"
           - "**/*.entitlements"
+          - "**/*.storyboard"
     resources:
       - path: PPPIX/Resources/GoogleService-Info.plist
         optional: true
