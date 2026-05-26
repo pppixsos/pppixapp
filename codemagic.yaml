@@ -4,21 +4,16 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
 
-    integrations:
-      app_store_connect: Codemagic
-
     environment:
       xcode: 16.2
       cocoapods: default
       groups:
         - PPPIX
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: tech.pppix.app
       vars:
         BUNDLE_ID: "tech.pppix.app"
         XCODE_SCHEME: "PPPIX"
         XCODE_PROJECT: "PPPIX.xcodeproj"
+        TEAM_ID: "K5SWZ92Z64"
 
     scripts:
       - name: Instalar XcodeGen
@@ -29,13 +24,18 @@ workflows:
 
       - name: Atualizar Team ID
         script: |
-          sed -i '' 's/DEVELOPMENT_TEAM = ""/DEVELOPMENT_TEAM = K5SWZ92Z64/g' PPPIX.xcodeproj/project.pbxproj || true
-          sed -i '' 's/DEVELOPMENT_TEAM = ;/DEVELOPMENT_TEAM = K5SWZ92Z64;/g' PPPIX.xcodeproj/project.pbxproj || true
+          sed -i '' "s/DEVELOPMENT_TEAM = \"\"/DEVELOPMENT_TEAM = $TEAM_ID/g" PPPIX.xcodeproj/project.pbxproj || true
+          sed -i '' "s/DEVELOPMENT_TEAM = ;/DEVELOPMENT_TEAM = $TEAM_ID;/g" PPPIX.xcodeproj/project.pbxproj || true
+
+      - name: Configurar API Key para assinatura
+        script: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
 
       - name: Resolver pacotes SPM
         script: |
-          xcodebuild -project PPPIX.xcodeproj \
-            -scheme PPPIX \
+          xcodebuild -project $XCODE_PROJECT \
+            -scheme $XCODE_SCHEME \
             -resolvePackageDependencies
 
       - name: Build e Archive
@@ -47,9 +47,12 @@ workflows:
             -archivePath build/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
             CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM=K5SWZ92Z64 \
+            DEVELOPMENT_TEAM=$TEAM_ID \
             archive \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8 \
+            -authenticationKeyID $APP_STORE_CONNECT_KEY_IDENTIFIER \
+            -authenticationKeyIssuerID $APP_STORE_CONNECT_ISSUER_ID
 
       - name: Exportar IPA
         script: |
@@ -71,14 +74,19 @@ workflows:
             -archivePath build/PPPIX.xcarchive \
             -exportPath build/ios/ipa \
             -exportOptionsPlist /tmp/ExportOptions.plist \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8 \
+            -authenticationKeyID $APP_STORE_CONNECT_KEY_IDENTIFIER \
+            -authenticationKeyIssuerID $APP_STORE_CONNECT_ISSUER_ID
 
     artifacts:
       - build/ios/ipa/*.ipa
 
     publishing:
       app_store_connect:
-        auth: integration
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
       email:
         recipients:
