@@ -30,8 +30,7 @@ jobs:
             -out /tmp/pppix.p12 \
             -inkey /tmp/pppix.key \
             -in /tmp/distribution.pem \
-            -passout pass:pppix123 \
-            -legacy
+            -passout pass:pppix123
           security create-keychain -p temppass123 build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p temppass123 build.keychain
