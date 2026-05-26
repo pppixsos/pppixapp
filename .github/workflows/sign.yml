@@ -52,7 +52,7 @@ jobs:
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          pip3 install codemagic-cli-tools
+          pip3 install codemagic-cli-tools --break-system-packages
           export APP_STORE_CONNECT_KEY_IDENTIFIER=$KEY_ID
           export APP_STORE_CONNECT_ISSUER_ID=$ISSUER_ID
           export APP_STORE_CONNECT_PRIVATE_KEY=$(echo "$API_KEY" | base64 --decode)
