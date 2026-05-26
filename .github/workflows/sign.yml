@@ -9,8 +9,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check available Xcode versions
-        run: ls /Applications/ | grep Xcode
+      - name: Select Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -18,7 +18,7 @@ jobs:
       - name: Generate .xcodeproj
         run: xcodegen generate --spec project.yml
 
-      - name: Create P12 from cert and key
+      - name: Create P12 and install certificate
         env:
           DIST_CERT: ${{ secrets.DISTRIBUTION_CERT_BASE64 }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY_BASE64 }}
@@ -30,7 +30,8 @@ jobs:
             -out /tmp/pppix.p12 \
             -inkey /tmp/pppix.key \
             -in /tmp/distribution.pem \
-            -passout pass:pppix123
+            -passout pass:pppix123 \
+            -legacy
           security create-keychain -p temppass123 build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p temppass123 build.keychain
@@ -52,16 +53,25 @@ jobs:
             -scheme PPPIX \
             -resolvePackageDependencies
 
-      - name: Archive
+      - name: Archive with signing
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           xcodebuild \
             -project PPPIX.xcodeproj \
             -scheme PPPIX \
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
-            -destination "generic/platform=iOS Simulator" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
+            -destination "generic/platform=iOS" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)" \
+            DEVELOPMENT_TEAM=K5SWZ92Z64 \
+            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
+            -authenticationKeyID ${KEY_ID} \
+            -authenticationKeyIssuerID ${ISSUER_ID} \
             archive
 
       - name: Export IPA
@@ -78,6 +88,10 @@ jobs:
             <string>app-store-connect</string>
             <key>teamID</key>
             <string>K5SWZ92Z64</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
           </dict>
           </plist>
           PLIST
