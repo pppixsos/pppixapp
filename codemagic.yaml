@@ -1,12 +1,18 @@
 workflows:
-  ios-build:
-    name: PPPIX iOS Build
+  ios-testflight:
+    name: PPPIX iOS TestFlight
     max_build_duration: 60
     instance_type: mac_mini_m1
 
     environment:
       xcode: 16.2
       cocoapods: default
+      groups:
+        - pppix
+      vars:
+        BUNDLE_ID: "tech.pppix.app"
+        XCODE_SCHEME: "PPPIX"
+        XCODE_PROJECT: "PPPIX.xcodeproj"
 
     scripts:
       - name: Instalar XcodeGen
@@ -15,33 +21,53 @@ workflows:
       - name: Gerar .xcodeproj
         script: xcodegen generate --spec project.yml
 
+      - name: Atualizar Team ID no projeto
+        script: |
+          sed -i '' "s/DEVELOPMENT_TEAM = \"\"/DEVELOPMENT_TEAM = K5SWZ92Z64/g" PPPIX.xcodeproj/project.pbxproj
+          sed -i '' "s/DEVELOPMENT_TEAM = ;/DEVELOPMENT_TEAM = K5SWZ92Z64;/g" PPPIX.xcodeproj/project.pbxproj
+
       - name: Resolver pacotes SPM
         script: |
           xcodebuild -project PPPIX.xcodeproj \
             -scheme PPPIX \
             -resolvePackageDependencies
 
-      - name: Build simulador
+      - name: Configurar assinatura
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files \
+            --type IOS_APP_DEVELOPMENT \
+            --bundle-id $BUNDLE_ID \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Build e Archive
         script: |
           xcodebuild \
-            -project PPPIX.xcodeproj \
-            -scheme PPPIX \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -project $XCODE_PROJECT \
+            -scheme $XCODE_SCHEME \
             -configuration Debug \
-            -derivedDataPath build \
-            build \
-            CODE_SIGNING_ALLOWED=NO
+            -archivePath build/PPPIX.xcarchive \
+            archive \
+            -allowProvisioningUpdates
 
-      - name: Zipar .app
+      - name: Exportar IPA
         script: |
-          APP=$(find build -name "*.app" | head -1)
-          echo "App encontrado: $APP"
-          zip -r PPPIX_simulator.zip "$APP"
+          xcode-project build-ipa \
+            --project $XCODE_PROJECT \
+            --scheme $XCODE_SCHEME
 
     artifacts:
-      - PPPIX_simulator.zip
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
 
     publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
       email:
         recipients:
           - pixpppapp@gmail.com
