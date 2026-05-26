@@ -1,4 +1,4 @@
-name: Sign and Install PPPIX
+name: Sign and Upload PPPIX to TestFlight
 
 on:
   workflow_dispatch:
@@ -10,7 +10,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.0.app
+        run: |
+          # Tenta Xcode_26.0.1 primeiro, depois 26.0
+          if [ -d "/Applications/Xcode_26.0.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_26.0.1.app
+          else
+            sudo xcode-select -s /Applications/Xcode_26.0.app
+          fi
+          xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -18,7 +25,16 @@ jobs:
       - name: Generate .xcodeproj
         run: xcodegen generate --spec project.yml
 
-      - name: Generate certificate via API
+      - name: Setup App Store Connect API Key
+        env:
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+
+      - name: Generate certificate and setup keychain
         env:
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -35,8 +51,10 @@ jobs:
           api_key_b64 = os.environ['API_KEY']
           private_key = base64.b64decode(api_key_b64).decode('utf-8')
 
+          # Gerar chave RSA no Mac
           subprocess.run(['openssl', 'genrsa', '-out', '/tmp/mac_key.key', '2048'], check=True)
 
+          # Gerar CSR
           csr_config = """[req]
 default_bits = 2048
 prompt = no
@@ -51,7 +69,10 @@ emailAddress = pixpppapp@gmail.com
           with open('/tmp/csr.conf', 'w') as f:
               f.write(csr_config)
 
-          subprocess.run(['openssl', 'req', '-new', '-key', '/tmp/mac_key.key', '-out', '/tmp/mac_csr.csr', '-config', '/tmp/csr.conf'], check=True)
+          subprocess.run([
+              'openssl', 'req', '-new', '-key', '/tmp/mac_key.key',
+              '-out', '/tmp/mac_csr.csr', '-config', '/tmp/csr.conf'
+          ], check=True)
 
           with open('/tmp/mac_csr.csr', 'r') as f:
               csr_pem = f.read()
@@ -59,12 +80,34 @@ emailAddress = pixpppapp@gmail.com
           csr_lines = [l for l in csr_pem.split('\n') if l and not l.startswith('-----')]
           csr_b64 = ''.join(csr_lines)
 
-          payload = {'iss': issuer_id, 'iat': int(time.time()), 'exp': int(time.time()) + 1200, 'aud': 'appstoreconnect-v1'}
+          # Gerar JWT para App Store Connect API
+          payload = {
+              'iss': issuer_id,
+              'iat': int(time.time()),
+              'exp': int(time.time()) + 1200,
+              'aud': 'appstoreconnect-v1'
+          }
           token = jwt.encode(payload, private_key, algorithm='ES256', headers={'kid': key_id})
-          headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Content-Type': 'application/json'
+          }
 
-          body = json.dumps({'data': {'type': 'certificates', 'attributes': {'certificateType': 'IOS_DISTRIBUTION', 'csrContent': csr_b64}}}).encode()
-          req = urllib.request.Request('https://api.appstoreconnect.apple.com/v1/certificates', data=body, headers=headers, method='POST')
+          # Criar certificado via API
+          body = json.dumps({
+              'data': {
+                  'type': 'certificates',
+                  'attributes': {
+                      'certificateType': 'IOS_DISTRIBUTION',
+                      'csrContent': csr_b64
+                  }
+              }
+          }).encode()
+
+          req = urllib.request.Request(
+              'https://api.appstoreconnect.apple.com/v1/certificates',
+              data=body, headers=headers, method='POST'
+          )
           try:
               with urllib.request.urlopen(req) as resp:
                   data = json.loads(resp.read())
@@ -72,38 +115,86 @@ emailAddress = pixpppapp@gmail.com
               cert_bytes = base64.b64decode(cert_content)
               with open('/tmp/new_cert.cer', 'wb') as f:
                   f.write(cert_bytes)
-              print(f"Certificate created! ID: {data['data']['id']}")
-              print(f"Name: {data['data']['attributes']['name']}")
+              print(f"Certificado criado! ID: {data['data']['id']}")
+              print(f"Nome: {data['data']['attributes']['name']}")
           except urllib.error.HTTPError as e:
-              print(f"Error {e.code}: {e.read().decode()}")
-              exit(1)
+              error_body = e.read().decode()
+              print(f"Erro {e.code}: {error_body}")
+              # Se erro 422, pode ser limite de certificados — listar e revogar o mais antigo
+              if e.code == 422:
+                  print("AVISO: Possivel limite de certificados atingido.")
+                  print("Acesse https://developer.apple.com/account/resources/certificates/list e revogue certificados antigos.")
+              raise SystemExit(1)
           PYEOF
 
+          echo "=== Convertendo certificado DER -> PEM ==="
           openssl x509 -inform DER -in /tmp/new_cert.cer -out /tmp/new_cert.pem
-          echo "Certificate subject:"
+          echo "Subject do certificado:"
           openssl x509 -in /tmp/new_cert.pem -noout -subject
 
+          echo "=== Baixando cadeia completa de CAs da Apple ==="
+          # CA intermediária (OBRIGATÓRIA para Authority aparecer corretamente)
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
           openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem
 
-          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123
+          # CA raiz da Apple
+          curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
+          openssl x509 -inform DER -in /tmp/AppleRoot.cer -out /tmp/AppleRoot.pem
 
+          echo "=== Criando .p12 ==="
+          openssl pkcs12 -export \
+            -out /tmp/pppix.p12 \
+            -inkey /tmp/mac_key.key \
+            -in /tmp/new_cert.pem \
+            -certfile /tmp/AppleWWDRCAG3.pem \
+            -passout pass:pppix123 \
+            -legacy
+
+          echo "=== Criando e configurando keychain ==="
           security create-keychain -p temppass123 build.keychain
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
           security default-keychain -s build.keychain
           security unlock-keychain -p temppass123 build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
-          security import /tmp/pppix.p12 -k build.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/productbuild
+
+          echo "=== Importando CAs da Apple ANTES do certificado (CRÍTICO) ==="
+          # Importar CA raiz como trusted
+          sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/AppleRoot.cer
+          # Importar CA intermediária como trusted
+          sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/AppleWWDRCAG3.cer
+
+          echo "=== Importando .p12 no keychain ==="
+          security import /tmp/pppix.p12 \
+            -k build.keychain \
+            -P pppix123 \
+            -T /usr/bin/codesign \
+            -T /usr/bin/productbuild \
+            -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
 
-          echo "Identidades disponíveis:"
+          echo "=== Identidades disponíveis ==="
           security find-identity -v -p codesigning build.keychain
 
+          echo "=== Verificando se Authority está preenchido ==="
+          security find-identity -v -p codesigning build.keychain | grep -E "Apple Distribution|iPhone Distribution" || echo "AVISO: Nenhuma identidade encontrada!"
+
           # Detectar nome do certificado automaticamente
-          CERT_IDENTITY=$(security find-identity -v -p codesigning build.keychain | grep "Apple Distribution\|iPhone Distribution" | head -1 | sed 's/.*"\(.*\)"/\1/')
+          CERT_IDENTITY=$(security find-identity -v -p codesigning build.keychain \
+            | grep -E "Apple Distribution|iPhone Distribution" \
+            | head -1 \
+            | sed 's/.*"\(.*\)"/\1/')
+
+          if [ -z "$CERT_IDENTITY" ]; then
+            echo "ERRO: Nenhum certificado válido encontrado no keychain!"
+            security find-identity -v build.keychain
+            exit 1
+          fi
+
           echo "CERT_IDENTITY=$CERT_IDENTITY" >> $GITHUB_ENV
           echo "Usando certificado: $CERT_IDENTITY"
+          echo "KEYCHAIN_PATH=$HOME/Library/Keychains/build.keychain-db" >> $GITHUB_ENV
 
+          echo "=== Instalando Provisioning Profile ==="
           echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/pppix.mobileprovision
           UUID=$(python3 -c "
           import plistlib, subprocess
@@ -114,35 +205,32 @@ emailAddress = pixpppapp@gmail.com
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
           cp /tmp/pppix.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
           echo "Profile UUID: $UUID"
-          echo "KEYCHAIN_PATH=$HOME/Library/Keychains/build.keychain-db" >> $GITHUB_ENV
-
-      - name: Setup API Key
-        env:
-          API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-        run: |
-          mkdir -p ~/.appstoreconnect/private_keys
-          echo "$API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
 
       - name: Resolve SPM
-        run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX -resolvePackageDependencies
-
-      - name: Update project signing identity
         run: |
-          echo "Using identity: $CERT_IDENTITY"
-          # Atualizar project.yml com identidade correta
+          xcodebuild \
+            -project PPPIX.xcodeproj \
+            -scheme PPPIX \
+            -resolvePackageDependencies \
+            -clonedSourcePackagesDirPath $RUNNER_TEMP/spm
+
+      - name: Update project.yml with correct signing identity
+        run: |
+          echo "Identidade a usar: $CERT_IDENTITY"
           python3 << PYEOF
-          import subprocess, os
+          import os, re
           identity = os.environ['CERT_IDENTITY']
           with open('project.yml', 'r') as f:
               content = f.read()
-          content = content.replace(
-              'CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"',
-              f'CODE_SIGN_IDENTITY: "{identity}"'
+          # Substitui qualquer valor de CODE_SIGN_IDENTITY na config Release
+          new_content = re.sub(
+              r'(CODE_SIGN_IDENTITY:\s*")[^"]*(")',
+              rf'\g<1>{identity}\g<2>',
+              content
           )
           with open('project.yml', 'w') as f:
-              f.write(content)
-          print(f"Updated project.yml with identity: {identity}")
+              f.write(new_content)
+          print(f"project.yml atualizado com: {identity}")
           PYEOF
           xcodegen generate --spec project.yml
 
@@ -155,7 +243,21 @@ emailAddress = pixpppapp@gmail.com
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
+            -clonedSourcePackagesDirPath $RUNNER_TEMP/spm \
             CODE_SIGN_IDENTITY="$CERT_IDENTITY" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="PPPIX AppStore" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
+            archive | xcpretty || xcodebuild \
+            -project PPPIX.xcodeproj \
+            -scheme PPPIX \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
+            -destination "generic/platform=iOS" \
+            -clonedSourcePackagesDirPath $RUNNER_TEMP/spm \
+            CODE_SIGN_IDENTITY="$CERT_IDENTITY" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="PPPIX AppStore" \
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
             archive
 
@@ -191,10 +293,14 @@ emailAddress = pixpppapp@gmail.com
             -exportPath $RUNNER_TEMP/PPPIX_ipa \
             -exportOptionsPlist /tmp/ExportOptions.plist
 
-      - name: Verificar assinatura
+      - name: Verificar assinatura do IPA
         run: |
           unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1
+          echo "=== Assinatura do app ==="
           codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | grep -E "Authority|TeamID|Identifier"
+          echo ""
+          echo "=== Authority deve mostrar 'Apple Distribution' (não unavailable) ==="
+          codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | grep "Authority" | head -3
 
       - name: Upload to TestFlight
         env:
@@ -206,9 +312,11 @@ emailAddress = pixpppapp@gmail.com
             --type ios \
             --apiKey ${KEY_ID} \
             --apiIssuer ${ISSUER_ID} \
-            --private-key-path ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 2>&1
+            --private-key-path ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
+            --verbose 2>&1
 
-      - name: Upload IPA as artifact
+      - name: Upload IPA como artefato
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: PPPIX-IPA
