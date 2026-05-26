@@ -34,18 +34,63 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k temppass123 build.keychain
           security find-identity -v -p codesigning
 
-      - name: Setup API Key
+      - name: Setup API Key and fetch provisioning profile
         env:
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+          # Fetch provisioning profile via API
+          python3 << PYEOF
+          import jwt, time, json, urllib.request, os, base64
+          key_id = os.environ['KEY_ID']
+          issuer_id = os.environ['ISSUER_ID']
+          with open(os.path.expanduser(f'~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8')) as f:
+              private_key = f.read()
+          payload = {
+              'iss': issuer_id,
+              'iat': int(time.time()),
+              'exp': int(time.time()) + 1200,
+              'aud': 'appstoreconnect-v1'
+          }
+          token = jwt.encode(payload, private_key, algorithm='ES256', headers={'kid': key_id})
+          headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+          # List existing profiles
+          req = urllib.request.Request('https://api.appstoreconnect.apple.com/v1/profiles?filter[profileType]=IOS_APP_STORE&filter[name]=PPPIX', headers=headers)
+          with urllib.request.urlopen(req) as resp:
+              data = json.loads(resp.read())
+          profiles = data.get('data', [])
+          if profiles:
+              profile_data = profiles[0]['attributes']['profileContent']
+              with open('/tmp/pppix.mobileprovision', 'wb') as f:
+                  f.write(base64.b64decode(profile_data))
+              print('Profile downloaded!')
+          else:
+              print('No profile found, will create via xcodebuild')
+          PYEOF
+
+      - name: Install provisioning profile
+        run: |
+          if [ -f /tmp/pppix.mobileprovision ]; then
+            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
+            UUID=$(python3 -c "
+          import plistlib, subprocess, re
+          out = subprocess.check_output(['security', 'cms', '-D', '-i', '/tmp/pppix.mobileprovision'])
+          plist = plistlib.loads(out)
+          print(plist['UUID'])
+          ")
+            cp /tmp/pppix.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
+            echo "Profile installed: $UUID"
+          else
+            echo "No profile to install"
+          fi
 
       - name: Resolve SPM
         run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX -resolvePackageDependencies
 
-      - name: Archive and sign
+      - name: Archive
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -56,8 +101,10 @@ jobs:
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=K5SWZ92Z64 \
+            OTHER_CODE_SIGN_FLAGS="--keychain /Users/runner/Library/Keychains/build.keychain-db" \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
             -authenticationKeyID ${KEY_ID} \
@@ -78,6 +125,10 @@ jobs:
             <string>app-store-connect</string>
             <key>teamID</key>
             <string>K5SWZ92Z64</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
           </dict>
           </plist>
           PLIST
