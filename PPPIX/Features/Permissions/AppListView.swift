@@ -199,7 +199,7 @@ private struct ScreenTimeSection: View {
             }
         }
         .familyActivityPicker(isPresented: $showPrivacyDisclosure, selection: $activitySelection)
-        .onChange(of: activitySelection) { _, newSelection in
+        .onChange(of: activitySelection) { newSelection in
             screenTime.blockApps(newSelection)
             savedSelection = true
         }

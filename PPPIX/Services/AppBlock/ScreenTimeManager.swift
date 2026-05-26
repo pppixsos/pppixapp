@@ -25,7 +25,7 @@ final class ScreenTimeManager: ObservableObject {
     }
 
     func blockApps(_ selection: FamilyActivitySelection) {
-        store.application.blockedApplications = selection.applicationTokens
+        store.shield.applications = selection.applicationTokens
         SessionManager.shared.isMonitorActive = true
     }
 
