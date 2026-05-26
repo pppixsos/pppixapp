@@ -34,15 +34,21 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k temppass123 build.keychain
           security find-identity -v -p codesigning
 
-      - name: Setup API Key and fetch provisioning profile
+      - name: Setup API Key
         env:
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
-          # Fetch provisioning profile via API
+
+      - name: Fetch provisioning profile
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          pip3 install PyJWT cryptography --break-system-packages
           python3 << PYEOF
           import jwt, time, json, urllib.request, os, base64
           key_id = os.environ['KEY_ID']
@@ -57,34 +63,38 @@ jobs:
           }
           token = jwt.encode(payload, private_key, algorithm='ES256', headers={'kid': key_id})
           headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
-          # List existing profiles
-          req = urllib.request.Request('https://api.appstoreconnect.apple.com/v1/profiles?filter[profileType]=IOS_APP_STORE&filter[name]=PPPIX', headers=headers)
+          req = urllib.request.Request(
+              'https://api.appstoreconnect.apple.com/v1/profiles?filter[profileType]=IOS_APP_STORE&limit=10',
+              headers=headers
+          )
           with urllib.request.urlopen(req) as resp:
               data = json.loads(resp.read())
           profiles = data.get('data', [])
-          if profiles:
-              profile_data = profiles[0]['attributes']['profileContent']
-              with open('/tmp/pppix.mobileprovision', 'wb') as f:
-                  f.write(base64.b64decode(profile_data))
-              print('Profile downloaded!')
-          else:
-              print('No profile found, will create via xcodebuild')
+          print(f'Found {len(profiles)} profiles')
+          for p in profiles:
+              name = p['attributes']['name']
+              ptype = p['attributes']['profileType']
+              state = p['attributes']['profileState']
+              print(f'  - {name} ({ptype}) [{state}]')
+              if ptype == 'IOS_APP_STORE' and state == 'ACTIVE':
+                  profile_data = p['attributes']['profileContent']
+                  with open('/tmp/pppix.mobileprovision', 'wb') as f:
+                      f.write(base64.b64decode(profile_data))
+                  print('Profile saved!')
+                  break
           PYEOF
-
-      - name: Install provisioning profile
-        run: |
           if [ -f /tmp/pppix.mobileprovision ]; then
-            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
             UUID=$(python3 -c "
-          import plistlib, subprocess, re
+          import plistlib, subprocess
           out = subprocess.check_output(['security', 'cms', '-D', '-i', '/tmp/pppix.mobileprovision'])
           plist = plistlib.loads(out)
           print(plist['UUID'])
           ")
+            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
             cp /tmp/pppix.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
             echo "Profile installed: $UUID"
           else
-            echo "No profile to install"
+            echo "No profile found!"
           fi
 
       - name: Resolve SPM
