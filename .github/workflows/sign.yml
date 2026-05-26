@@ -48,16 +48,16 @@ jobs:
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
           openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem
           curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
-          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123
+          openssl x509 -inform DER -in /tmp/AppleRoot.cer -out /tmp/AppleRoot.pem
+          cat /tmp/AppleWWDRCAG3.pem /tmp/AppleRoot.pem > /tmp/apple_chain.pem
+          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/apple_chain.pem -passout pass:pppix123
           security create-keychain -p temppass123 build.keychain
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
           security default-keychain -s build.keychain
           security unlock-keychain -p temppass123 build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
-          sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/AppleRoot.cer
-          sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/AppleWWDRCAG3.cer
-          security add-trusted-cert -d -r trustRoot -k build.keychain /tmp/AppleRoot.cer
-          security add-trusted-cert -d -r trustAsRoot -k build.keychain /tmp/AppleWWDRCAG3.cer
+          security import /tmp/AppleRoot.cer -k build.keychain
+          security import /tmp/AppleWWDRCAG3.cer -k build.keychain
           security import /tmp/pppix.p12 -k build.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
           echo '=== Identidades ==='
