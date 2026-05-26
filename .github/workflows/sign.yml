@@ -53,7 +53,7 @@ jobs:
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
           openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem
           curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
-          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123 -legacy
+          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123
           security create-keychain -p temppass123 build.keychain
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
           security default-keychain -s build.keychain
