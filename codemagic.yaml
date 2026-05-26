@@ -13,7 +13,7 @@ workflows:
       groups:
         - PPPIX
       ios_signing:
-        distribution_type: ad_hoc
+        distribution_type: app_store
         bundle_identifier: tech.pppix.app
       vars:
         BUNDLE_ID: "tech.pppix.app"
@@ -59,7 +59,7 @@ workflows:
           <plist version="1.0">
           <dict>
             <key>method</key>
-            <string>ad-hoc</string>
+            <string>app-store</string>
             <key>teamID</key>
             <string>K5SWZ92Z64</string>
             <key>compileBitcode</key>
