@@ -107,6 +107,11 @@ jobs:
             -authenticationKeyID ${KEY_ID} \
             -authenticationKeyIssuerID ${ISSUER_ID}
 
+      - name: Verificar assinatura
+        run: |
+          unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1
+          codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | grep -E "Authority|TeamID|Identifier|Signed"
+
       - name: Upload to TestFlight
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
