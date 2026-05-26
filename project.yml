@@ -5,7 +5,6 @@ options:
     iOS: "16.0"
   defaultConfig: Debug
   xcodeVersion: "16.2"
-
 settings:
   base:
     MARKETING_VERSION: "1.0.0"
@@ -13,20 +12,16 @@ settings:
     SWIFT_VERSION: "5.9"
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     TARGETED_DEVICE_FAMILY: "1"
-
 packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     exactVersion: "11.6.0"
-
 targets:
-
   PPPIX:
     type: application
     platform: iOS
     deploymentTarget: "16.0"
     bundleId: tech.pppix.app
-
     sources:
       - path: PPPIX/App
       - path: PPPIX/Core
@@ -37,11 +32,9 @@ targets:
           - "**/*.plist"
           - "**/*.mp3"
           - "**/*.entitlements"
-
     resources:
       - path: PPPIX/Resources/GoogleService-Info.plist
         optional: true
-
     info:
       path: PPPIX/Resources/Info.plist
       properties:
@@ -63,33 +56,33 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano."
         NSLocationAlwaysUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano."
         NSFamilyControlsUsageDescription: "O PPPIX usa o Screen Time para proteger seus apps financeiros com senha."
-
     entitlements:
       path: PPPIX/PPPIX.entitlements
-
     dependencies:
       - package: Firebase
         product: FirebaseCore
       - package: Firebase
         product: FirebaseMessaging
-
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app
-        CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""
-
+        DEVELOPMENT_TEAM: K5SWZ92Z64
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
+          PROVISIONING_PROFILE_SPECIFIER: "PPPIX AppStore"
   PPPIXBlockExtension:
     type: app-extension
     platform: iOS
     deploymentTarget: "16.0"
     bundleId: tech.pppix.app.block
-
     sources:
       - path: PPPIXBlockExtension
         excludes:
           - "**/*.entitlements"
-
     info:
       path: PPPIXBlockExtension/Info.plist
       properties:
@@ -98,27 +91,26 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.managed-settings.shield.configuration
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
-
     entitlements:
       path: PPPIXBlockExtension/PPPIXBlockExtension.entitlements
-
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.block
-        CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""
-
+        DEVELOPMENT_TEAM: K5SWZ92Z64
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Automatic
   PPPIXActivityMonitor:
     type: app-extension
     platform: iOS
     deploymentTarget: "16.0"
     bundleId: tech.pppix.app.monitor
-
     sources:
       - path: PPPIXActivityMonitor
         excludes:
           - "**/*.entitlements"
-
     info:
       path: PPPIXActivityMonitor/Info.plist
       properties:
@@ -127,18 +119,18 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.DeviceActivityMonitor
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PPPIXActivityMonitor
-
     entitlements:
       path: PPPIXActivityMonitor/PPPIXActivityMonitor.entitlements
-
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.monitor
-        CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""
-
+        DEVELOPMENT_TEAM: K5SWZ92Z64
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Automatic
 schemes:
-  # Scheme principal - SEM extensões (para build no simulador)
   PPPIX:
     build:
       targets:
@@ -147,8 +139,6 @@ schemes:
       config: Debug
     archive:
       config: Release
-
-  # Scheme completo - COM extensões (para build no device real)
   PPPIX-Full:
     build:
       targets:
