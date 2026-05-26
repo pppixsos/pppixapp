@@ -49,6 +49,8 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
           cp /tmp/pppix.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
           echo "Profile installed: $UUID"
+          # Salvar keychain path para uso posterior
+          echo "KEYCHAIN_PATH=$HOME/Library/Keychains/build.keychain-db" >> $GITHUB_ENV
 
       - name: Setup API Key
         env:
@@ -63,13 +65,14 @@ jobs:
 
       - name: Archive
         run: |
+          security unlock-keychain -p temppass123 build.keychain
           xcodebuild \
             -project PPPIX.xcodeproj \
             -scheme PPPIX \
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
-            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
             archive
 
       - name: Export IPA
@@ -77,6 +80,7 @@ jobs:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          security unlock-keychain -p temppass123 build.keychain
           cat > /tmp/ExportOptions.plist << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -101,11 +105,7 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -exportPath $RUNNER_TEMP/PPPIX_ipa \
-            -exportOptionsPlist /tmp/ExportOptions.plist \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
-            -authenticationKeyID ${KEY_ID} \
-            -authenticationKeyIssuerID ${ISSUER_ID}
+            -exportOptionsPlist /tmp/ExportOptions.plist
 
       - name: Verificar assinatura
         run: |
