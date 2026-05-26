@@ -59,8 +59,8 @@ jobs:
           export APP_STORE_CONNECT_PRIVATE_KEY=$(echo "$API_KEY" | base64 --decode)
           CERT_KEY_CONTENT=$(echo "$PRIVATE_KEY" | base64 --decode)
           app-store-connect fetch-signing-files \
+            tech.pppix.app \
             --type IOS_APP_STORE \
-            --bundle-id tech.pppix.app \
             --create \
             --certificate-key "$CERT_KEY_CONTENT"
           xcode-project use-profiles
