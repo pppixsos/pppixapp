@@ -67,11 +67,12 @@ jobs:
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=K5SWZ92Z64 \
-            PROVISIONING_PROFILE_SPECIFIER="PPPIX AppStore" \
-            OTHER_CODE_SIGN_FLAGS="--keychain /Users/runner/Library/Keychains/build.keychain-db" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
+            -authenticationKeyID ${KEY_ID} \
+            -authenticationKeyIssuerID ${ISSUER_ID} \
             archive
 
       - name: Export IPA
@@ -88,15 +89,6 @@ jobs:
             <string>app-store-connect</string>
             <key>teamID</key>
             <string>K5SWZ92Z64</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>signingCertificate</key>
-            <string>Apple Distribution</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>tech.pppix.app</key>
-              <string>PPPIX AppStore</string>
-            </dict>
           </dict>
           </plist>
           PLIST
