@@ -51,16 +51,18 @@ jobs:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY_BASE64 }}
         run: |
           pip3 install codemagic-cli-tools --break-system-packages
           export APP_STORE_CONNECT_KEY_IDENTIFIER=$KEY_ID
           export APP_STORE_CONNECT_ISSUER_ID=$ISSUER_ID
           export APP_STORE_CONNECT_PRIVATE_KEY=$(echo "$API_KEY" | base64 --decode)
+          CERT_KEY=$(echo "$PRIVATE_KEY" | base64 --decode)
           app-store-connect fetch-signing-files \
             --type IOS_APP_STORE \
             --bundle-id tech.pppix.app \
             --create \
-            --certificate-key /tmp/pppix.key
+            --certificate-key "@/tmp/pppix.key"
           xcode-project use-profiles
 
       - name: Resolve SPM
