@@ -22,15 +22,24 @@ workflows:
       - name: Gerar .xcodeproj
         script: xcodegen generate --spec project.yml
 
-      - name: Atualizar Team ID
+      - name: Instalar certificado
         script: |
-          sed -i '' "s/DEVELOPMENT_TEAM = \"\"/DEVELOPMENT_TEAM = $TEAM_ID/g" PPPIX.xcodeproj/project.pbxproj || true
-          sed -i '' "s/DEVELOPMENT_TEAM = ;/DEVELOPMENT_TEAM = $TEAM_ID;/g" PPPIX.xcodeproj/project.pbxproj || true
+          echo $CERTIFICATE_PRIVATE_KEY | base64 --decode > /tmp/pppix.p12
+          keychain initialize
+          keychain add-certificates --certificate /tmp/pppix.p12 --certificate-password $CERTIFICATE_PASSWORD
 
-      - name: Configurar API Key para assinatura
+      - name: Configurar API Key
         script: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
+
+      - name: Criar perfil de provisionamento
+        script: |
+          app-store-connect fetch-signing-files \
+            --type IOS_APP_STORE \
+            --bundle-id $BUNDLE_ID \
+            --create
+          xcode-project use-profiles
 
       - name: Resolver pacotes SPM
         script: |
@@ -46,13 +55,9 @@ workflows:
             -configuration Release \
             -archivePath build/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM=$TEAM_ID \
-            archive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8 \
-            -authenticationKeyID $APP_STORE_CONNECT_KEY_IDENTIFIER \
-            -authenticationKeyIssuerID $APP_STORE_CONNECT_ISSUER_ID
+            archive
 
       - name: Exportar IPA
         script: |
@@ -73,11 +78,7 @@ workflows:
           xcodebuild -exportArchive \
             -archivePath build/PPPIX.xcarchive \
             -exportPath build/ios/ipa \
-            -exportOptionsPlist /tmp/ExportOptions.plist \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8 \
-            -authenticationKeyID $APP_STORE_CONNECT_KEY_IDENTIFIER \
-            -authenticationKeyIssuerID $APP_STORE_CONNECT_ISSUER_ID
+            -exportOptionsPlist /tmp/ExportOptions.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
