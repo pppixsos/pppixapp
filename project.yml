@@ -49,8 +49,8 @@ targets:
       properties:
         CFBundleDisplayName: PPPIX
         CFBundleIdentifier: tech.pppix.app
-        CFBundleShortVersionString: "1.0.18"
-        CFBundleVersion: "18"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleIconName: AppIcon
         UILaunchScreen:
           UIColorName: ""
