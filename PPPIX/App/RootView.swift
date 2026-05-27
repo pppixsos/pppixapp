@@ -29,7 +29,7 @@ struct RootView: View {
         .fullScreenCover(isPresented: $showPasswordScreen) {
             ShieldPasswordView(isPresented: $showPasswordScreen)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openAlertDetail)) { notif in
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.openAlertDetail"))) { notif in
             if let alertId = notif.userInfo?["alert_id"] as? Int {
                 showAlertDetail = alertId
             }
@@ -171,7 +171,7 @@ struct ShieldPasswordView: View {
 
         Task {
             do {
-                let response = try await APIClient.shared.verifyPassword(password)
+                let response = try await APIClient.shared.verifyPassword(body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
                 await MainActor.run {
                     isLoading = false
                     handlePasswordResponse(response)
@@ -186,7 +186,7 @@ struct ShieldPasswordView: View {
         }
     }
 
-    private func handlePasswordResponse(_ response: PasswordResponse) {
+    private func handlePasswordResponse(_ response: VerifyPasswordResponse) {
         switch response.action {
         case "open_bank":
             // Senha normal — desbloquear e o usuário abre o app normalmente
@@ -223,6 +223,5 @@ struct ShieldPasswordView: View {
 }
 
 extension Notification.Name {
-    static let openAlertDetail = Notification.Name("pppix_open_alert_detail")
     static let sendEmergencyAlert = Notification.Name("pppix_send_emergency_alert")
 }
