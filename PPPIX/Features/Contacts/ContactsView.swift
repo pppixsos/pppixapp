@@ -20,7 +20,6 @@ struct ContactsView: View {
                 ScrollView {
                     VStack(spacing: 16) {
 
-                        // Explicação
                         PPPIXCard {
                             VStack(alignment: .leading, spacing: 8) {
                                 Label("Grupo de Emergência", systemImage: "person.2.fill")
@@ -103,6 +102,7 @@ struct ContactsView: View {
         .sheet(isPresented: $showAddSheet) {
             AddContactSheet(myEmail: myEmail) { msg in
                 successMessage = msg
+                errorMessage = ""
                 Task { await loadContacts() }
             }
         }
@@ -114,13 +114,16 @@ struct ContactsView: View {
 
     private func loadContacts() async {
         isLoading = true
+        errorMessage = ""
         defer { isLoading = false }
+
         do {
-            async let accepted = APIClient.shared.getAcceptedConnections()
-            async let pending  = APIClient.shared.getPendingConnections()
-            let a = (try? await accepted) ?? []
-            let p = (try? await pending) ?? []
-            connections = p + a
+            let accepted = try await APIClient.shared.getAcceptedConnections()
+            let pending  = try await APIClient.shared.getPendingConnections()
+            connections = pending + accepted
+        } catch {
+            errorMessage = "Erro ao carregar contatos: \(error.localizedDescription)"
+            connections = []
         }
     }
 
@@ -128,15 +131,20 @@ struct ContactsView: View {
         do {
             try await APIClient.shared.acceptConnection(id: c.id)
             successMessage = "Contato aceito! Você está no grupo de emergência dele."
+            errorMessage = ""
             await loadContacts()
         } catch {
-            errorMessage = "Erro ao aceitar contato."
+            errorMessage = "Erro ao aceitar contato: \(error.localizedDescription)"
         }
     }
 
     private func deleteConnection(_ c: Connection) async {
-        try? await APIClient.shared.deleteConnection(id: c.id)
-        await loadContacts()
+        do {
+            try await APIClient.shared.deleteConnection(id: c.id)
+            await loadContacts()
+        } catch {
+            errorMessage = "Erro ao remover contato."
+        }
     }
 }
 
@@ -157,7 +165,6 @@ private struct ConnectionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                // Avatar inicial
                 Text(String(displayName.prefix(1)).uppercased())
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.white)
@@ -176,7 +183,6 @@ private struct ConnectionRow: View {
 
                 Spacer()
 
-                // Badge status
                 Text(isPending ? (isReceived ? "Convite Recebido" : "Aguardando") : "Aceito ✓")
                     .font(.caption2.bold())
                     .foregroundColor(isPending ? Color(hex: "#FF9900") : Color(hex: "#44FF88"))
@@ -187,7 +193,6 @@ private struct ConnectionRow: View {
             }
 
             HStack(spacing: 10) {
-                // Aceitar (se convite recebido)
                 if isReceived {
                     Button(action: onAccept) {
                         Label("Aceitar Convite", systemImage: "checkmark")
@@ -202,7 +207,6 @@ private struct ConnectionRow: View {
 
                 Spacer()
 
-                // Remover / cancelar
                 Button {
                     showDeleteConfirm = true
                 } label: {
@@ -260,7 +264,7 @@ private struct AddContactSheet: View {
                         Text("Adicionar Contato")
                             .font(.title2.bold())
                             .foregroundColor(.white)
-                        Text("A pessoa precisa ter o PPPIX instalado e receberá uma notificação de convite")
+                        Text("A pessoa precisa ter o PPPIX instalado (iOS ou Android) e receberá uma notificação de convite")
                             .font(.subheadline)
                             .foregroundColor(Color(white: 0.5))
                             .multilineTextAlignment(.center)
@@ -308,9 +312,10 @@ private struct AddContactSheet: View {
             onSent("Convite enviado! \(trimmed) receberá uma notificação para aceitar.")
             dismiss()
         } catch APIError.badRequest(let msg) {
-            if msg.lowercased().contains("already") || msg.lowercased().contains("already_connected") {
+            let lower = msg.lowercased()
+            if lower.contains("already") || lower.contains("already_connected") {
                 errorMessage = "Você já está conectado com este contato."
-            } else if msg.lowercased().contains("pending") {
+            } else if lower.contains("pending") {
                 errorMessage = "Convite já enviado. Aguarde a resposta."
             } else {
                 errorMessage = msg
