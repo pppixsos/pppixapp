@@ -3,11 +3,85 @@ import UIKit
 
 // Representa um app instalado no iPhone
 struct InstalledApp: Identifiable, Codable {
-    let id: String
+    let id: String       // bundle ID
     let name: String
-    let iconData: Data?
+    let urlScheme: String
+    let iconName: String // nome do asset local
     var isBlocked: Bool
     var profileInstalled: Bool
+
+    // Ícone como Data — carregado em runtime
+    var iconData: Data? {
+        if let img = UIImage(named: iconName) { return img.pngData() }
+        return nil
+    }
+}
+
+// Catálogo de apps financeiros/utilitários populares no Brasil
+// com seus URL schemes para verificar se estão instalados
+struct AppCatalog {
+    static let all: [(id: String, name: String, scheme: String, icon: String)] = [
+        // Bancos
+        ("com.itau.iphone",                 "Itaú",              "itauaplicativo://",    "app_itau"),
+        ("com.bradesco.Bradesco",           "Bradesco",          "bradesco://",          "app_bradesco"),
+        ("com.bb.bolsodigital",             "Banco do Brasil",   "bbdigi://",            "app_bb"),
+        ("com.santander.SantanderBrasil",   "Santander",         "santander://",         "app_santander"),
+        ("com.caixa.caixatem",              "Caixa Tem",         "caixatemapp://",       "app_caixa"),
+        ("com.nubank.app",                  "Nubank",            "nubank://",            "app_nubank"),
+        ("com.c6bank.ios",                  "C6 Bank",           "c6bank://",            "app_c6bank"),
+        ("com.inter.Inter",                 "Inter",             "interapp://",          "app_inter"),
+        ("br.com.sicredi.sicredi",          "Sicredi",           "sicredi://",           "app_sicredi"),
+        ("com.picpay.ios",                  "PicPay",            "picpay://",            "app_picpay"),
+        ("com.mercadopago.ios",             "Mercado Pago",      "mercadopago://",       "app_mercadopago"),
+        ("com.xp.minha-conta",              "XP",                "xpapp://",             "app_xp"),
+        ("com.btgpactual.digital",          "BTG Pactual",       "btgpactual://",        "app_btg"),
+        // Pagamentos
+        ("com.apple.Passbook",              "Apple Wallet",      "shoebox://",           "app_wallet"),
+        ("br.com.pagaleve.app",             "Pagaleve",          "pagaleve://",          "app_pagaleve"),
+        // Outros financeiros
+        ("com.guiabolso.ios",               "Guiabolso",         "guiabolso://",         "app_guiabolso"),
+        ("com.neon.Neon",                   "Neon",              "neon://",              "app_neon"),
+        ("br.com.original.original",        "Original",          "original://",          "app_original"),
+        ("com.agibank.app",                 "Agibank",           "agibank://",           "app_agibank"),
+        ("com.sofisa.sofisa",               "Sofisa",            "sofisa://",            "app_sofisa"),
+        // Redes sociais / comunicação
+        ("com.facebook.Facebook",           "Facebook",          "fb://",                "app_facebook"),
+        ("com.instagram.Instagram",         "Instagram",         "instagram://",         "app_instagram"),
+        ("com.burbn.instagram",             "Instagram",         "instagram://",         "app_instagram"),
+        ("net.whatsapp.WhatsApp",           "WhatsApp",          "whatsapp://",          "app_whatsapp"),
+        ("com.toyopagroup.picaboo",         "Snapchat",          "snapchat://",          "app_snapchat"),
+        ("com.atebits.Tweetie2",            "Twitter/X",         "twitter://",           "app_twitter"),
+        ("com.zhiliaoapp.musically",        "TikTok",            "tiktok://",            "app_tiktok"),
+        ("com.hammerandchisel.discord",     "Discord",           "discord://",           "app_discord"),
+        ("com.toyopagroup.picaboo",         "Telegram",          "tg://",                "app_telegram"),
+        // Outros
+        ("com.google.Maps",                 "Google Maps",       "comgooglemaps://",     "app_gmaps"),
+        ("com.ubercab.UberClient",          "Uber",              "uber://",              "app_uber"),
+        ("com.99app.client",                "99",                "taxis99://",           "app_99"),
+        ("com.ifood.app",                   "iFood",             "ifood://",             "app_ifood"),
+        ("com.rappi.app",                   "Rappi",             "rappi://",             "app_rappi"),
+    ]
+
+    static func installedApps() -> [InstalledApp] {
+        var seen = Set<String>()
+        var result: [InstalledApp] = []
+
+        for entry in all {
+            guard !seen.contains(entry.id) else { continue }
+            guard let url = URL(string: entry.scheme),
+                  UIApplication.shared.canOpenURL(url) else { continue }
+            seen.insert(entry.id)
+            result.append(InstalledApp(
+                id: entry.id,
+                name: entry.name,
+                urlScheme: entry.scheme,
+                iconName: entry.icon,
+                isBlocked: false,
+                profileInstalled: false
+            ))
+        }
+        return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
 }
 
 @MainActor
@@ -27,59 +101,12 @@ final class AppBlockManager: ObservableObject {
         guard installedApps.isEmpty else { return }
         isLoadingApps = true
         Task.detached(priority: .userInitiated) {
-            let apps = await Self.fetchInstalledApps()
+            let apps = AppCatalog.installedApps()
             await MainActor.run {
                 self.installedApps = apps
                 self.isLoadingApps = false
             }
         }
-    }
-
-    private static func fetchInstalledApps() async -> [InstalledApp] {
-        var result: [InstalledApp] = []
-        guard
-            let workspaceClass = NSClassFromString("LSApplicationWorkspace") as? NSObject.Type,
-            let workspace = workspaceClass.perform(Selector(("defaultWorkspace")))?.takeUnretainedValue() as? NSObject,
-            let appsRaw = workspace.perform(Selector(("allInstalledApplications")))?.takeUnretainedValue() as? [NSObject]
-        else { return [] }
-
-        let excluded = Set(["tech.pppix.app"])
-        let systemPrefixes = ["com.apple."]
-
-        for app in appsRaw {
-            guard
-                let bundleId = app.perform(Selector(("applicationIdentifier")))?.takeUnretainedValue() as? String,
-                !excluded.contains(bundleId),
-                !systemPrefixes.contains(where: { bundleId.hasPrefix($0) }),
-                let appName = app.perform(Selector(("localizedName")))?.takeUnretainedValue() as? String,
-                !appName.isEmpty
-            else { continue }
-
-            var iconData: Data? = nil
-            if let bundleURL = app.perform(Selector(("bundleURL")))?.takeUnretainedValue() as? URL,
-               let bundle = Bundle(url: bundleURL) {
-                iconData = Self.iconDataFromBundle(bundle)
-            }
-            result.append(InstalledApp(id: bundleId, name: appName, iconData: iconData, isBlocked: false, profileInstalled: false))
-        }
-        return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    private static func iconDataFromBundle(_ bundle: Bundle) -> Data? {
-        if let icons = bundle.infoDictionary?["CFBundleIcons"] as? [String: Any],
-           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-           let files = primary["CFBundleIconFiles"] as? [String],
-           let lastName = files.last {
-            for suffix in ["@3x", "@2x", ""] {
-                if let img = UIImage(named: lastName + suffix, in: bundle, compatibleWith: nil),
-                   let data = img.pngData() { return data }
-            }
-        }
-        if let iconFile = bundle.infoDictionary?["CFBundleIconFile"] as? String,
-           let img = UIImage(named: iconFile, in: bundle, compatibleWith: nil) {
-            return img.pngData()
-        }
-        return nil
     }
 
     func blockApp(_ app: InstalledApp, completion: @escaping (Bool) -> Void) {
@@ -98,17 +125,10 @@ final class AppBlockManager: ObservableObject {
     }
 
     func openRealApp(bundleId: String) {
-        openAppByBundleId(bundleId)
-    }
-
-    private func openAppByBundleId(_ bundleId: String) {
-        guard
-            let workspaceClass = NSClassFromString("LSApplicationWorkspace") as? NSObject.Type,
-            let workspace = workspaceClass.perform(Selector(("defaultWorkspace")))?.takeUnretainedValue() as? NSObject
-        else { return }
-        let sel = Selector(("openApplicationWithBundleID:"))
-        if workspace.responds(to: sel) {
-            workspace.perform(sel, with: bundleId)
+        // Abrir pelo URL scheme do app
+        if let app = blockedApps.first(where: { $0.id == bundleId }),
+           let url = URL(string: app.urlScheme) {
+            UIApplication.shared.open(url)
         }
     }
 
