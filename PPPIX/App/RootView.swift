@@ -33,14 +33,11 @@ struct RootView: View {
                 appName: "App Financeiro",
                 onUnlocked: {
                     showUnlockScreen = false
-                    // Desbloqueia temporariamente
+                    // Desbloqueia temporariamente e rebloqueia após 60 segundos
                     #if !targetEnvironment(simulator)
                     ScreenTimeManager.shared.unblockAll()
-                    // Rebloqueia após 60 segundos
                     DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
-                        if let sel = SessionManager.shared.lastAppSelection {
-                            ScreenTimeManager.shared.blockApps(sel)
-                        }
+                        ScreenTimeManager.shared.reblockFromSaved()
                     }
                     #endif
                 }
