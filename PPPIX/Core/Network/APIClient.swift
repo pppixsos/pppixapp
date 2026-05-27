@@ -107,11 +107,19 @@ final class APIClient {
     // MARK: - Connections
 
     func getAcceptedConnections() async throws -> [Connection] {
-        try await get("connections/accepted/")
+        let data = try await rawGet("connections/accepted/")
+        if let list = try? JSONDecoder().decode([Connection].self, from: data) { return list }
+        if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
+           let results = paged.results { return results }
+        return []
     }
 
     func getPendingConnections() async throws -> [Connection] {
-        try await get("connections/pending/")
+        let data = try await rawGet("connections/pending/")
+        if let list = try? JSONDecoder().decode([Connection].self, from: data) { return list }
+        if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
+           let results = paged.results { return results }
+        return []
     }
 
     func sendConnectionRequest(email: String) async throws {
