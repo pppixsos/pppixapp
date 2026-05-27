@@ -7,8 +7,8 @@ options:
   xcodeVersion: "16.2"
 settings:
   base:
-    MARKETING_VERSION: "1.0.24"
-    CURRENT_PROJECT_VERSION: "24"
+    MARKETING_VERSION: "1.0.26"
+    CURRENT_PROJECT_VERSION: "26"
     SWIFT_VERSION: "5.9"
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     TARGETED_DEVICE_FAMILY: "1"
@@ -89,12 +89,7 @@ targets:
         product: FirebaseCore
       - package: Firebase
         product: FirebaseMessaging
-      - target: PPPIXBlockExtension
-        embed: true
-      - target: PPPIXShieldAction
-        embed: true
-      - target: PPPIXActivityMonitor
-        embed: true
+
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app
