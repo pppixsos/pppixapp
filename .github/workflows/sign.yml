@@ -12,7 +12,7 @@ jobs:
       - name: Select Xcode 26
         run: |
           if [ -d "/Applications/Xcode_26.0.1.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_26.0.1.app
+            sudo xcode-select -s /Applications/Xcode_26.2.app || sudo xcode-select -s /Applications/Xcode_26.0.1.app
           else
             sudo xcode-select -s /Applications/Xcode_26.0.app
           fi
@@ -141,16 +141,16 @@ jobs:
 
       - name: Check IPA version
         run: |
-          unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1
+          unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1 | tee /tmp/xcode_build.log | grep -E "error:|warning:|ARCHIVE" || true
           echo "=== CFBundleVersion dentro do IPA ==="
           /usr/libexec/PlistBuddy -c "Print CFBundleVersion" /tmp/ipa_check/Payload/PPPIX.app/Info.plist
           /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" /tmp/ipa_check/Payload/PPPIX.app/Info.plist
 
       - name: Check signature
         run: |
-          unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1
+          unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1 | tee /tmp/xcode_build.log | grep -E "error:|warning:|ARCHIVE" || true
           echo '=== Authority (nao deve ser unavailable) ==='
-          codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | grep -E 'Authority|TeamID|Identifier'
+          codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | tee /tmp/xcode_build.log | grep -E "error:|warning:|ARCHIVE" || true | grep -E 'Authority|TeamID|Identifier'
 
       - name: Check entitlements in IPA
         run: |
