@@ -1,87 +1,51 @@
 import Foundation
 import UIKit
 
-// Representa um app instalado no iPhone
 struct InstalledApp: Identifiable, Codable {
-    let id: String       // bundle ID
+    let id: String
     let name: String
     let urlScheme: String
-    let iconName: String // nome do asset local
     var isBlocked: Bool
     var profileInstalled: Bool
-
-    // Ícone como Data — carregado em runtime
-    var iconData: Data? {
-        if let img = UIImage(named: iconName) { return img.pngData() }
-        return nil
-    }
 }
 
-// Catálogo de apps financeiros/utilitários populares no Brasil
-// com seus URL schemes para verificar se estão instalados
+// Lista fixa de apps populares no Brasil — mostrada sempre, independente de estar instalado
+// O usuário escolhe o app dele e o atalho é criado com o ícone correto
 struct AppCatalog {
-    static let all: [(id: String, name: String, scheme: String, icon: String)] = [
-        // Bancos
-        ("com.itau.iphone",                 "Itaú",              "itauaplicativo://",    "app_itau"),
-        ("com.bradesco.Bradesco",           "Bradesco",          "bradesco://",          "app_bradesco"),
-        ("com.bb.bolsodigital",             "Banco do Brasil",   "bbdigi://",            "app_bb"),
-        ("com.santander.SantanderBrasil",   "Santander",         "santander://",         "app_santander"),
-        ("com.caixa.caixatem",              "Caixa Tem",         "caixatemapp://",       "app_caixa"),
-        ("com.nubank.app",                  "Nubank",            "nubank://",            "app_nubank"),
-        ("com.c6bank.ios",                  "C6 Bank",           "c6bank://",            "app_c6bank"),
-        ("com.inter.Inter",                 "Inter",             "interapp://",          "app_inter"),
-        ("br.com.sicredi.sicredi",          "Sicredi",           "sicredi://",           "app_sicredi"),
-        ("com.picpay.ios",                  "PicPay",            "picpay://",            "app_picpay"),
-        ("com.mercadopago.ios",             "Mercado Pago",      "mercadopago://",       "app_mercadopago"),
-        ("com.xp.minha-conta",              "XP",                "xpapp://",             "app_xp"),
-        ("com.btgpactual.digital",          "BTG Pactual",       "btgpactual://",        "app_btg"),
+    static let all: [InstalledApp] = [
+        // Bancos tradicionais
+        InstalledApp(id: "com.itau.iphone",               name: "Itaú",             urlScheme: "itauaplicativo://", isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.bradesco.app",              name: "Bradesco",          urlScheme: "bradesco://",       isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.bb.bolsodigital",           name: "Banco do Brasil",   urlScheme: "bbdigi://",         isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.santander.app",             name: "Santander",         urlScheme: "santander://",      isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.caixa.app",                 name: "Caixa",             urlScheme: "caixatem://",       isBlocked: false, profileInstalled: false),
+        // Bancos digitais
+        InstalledApp(id: "com.nubank.app",                name: "Nubank",            urlScheme: "nubank://",         isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.c6bank.ios",                name: "C6 Bank",           urlScheme: "c6bank://",         isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.inter.Inter",               name: "Inter",             urlScheme: "interapp://",       isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.neon.Neon",                 name: "Neon",              urlScheme: "neon://",           isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.original.app",              name: "Original",          urlScheme: "original://",       isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "br.com.sicredi.app",            name: "Sicredi",           urlScheme: "sicredi://",        isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.agibank.app",               name: "Agibank",           urlScheme: "agibank://",        isBlocked: false, profileInstalled: false),
         // Pagamentos
-        ("com.apple.Passbook",              "Apple Wallet",      "shoebox://",           "app_wallet"),
-        ("br.com.pagaleve.app",             "Pagaleve",          "pagaleve://",          "app_pagaleve"),
-        // Outros financeiros
-        ("com.guiabolso.ios",               "Guiabolso",         "guiabolso://",         "app_guiabolso"),
-        ("com.neon.Neon",                   "Neon",              "neon://",              "app_neon"),
-        ("br.com.original.original",        "Original",          "original://",          "app_original"),
-        ("com.agibank.app",                 "Agibank",           "agibank://",           "app_agibank"),
-        ("com.sofisa.sofisa",               "Sofisa",            "sofisa://",            "app_sofisa"),
-        // Redes sociais / comunicação
-        ("com.facebook.Facebook",           "Facebook",          "fb://",                "app_facebook"),
-        ("com.instagram.Instagram",         "Instagram",         "instagram://",         "app_instagram"),
-        ("com.burbn.instagram",             "Instagram",         "instagram://",         "app_instagram"),
-        ("net.whatsapp.WhatsApp",           "WhatsApp",          "whatsapp://",          "app_whatsapp"),
-        ("com.toyopagroup.picaboo",         "Snapchat",          "snapchat://",          "app_snapchat"),
-        ("com.atebits.Tweetie2",            "Twitter/X",         "twitter://",           "app_twitter"),
-        ("com.zhiliaoapp.musically",        "TikTok",            "tiktok://",            "app_tiktok"),
-        ("com.hammerandchisel.discord",     "Discord",           "discord://",           "app_discord"),
-        ("com.toyopagroup.picaboo",         "Telegram",          "tg://",                "app_telegram"),
+        InstalledApp(id: "com.picpay.ios",                name: "PicPay",            urlScheme: "picpay://",         isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.mercadopago.ios",           name: "Mercado Pago",      urlScheme: "mercadopago://",    isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.xp.app",                    name: "XP",                urlScheme: "xpapp://",          isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.btgpactual.app",            name: "BTG Pactual",       urlScheme: "btgpactual://",     isBlocked: false, profileInstalled: false),
+        // Redes sociais
+        InstalledApp(id: "com.facebook.Facebook",         name: "Facebook",          urlScheme: "fb://",             isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.burbn.instagram",           name: "Instagram",         urlScheme: "instagram://",      isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "net.whatsapp.WhatsApp",         name: "WhatsApp",          urlScheme: "whatsapp://",       isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.zhiliaoapp.musically",      name: "TikTok",            urlScheme: "tiktok://",         isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.atebits.Tweetie2",          name: "X (Twitter)",       urlScheme: "twitter://",        isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.hammerandchisel.discord",   name: "Discord",           urlScheme: "discord://",        isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "ph.telegra.Telegraph",          name: "Telegram",          urlScheme: "tg://",             isBlocked: false, profileInstalled: false),
         // Outros
-        ("com.google.Maps",                 "Google Maps",       "comgooglemaps://",     "app_gmaps"),
-        ("com.ubercab.UberClient",          "Uber",              "uber://",              "app_uber"),
-        ("com.99app.client",                "99",                "taxis99://",           "app_99"),
-        ("com.ifood.app",                   "iFood",             "ifood://",             "app_ifood"),
-        ("com.rappi.app",                   "Rappi",             "rappi://",             "app_rappi"),
+        InstalledApp(id: "com.ubercab.UberClient",        name: "Uber",              urlScheme: "uber://",           isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.99app.client",              name: "99",                urlScheme: "taxis99://",        isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.ifood.app",                 name: "iFood",             urlScheme: "ifood://",          isBlocked: false, profileInstalled: false),
+        InstalledApp(id: "com.rappi.app",                 name: "Rappi",             urlScheme: "rappi://",          isBlocked: false, profileInstalled: false),
     ]
-
-    static func installedApps() -> [InstalledApp] {
-        var seen = Set<String>()
-        var result: [InstalledApp] = []
-
-        for entry in all {
-            guard !seen.contains(entry.id) else { continue }
-            guard let url = URL(string: entry.scheme),
-                  UIApplication.shared.canOpenURL(url) else { continue }
-            seen.insert(entry.id)
-            result.append(InstalledApp(
-                id: entry.id,
-                name: entry.name,
-                urlScheme: entry.scheme,
-                iconName: entry.icon,
-                isBlocked: false,
-                profileInstalled: false
-            ))
-        }
-        return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
 }
 
 @MainActor
@@ -100,12 +64,10 @@ final class AppBlockManager: ObservableObject {
     func loadInstalledApps() {
         guard installedApps.isEmpty else { return }
         isLoadingApps = true
-        Task.detached(priority: .userInitiated) {
-            let apps = AppCatalog.installedApps()
-            await MainActor.run {
-                self.installedApps = apps
-                self.isLoadingApps = false
-            }
+        // Mostrar lista completa — usuário escolhe o app dele
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.installedApps = AppCatalog.all
+            self.isLoadingApps = false
         }
     }
 
@@ -125,8 +87,7 @@ final class AppBlockManager: ObservableObject {
     }
 
     func openRealApp(bundleId: String) {
-        // Abrir pelo URL scheme do app
-        if let app = blockedApps.first(where: { $0.id == bundleId }),
+        if let app = (blockedApps + AppCatalog.all).first(where: { $0.id == bundleId }),
            let url = URL(string: app.urlScheme) {
             UIApplication.shared.open(url)
         }
