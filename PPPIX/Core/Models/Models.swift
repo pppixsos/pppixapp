@@ -246,6 +246,11 @@ struct Connection: Codable, Identifiable {
     }
 }
 
+struct ConnectionListResponse: Decodable {
+    let results: [Connection]?
+    let count: Int?
+}
+
 struct SendConnectionRequest: Encodable {
     let to_user_email: String
 }
