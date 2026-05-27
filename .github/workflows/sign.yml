@@ -94,34 +94,8 @@ jobs:
         env:
           CERT_IDENTITY: ${{ env.CERT_IDENTITY }}
         run: |
-          UUID=$(cat /tmp/profile_uuid.txt)
-          echo "Identity: $CERT_IDENTITY"
-          echo "UUID principal: $UUID"
-
-          # Atualizar CODE_SIGN_IDENTITY em todos os targets
-          sed -i '' -e "s/CODE_SIGN_IDENTITY: \"[^\"]*\"/CODE_SIGN_IDENTITY: \"$CERT_IDENTITY\"/g" project.yml
-
-          # Atualizar PROVISIONING_PROFILE_SPECIFIER apenas do target PPPIX principal (primeira ocorrência)
-          python3 - <<PYEOF
-import re
-c = open('project.yml').read()
-import os
-uuid = open('/tmp/profile_uuid.txt').read().strip()
-identity = os.environ['CERT_IDENTITY']
-
-# Substituir apenas a PRIMEIRA ocorrência de PROVISIONING_PROFILE_SPECIFIER (target PPPIX)
-# As extensões já têm seus UUIDs hardcoded e não devem ser alteradas
-c = c.replace('PROVISIONING_PROFILE_SPECIFIER: "PPPIX AppStore"', 'PROVISIONING_PROFILE_SPECIFIER: "' + uuid + '"', 1)
-
-# Garantir que as extensões tenham seus UUIDs corretos
-c = c.replace('PROVISIONING_PROFILE_SPECIFIER: "PPPIX Block AppStore"', 'PROVISIONING_PROFILE_SPECIFIER: "cb0b5280-96e5-421d-b04c-07f989b07727"')
-c = c.replace('PROVISIONING_PROFILE_SPECIFIER: "PPPIX Monitor AppStore"', 'PROVISIONING_PROFILE_SPECIFIER: "b2745fe0-3030-44e9-a2a1-13695e252a31"')
-c = c.replace('PROVISIONING_PROFILE_SPECIFIER: "PPPIX Shield AppStore"', 'PROVISIONING_PROFILE_SPECIFIER: "4ce74b51-de94-4e75-8b55-d5465613b23f"')
-
-open('project.yml', 'w').write(c)
-print('project.yml atualizado')
-PYEOF
-
+          echo "aW1wb3J0IG9zCnV1aWQgPSBvcGVuKCcvdG1wL3Byb2ZpbGVfdXVpZC50eHQnKS5yZWFkKCkuc3RyaXAoKQppZGVudGl0eSA9IG9zLmVudmlyb25bJ0NFUlRfSURFTlRJVFknXQpjID0gb3BlbigncHJvamVjdC55bWwnKS5yZWFkKCkKYyA9IGMucmVwbGFjZSgnUFJPVklTSU9OSU5HX1BST0ZJTEVfU1BFQ0lGSUVSOiAiUFBQSVggQXBwU3RvcmUiJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkICsgJyInLCAxKQpjID0gYy5yZXBsYWNlKCdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICJQUFBJWCBCbG9jayBBcHBTdG9yZSInLCAnUFJPVklTSU9OSU5HX1BST0ZJTEVfU1BFQ0lGSUVSOiAiY2IwYjUyODAtOTZlNS00MjFkLWIwNGMtMDdmOTg5YjA3NzI3IicpCmMgPSBjLnJlcGxhY2UoJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIlBQUElYIE1vbml0b3IgQXBwU3RvcmUiJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogImIyNzQ1ZmUwLTMwMzAtNDRlOS1hMmExLTEzNjk1ZTI1MmEzMSInKQpjID0gYy5yZXBsYWNlKCdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICJQUFBJWCBTaGllbGQgQXBwU3RvcmUiJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIjRjZTc0YjUxLWRlOTQtNGU3NS04YjU1LWQ1NDY1NjEzYjIzZiInKQppbXBvcnQgcmUKYyA9IHJlLnN1YignQ09ERV9TSUdOX0lERU5USVRZOiAiW14iXSoiJywgJ0NPREVfU0lHTl9JREVOVElUWTogIicgKyBpZGVudGl0eSArICciJywgYykKb3BlbigncHJvamVjdC55bWwnLCAndycpLndyaXRlKGMpCnByaW50KCdwcm9qZWN0LnltbCBhdHVhbGl6YWRvJykK" | base64 --decode > /tmp/update_project.py
+          python3 /tmp/update_project.py
           xcodegen generate --spec project.yml
           echo 'xcodeproj gerado'
           echo '--- project.yml signing ---'
