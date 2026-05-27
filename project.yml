@@ -89,6 +89,12 @@ targets:
         product: FirebaseCore
       - package: Firebase
         product: FirebaseMessaging
+      - target: PPPIXBlockExtension
+        embed: true
+      - target: PPPIXShieldAction
+        embed: true
+      - target: PPPIXActivityMonitor
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app
