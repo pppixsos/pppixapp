@@ -63,12 +63,8 @@ final class LocalWebServer {
         let deepLink = "pppix://unlock?bundle=\(app.id)&name=\(app.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? app.name)"
 
         // Ícone em base64 — se não tiver ícone, usar string vazia (iOS usa ícone padrão)
-        var iconTag = ""
-        if let img = UIImage(named: app.iconName),
-           let iconData = img.pngData(), !iconData.isEmpty {
-            let b64 = iconData.base64EncodedString()
-            iconTag = "<key>Icon</key><data>\(b64)</data>"
-        }
+        // Sem ícone customizado — iOS usa screenshot como ícone do web clip
+        let iconTag = ""
 
         let xml = """
 <?xml version="1.0" encoding="UTF-8"?>
