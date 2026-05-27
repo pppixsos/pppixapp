@@ -7,8 +7,8 @@ options:
   xcodeVersion: "16.2"
 settings:
   base:
-    MARKETING_VERSION: "1.0.26"
-    CURRENT_PROJECT_VERSION: "26"
+    MARKETING_VERSION: "1.0.27"
+    CURRENT_PROJECT_VERSION: "27"
     SWIFT_VERSION: "5.9"
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     TARGETED_DEVICE_FAMILY: "1"
@@ -117,7 +117,7 @@ targets:
         CFBundleDisplayName: PPPIXBlock
         CFBundleIdentifier: tech.pppix.app.block
         NSExtension:
-          NSExtensionPointIdentifier: com.apple.managed-settings.shield.configuration
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
     entitlements:
       path: PPPIXBlockExtension/PPPIXBlockExtension.entitlements
@@ -177,7 +177,7 @@ targets:
         CFBundleDisplayName: PPPIXShieldAction
         CFBundleIdentifier: tech.pppix.app.shield
         NSExtension:
-          NSExtensionPointIdentifier: com.apple.managed-settings.shield.action
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-action-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldActionExtension
     entitlements:
       path: PPPIXShieldAction/PPPIXShieldAction.entitlements
