@@ -3,7 +3,6 @@ import SwiftUI
 struct AppListView: View {
 
     @State private var errorMessage = ""
-    @State private var showPrivacyDisclosure = false
     @State private var savedSelection = false
     @State private var isAuthorizing = false
 
@@ -56,7 +55,7 @@ struct AppListView: View {
                             Text("Simulador detectado")
                                 .font(.headline)
                                 .foregroundColor(.white)
-                            Text("O Screen Time (bloqueio de apps) só funciona em iPhone físico. No dispositivo real você poderá selecionar os apps para proteger.")
+                            Text("O Screen Time só funciona em iPhone físico.")
                                 .font(.caption)
                                 .foregroundColor(Color(white: 0.6))
                                 .multilineTextAlignment(.center)
@@ -67,7 +66,6 @@ struct AppListView: View {
                     ScreenTimeSection(
                         isAuthorizing: $isAuthorizing,
                         savedSelection: $savedSelection,
-                        showPrivacyDisclosure: $showPrivacyDisclosure,
                         errorMessage: $errorMessage
                     )
                     #endif
@@ -125,15 +123,14 @@ import ManagedSettings
 private struct ScreenTimeSection: View {
     @Binding var isAuthorizing: Bool
     @Binding var savedSelection: Bool
-    @Binding var showPrivacyDisclosure: Bool
     @Binding var errorMessage: String
 
     @StateObject private var screenTime = ScreenTimeManager.shared
     @State private var activitySelection = FamilyActivitySelection()
+    @State private var showPicker = false  // binding dedicado ao picker
 
     var body: some View {
         VStack(spacing: 12) {
-            // Status
             PPPIXCard {
                 HStack(spacing: 14) {
                     Image(systemName: screenTime.isAuthorized ? "checkmark.shield.fill" : "shield.slash.fill")
@@ -172,7 +169,7 @@ private struct ScreenTimeSection: View {
 
             if screenTime.isAuthorized {
                 PPPIXButton(title: "Selecionar Apps para Proteger") {
-                    showPrivacyDisclosure = true
+                    showPicker = true  // abre APENAS o picker
                 }
 
                 if savedSelection {
@@ -198,17 +195,13 @@ private struct ScreenTimeSection: View {
                 ErrorBanner(message: errorMessage)
             }
         }
-        .familyActivityPicker(isPresented: $showPrivacyDisclosure, selection: $activitySelection)
+        .familyActivityPicker(isPresented: $showPicker, selection: $activitySelection)
         .onChange(of: activitySelection) { newSelection in
             screenTime.blockApps(newSelection)
             savedSelection = true
         }
-        .task { screenTime.isAuthorized = AuthorizationCenter.shared.authorizationStatus == .approved }
-        .alert("Declaração de Privacidade", isPresented: $showPrivacyDisclosure) {
-            Button("Entendi e Aceito") {}
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("O PPPIX usa o Screen Time EXCLUSIVAMENTE para bloquear os apps que você mesmo selecionar.")
+        .task {
+            screenTime.isAuthorized = AuthorizationCenter.shared.authorizationStatus == .approved
         }
     }
 
