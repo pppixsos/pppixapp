@@ -2,33 +2,41 @@ import ManagedSettingsUI
 import ManagedSettings
 import UIKit
 
+// Esta extensão é chamada pelo iOS quando um app bloqueado é aberto
+// Ela retorna a tela que aparece em cima do app bloqueado
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
-    // Mesmo nome de store que o ScreenTimeManager usa
-    private let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("pppix"))
-
     override func configuration(shielding application: Application) -> ShieldConfiguration {
-        return makeConfig()
+        return pppixShield()
+    }
+
+    override func configuration(shielding application: Application, in domain: WebDomain) -> ShieldConfiguration {
+        return pppixShield()
     }
 
     override func configuration(shielding webDomain: WebDomain) -> ShieldConfiguration {
-        return makeConfig()
+        return pppixShield()
     }
 
-    private func makeConfig() -> ShieldConfiguration {
+    override func configuration(shielding category: ActivityCategory) -> ShieldConfiguration {
+        return pppixShield()
+    }
+
+    private func pppixShield() -> ShieldConfiguration {
         ShieldConfiguration(
-            backgroundBlurStyle: .dark,
-            backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.08, alpha: 1.0),
+            backgroundBlurStyle: .systemUltraThinMaterialDark,
+            backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 0.97),
+            icon: UIImage(named: "AppIcon"),
             title: ShieldConfiguration.Label(
-                text: "App Bloqueado pelo PPPIX",
+                text: "App Protegido pelo PPPIX",
                 color: .white
             ),
             subtitle: ShieldConfiguration.Label(
-                text: "Toque em Desbloquear para abrir o PPPIX",
-                color: UIColor(white: 0.7, alpha: 1.0)
+                text: "Digite sua senha para abrir",
+                color: UIColor(white: 0.65, alpha: 1.0)
             ),
             primaryButtonLabel: ShieldConfiguration.Label(
-                text: "Desbloquear",
+                text: "Digitar Senha",
                 color: .white
             ),
             primaryButtonBackgroundColor: UIColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0)
