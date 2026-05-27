@@ -68,6 +68,7 @@ struct PermissionsView: View {
                         title: "Screen Time (Bloqueio de Apps)",
                         description: "Necessário para bloquear apps financeiros com senha",
                         status: viewModel.screenTimeStatus,
+                        errorMessage: viewModel.screenTimeError,
                         onGrant: { Task { await viewModel.requestScreenTime() } }
                     )
                     #endif
@@ -129,40 +130,51 @@ private struct PermissionRow: View {
     let description: String
     let status: PermissionStatus
     var actionLabel: String = "Conceder"
+    var errorMessage: String? = nil
     let onGrant: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 22))
-                .foregroundColor(color)
-                .frame(width: 36)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                    .foregroundColor(color)
+                    .frame(width: 36)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                Text(status == .granted ? "\(title): Concedido ✓" : description)
-                    .font(.caption)
-                    .foregroundColor(status == .granted ? Color(hex: "#44FF88") : Color(white: 0.5))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text(status == .granted ? "\(title): Concedido ✓" : description)
+                        .font(.caption)
+                        .foregroundColor(status == .granted ? Color(hex: "#44FF88") : Color(white: 0.5))
+                }
+
+                Spacer()
+
+                if status == .granted {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(Color(hex: "#44FF88"))
+                        .font(.system(size: 20))
+                } else {
+                    Button(action: onGrant) {
+                        Text(actionLabel)
+                            .font(.caption.bold())
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(status == .denied ? Color(hex: "#FF6600") : Color(hex: "#3366FF"))
+                            .cornerRadius(8)
+                    }
+                }
             }
 
-            Spacer()
-
-            if status == .granted {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(Color(hex: "#44FF88"))
-                    .font(.system(size: 20))
-            } else {
-                Button(action: onGrant) {
-                    Text(actionLabel)
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(status == .denied ? Color(hex: "#FF6600") : Color(hex: "#3366FF"))
-                        .cornerRadius(8)
-                }
+            if let err = errorMessage, !err.isEmpty {
+                Text("⚠️ \(err)")
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "#FF6644"))
+                    .padding(.top, 8)
+                    .padding(.leading, 50)
             }
         }
         .padding(14)
@@ -185,6 +197,7 @@ final class PermissionsViewModel: ObservableObject {
     @Published var locationBgStatus: PermissionStatus = .pending
     @Published var screenTimeStatus: PermissionStatus = .pending
     @Published var backgroundRefreshStatus: PermissionStatus = .pending
+    @Published var screenTimeError: String = ""
 
     private let locationManager = CLLocationManager()
 
@@ -242,8 +255,15 @@ final class PermissionsViewModel: ObservableObject {
 
     func requestScreenTime() async {
         #if !targetEnvironment(simulator)
-        await ScreenTimeManager.shared.requestAuthorization()
-        checkScreenTime()
+        screenTimeError = ""
+        do {
+            try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+            ScreenTimeManager.shared.isAuthorized = true
+            screenTimeStatus = .granted
+        } catch {
+            screenTimeError = error.localizedDescription
+            screenTimeStatus = .denied
+        }
         #endif
     }
 }
