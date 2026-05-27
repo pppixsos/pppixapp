@@ -2,15 +2,13 @@ import ManagedSettingsUI
 import ManagedSettings
 import UIKit
 
-// Esta extensão é chamada pelo iOS quando um app bloqueado é aberto
-// Ela retorna a tela que aparece em cima do app bloqueado
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
     override func configuration(shielding application: Application) -> ShieldConfiguration {
         return pppixShield()
     }
 
-    override func configuration(shielding application: Application, in domain: WebDomain) -> ShieldConfiguration {
+    override func configuration(shielding application: Application, in category: ActivityCategory) -> ShieldConfiguration {
         return pppixShield()
     }
 
@@ -18,7 +16,7 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
         return pppixShield()
     }
 
-    override func configuration(shielding category: ActivityCategory) -> ShieldConfiguration {
+    override func configuration(shielding webDomain: WebDomain, in category: ActivityCategory) -> ShieldConfiguration {
         return pppixShield()
     }
 
