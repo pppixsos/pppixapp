@@ -113,6 +113,9 @@ jobs:
 
       - name: Archive
         run: |
+          # Limpar cache e archive antigo
+          rm -rf $RUNNER_TEMP/PPPIX.xcarchive
+          rm -rf ~/Library/Developer/Xcode/DerivedData/PPPIX-*
           security unlock-keychain -p temppass123 build.keychain
           xcodebuild \
             -project PPPIX.xcodeproj \
@@ -135,6 +138,13 @@ jobs:
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -exportPath $RUNNER_TEMP/PPPIX_ipa \
             -exportOptionsPlist /tmp/ExportOptions.plist
+
+      - name: Check IPA version
+        run: |
+          unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1
+          echo "=== CFBundleVersion dentro do IPA ==="
+          /usr/libexec/PlistBuddy -c "Print CFBundleVersion" /tmp/ipa_check/Payload/PPPIX.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" /tmp/ipa_check/Payload/PPPIX.app/Info.plist
 
       - name: Check signature
         run: |
