@@ -128,7 +128,9 @@ targets:
         Debug:
           CODE_SIGN_STYLE: Automatic
         Release:
-          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
+          PROVISIONING_PROFILE_SPECIFIER: "PPPIX Block AppStore"
   PPPIXActivityMonitor:
     type: app-extension
     platform: iOS
@@ -156,7 +158,9 @@ targets:
         Debug:
           CODE_SIGN_STYLE: Automatic
         Release:
-          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
+          PROVISIONING_PROFILE_SPECIFIER: "PPPIX Monitor AppStore"
   PPPIXShieldAction:
     type: app-extension
     platform: iOS
@@ -188,7 +192,9 @@ targets:
         Debug:
           CODE_SIGN_STYLE: Automatic
         Release:
-          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
+          PROVISIONING_PROFILE_SPECIFIER: "PPPIX Shield AppStore"
 schemes:
   PPPIX:
     build:
