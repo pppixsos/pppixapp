@@ -143,6 +143,13 @@ jobs:
           echo '=== Authority (nao deve ser unavailable) ==='
           codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | grep -E 'Authority|TeamID|Identifier'
 
+      - name: Check entitlements in IPA
+        run: |
+          echo "=== Entitlements embarcados no app ==="
+          codesign -d --entitlements - /tmp/ipa_check/Payload/PPPIX.app 2>/dev/null || true
+          echo "=== PPPIX.entitlements no repositorio ==="
+          cat PPPIX/PPPIX.entitlements
+
       - name: Upload to TestFlight
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
