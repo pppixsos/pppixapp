@@ -1,217 +1,78 @@
-name: PPPIX
-options:
-  bundleIdPrefix: tech.pppix
-  deploymentTarget:
-    iOS: "16.0"
-  defaultConfig: Debug
-  xcodeVersion: "16.2"
-settings:
-  base:
-    MARKETING_VERSION: "1.0.22"
-    CURRENT_PROJECT_VERSION: "22"
-    SWIFT_VERSION: "5.9"
-    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
-    TARGETED_DEVICE_FAMILY: "1"
-packages:
-  Firebase:
-    url: https://github.com/firebase/firebase-ios-sdk
-    exactVersion: "12.8.0"
-targets:
-  PPPIX:
-    type: application
-    platform: iOS
-    deploymentTarget: "16.0"
-    bundleId: tech.pppix.app
-    sources:
-      - path: PPPIX/App
-        excludes:
-          - "**/*.storyboard"
-      - path: PPPIX/Core
-        excludes:
-          - "**/*.storyboard"
-      - path: PPPIX/Features
-        excludes:
-          - "**/*.storyboard"
-      - path: PPPIX/Services
-        excludes:
-          - "**/*.storyboard"
-      - path: PPPIX/Resources
-        excludes:
-          - "**/*.plist"
-          - "**/*.mp3"
-          - "**/*.entitlements"
-          - "**/*.storyboard"
-    resources:
-      - path: PPPIX/Resources/GoogleService-Info.plist
-        optional: true
-    info:
-      path: PPPIX/Resources/Info.plist
-      properties:
-        CFBundleDisplayName: PPPIX
-        CFBundleIdentifier: tech.pppix.app
-        CFBundleShortVersionString: "$(MARKETING_VERSION)"
-        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        CFBundleIconName: AppIcon
-        UILaunchScreen:
-          UIColorName: ""
-        UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
-        UISupportedInterfaceOrientations~ipad:
-          - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationPortraitUpsideDown
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
-        UIBackgroundModes:
-          - fetch
-          - remote-notification
-          - processing
-        BGTaskSchedulerPermittedIdentifiers:
-          - tech.pppix.app.refresh
-          - tech.pppix.app.processing
-        NSLocationWhenInUseUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência."
-        NSLocationAlwaysAndWhenInUseUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano."
-        NSLocationAlwaysUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano."
-        NSFamilyControlsUsageDescription: "O PPPIX usa o Screen Time para proteger seus apps financeiros com senha."
-        CFBundleURLTypes:
-          - CFBundleURLName: tech.pppix.app
-            CFBundleURLSchemes:
-              - pppix
-    entitlements:
-      path: PPPIX/PPPIX.entitlements
-      properties:
-        com.apple.developer.family-controls: true
-        com.apple.security.application-groups:
-          - group.tech.pppix.app
-    capabilities:
-      com.apple.developer.family-controls: {}
-    dependencies:
-      - package: Firebase
-        product: FirebaseCore
-      - package: Firebase
-        product: FirebaseMessaging
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app
-        DEVELOPMENT_TEAM: K5SWZ92Z64
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-      configs:
-        Debug:
-          CODE_SIGN_STYLE: Automatic
-        Release:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
-          PROVISIONING_PROFILE_SPECIFIER: "PPPIX AppStore"
-  PPPIXBlockExtension:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "16.0"
-    bundleId: tech.pppix.app.block
-    sources:
-      - path: PPPIXBlockExtension
-        excludes:
-          - "**/*.entitlements"
-    info:
-      path: PPPIXBlockExtension/Info.plist
-      properties:
-        CFBundleDisplayName: PPPIXBlock
-        CFBundleIdentifier: tech.pppix.app.block
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.managed-settings.shield.configuration
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
-    entitlements:
-      path: PPPIXBlockExtension/PPPIXBlockExtension.entitlements
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.block
-        DEVELOPMENT_TEAM: K5SWZ92Z64
-      configs:
-        Debug:
-          CODE_SIGN_STYLE: Automatic
-        Release:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
-          PROVISIONING_PROFILE_SPECIFIER: "PPPIX Block AppStore"
-  PPPIXActivityMonitor:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "16.0"
-    bundleId: tech.pppix.app.monitor
-    sources:
-      - path: PPPIXActivityMonitor
-        excludes:
-          - "**/*.entitlements"
-    info:
-      path: PPPIXActivityMonitor/Info.plist
-      properties:
-        CFBundleDisplayName: PPPIXMonitor
-        CFBundleIdentifier: tech.pppix.app.monitor
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.DeviceActivityMonitor
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PPPIXActivityMonitor
-    entitlements:
-      path: PPPIXActivityMonitor/PPPIXActivityMonitor.entitlements
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.monitor
-        DEVELOPMENT_TEAM: K5SWZ92Z64
-      configs:
-        Debug:
-          CODE_SIGN_STYLE: Automatic
-        Release:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
-          PROVISIONING_PROFILE_SPECIFIER: "PPPIX Monitor AppStore"
-  PPPIXShieldAction:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "16.0"
-    bundleId: tech.pppix.app.shield
-    sources:
-      - path: PPPIXShieldAction
-        excludes:
-          - "**/*.entitlements"
-    info:
-      path: PPPIXShieldAction/Info.plist
-      properties:
-        CFBundleDisplayName: PPPIXShieldAction
-        CFBundleIdentifier: tech.pppix.app.shield
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.managed-settings.shield.action
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldActionExtension
-    entitlements:
-      path: PPPIXShieldAction/PPPIXShieldAction.entitlements
-      properties:
-        com.apple.developer.family-controls: true
-        com.apple.security.application-groups:
-          - group.tech.pppix.app
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.shield
-        DEVELOPMENT_TEAM: K5SWZ92Z64
-      configs:
-        Debug:
-          CODE_SIGN_STYLE: Automatic
-        Release:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
-          PROVISIONING_PROFILE_SPECIFIER: "PPPIX Shield AppStore"
-schemes:
-  PPPIX:
-    build:
-      targets:
-        PPPIX: all
-    run:
-      config: Debug
-    archive:
-      config: Release
-  PPPIX-Full:
-    build:
-      targets:
-        PPPIX: all
-        PPPIXBlockExtension: all
-        PPPIXActivityMonitor: all
-        PPPIXShieldAction: all
-    run:
-      config: Debug
-    archive:
-      config: Release
+import Foundation
+import SwiftUI
+
+#if !targetEnvironment(simulator)
+import FamilyControls
+import ManagedSettings
+import DeviceActivity
+
+@MainActor
+final class ScreenTimeManager: ObservableObject {
+
+    static let shared = ScreenTimeManager()
+    private init() {}
+
+    // Store com nome explícito — deve coincidir com o ShieldConfigurationExtension
+    let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("pppix"))
+    @Published var isAuthorized: Bool = false
+
+    private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
+
+    func requestAuthorization() async {
+        do {
+            try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+            isAuthorized = true
+        } catch {
+            isAuthorized = false
+        }
+    }
+
+    func blockApps(_ selection: FamilyActivitySelection) {
+        store.shield.applications = selection.applicationTokens
+        store.shield.applicationCategories = ShieldSettings.ActivityCategoryPolicy.specific(
+            selection.categoryTokens
+        )
+        // Salvar seleção para rebloquear depois
+        saveLastSelectionData(selection)
+        SessionManager.shared.isMonitorActive = true
+    }
+
+    func unblockAll() {
+        store.clearAllSettings()
+        SessionManager.shared.isMonitorActive = false
+    }
+
+    func reblockFromSaved() {
+        guard let data = sharedDefaults?.data(forKey: "pppix_last_selection"),
+              let selection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data) else {
+            return
+        }
+        store.shield.applications = selection.applicationTokens
+        store.shield.applicationCategories = ShieldSettings.ActivityCategoryPolicy.specific(
+            selection.categoryTokens
+        )
+        SessionManager.shared.isMonitorActive = true
+    }
+
+    func saveLastSelectionData(_ selection: FamilyActivitySelection) {
+        if let data = try? JSONEncoder().encode(selection) {
+            sharedDefaults?.set(data, forKey: "pppix_last_selection")
+        }
+    }
+}
+
+#else
+
+@MainActor
+final class ScreenTimeManager: ObservableObject {
+    static let shared = ScreenTimeManager()
+    private init() {}
+    @Published var isAuthorized: Bool = false
+    func requestAuthorization() async {}
+    func unblockAll() {}
+    func reblockFromSaved() {}
+    func saveLastSelectionData(_ selection: Any) {}
+    func blockApps(_ selection: Any) {}
+}
+
+#endif
