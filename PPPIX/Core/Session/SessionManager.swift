@@ -107,6 +107,22 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Monitor / Permissions
 
+    // MARK: - FamilyActivity Selection
+    #if !targetEnvironment(simulator)
+    func saveLastSelection(_ selection: FamilyControls.FamilyActivitySelection) {
+        if let data = try? JSONEncoder().encode(selection) {
+            defaults.set(data, forKey: "pppix_last_selection")
+        }
+    }
+
+    func loadLastSelection() -> FamilyControls.FamilyActivitySelection? {
+        guard let data = defaults.data(forKey: "pppix_last_selection") else { return nil }
+        return try? JSONDecoder().decode(FamilyControls.FamilyActivitySelection.self, from: data)
+    }
+
+    var lastAppSelection: FamilyControls.FamilyActivitySelection? { loadLastSelection() }
+    #endif
+
     var isMonitorActive: Bool {
         get { defaults.bool(forKey: Key.monitorActive) }
         set { defaults.set(newValue, forKey: Key.monitorActive) }
