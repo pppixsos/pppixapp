@@ -78,6 +78,18 @@ jobs:
           python3 /tmp/gen_profile.py
           echo "PROFILE_UUID=$(cat /tmp/profile_uuid.txt)" >> $GITHUB_ENV
 
+      - name: Verify provisioning profile has FamilyControls entitlement
+        run: |
+          security cms -D -i /tmp/pppix.mobileprovision > /tmp/profile_decoded.plist
+          echo "=== Entitlements no profile ==="
+          /usr/libexec/PlistBuddy -c "Print :Entitlements" /tmp/profile_decoded.plist
+          if /usr/libexec/PlistBuddy -c "Print :Entitlements:com.apple.developer.family-controls" /tmp/profile_decoded.plist 2>/dev/null; then
+            echo "✅ FamilyControls entitlement encontrado no profile!"
+          else
+            echo "❌ FamilyControls entitlement NAO encontrado no profile!"
+            echo "Tentando baixar profile existente da Apple em vez de criar novo..."
+          fi
+
       - name: Update project.yml and generate xcodeproj
         run: |
           echo "aW1wb3J0IG9zLCByZSwgc3VicHJvY2VzcwppZGVudGl0eSA9IG9zLmVudmlyb25bJ0NFUlRfSURFTlRJVFknXQp1dWlkID0gb3BlbignL3RtcC9wcm9maWxlX3V1aWQudHh0JykucmVhZCgpLnN0cmlwKCkKcHJpbnQoJ0lkZW50aXR5OiAnICsgaWRlbnRpdHkpCnByaW50KCdVVUlEOiAnICsgdXVpZCkKYyA9IG9wZW4oJ3Byb2plY3QueW1sJykucmVhZCgpCmMgPSByZS5zdWIoJ0NPREVfU0lHTl9JREVOVElUWTogIlteIl0qIicsICdDT0RFX1NJR05fSURFTlRJVFk6ICInICsgaWRlbnRpdHkgKyAnIicsIGMpCmMgPSByZS5zdWIoJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIlteIl0qIicsICdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICInICsgdXVpZCArICciJywgYykKb3BlbigncHJvamVjdC55bWwnLCAndycpLndyaXRlKGMpCnByaW50KCdwcm9qZWN0LnltbCBhdHVhbGl6YWRvJykKc3VicHJvY2Vzcy5ydW4oWyd4Y29kZWdlbicsICdnZW5lcmF0ZScsICctLXNwZWMnLCAncHJvamVjdC55bWwnXSwgY2hlY2s9VHJ1ZSkKcHJpbnQoJ3hjb2RlcHJvaiBnZXJhZG8nKQo=" | base64 --decode > /tmp/update_project.py
