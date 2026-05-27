@@ -25,6 +25,42 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>itauaplicativo</string>
+		<string>bradesco</string>
+		<string>bbdigi</string>
+		<string>santander</string>
+		<string>caixatemapp</string>
+		<string>nubank</string>
+		<string>c6bank</string>
+		<string>interapp</string>
+		<string>sicredi</string>
+		<string>picpay</string>
+		<string>mercadopago</string>
+		<string>xpapp</string>
+		<string>btgpactual</string>
+		<string>shoebox</string>
+		<string>pagaleve</string>
+		<string>guiabolso</string>
+		<string>neon</string>
+		<string>original</string>
+		<string>agibank</string>
+		<string>sofisa</string>
+		<string>fb</string>
+		<string>instagram</string>
+		<string>whatsapp</string>
+		<string>snapchat</string>
+		<string>twitter</string>
+		<string>tiktok</string>
+		<string>discord</string>
+		<string>tg</string>
+		<string>comgooglemaps</string>
+		<string>uber</string>
+		<string>taxis99</string>
+		<string>ifood</string>
+		<string>rappi</string>
+	</array>
 	<key>NSFamilyControlsUsageDescription</key>
 	<string>O PPPIX usa o Screen Time para proteger seus apps financeiros com senha.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
