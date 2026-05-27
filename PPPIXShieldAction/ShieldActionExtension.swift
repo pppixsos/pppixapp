@@ -5,12 +5,17 @@ class ShieldActionExtension: ShieldActionDelegate {
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
-    override func handle(action: ShieldAction, for application: Application, completionHandler: @escaping (ShieldActionResponse) -> Void) {
+    override func handle(action: ShieldAction, for application: ApplicationToken, completionHandler: @escaping (ShieldActionResponse) -> Void) {
         requestUnlock()
         completionHandler(.defer)
     }
 
-    override func handle(action: ShieldAction, for webDomain: WebDomain, completionHandler: @escaping (ShieldActionResponse) -> Void) {
+    override func handle(action: ShieldAction, for webDomain: WebDomainToken, completionHandler: @escaping (ShieldActionResponse) -> Void) {
+        requestUnlock()
+        completionHandler(.defer)
+    }
+
+    override func handle(action: ShieldAction, for category: ActivityCategoryToken, completionHandler: @escaping (ShieldActionResponse) -> Void) {
         requestUnlock()
         completionHandler(.defer)
     }
