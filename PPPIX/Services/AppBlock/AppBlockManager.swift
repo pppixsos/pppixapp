@@ -136,7 +136,7 @@ final class AppBlockManager: ObservableObject {
                 allTokens.insert(token)
             }
         }
-        store.application.blockedApplications = allTokens.isEmpty ? nil : allTokens
+        store.application.blockedApplications = allTokens.isEmpty ? nil : allTokens as Set<ApplicationToken>?
     }
 
     private func saveBlockedApp(_ app: InstalledApp) {
