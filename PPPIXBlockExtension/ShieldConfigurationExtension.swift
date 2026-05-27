@@ -1,38 +1,27 @@
 import ManagedSettingsUI
 import UIKit
 
-/// Target: PPPIXBlockExtension
-/// Bundle ID: tech.pppix.app.block
-///
-/// Adicionar no Xcode:
-///   File → New → Target → Shield Configuration Extension
-///   Product Name: PPPIXBlockExtension
-///
-/// Capabilities do target:
-///   - Family Controls
-
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
     override func configuration(shielding application: Application) -> ShieldConfiguration {
+        let name = application.localizedDisplayName ?? "App"
         return ShieldConfiguration(
             backgroundBlurStyle: .dark,
-            backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.08, alpha: 1.0),
-            icon: UIImage(named: "AppIcon"),
+            backgroundColor: UIColor(red: 0.02, green: 0.02, blue: 0.06, alpha: 1.0),
+            icon: UIImage(systemName: "lock.fill"),
             title: ShieldConfiguration.Label(
-                text: "App Bloqueado pelo PPPIX",
+                text: "\(name) está bloqueado",
                 color: .white
             ),
             subtitle: ShieldConfiguration.Label(
-                text: "Abra o PPPIX e use a tela de senhas para desbloquear",
-                color: UIColor(white: 0.6, alpha: 1.0)
+                text: "Digite sua senha no PPPIX para abrir",
+                color: UIColor(white: 0.5, alpha: 1.0)
             ),
             primaryButtonLabel: ShieldConfiguration.Label(
-                text: "Abrir PPPIX",
+                text: "Digitar Senha",
                 color: .white
             ),
-            primaryButtonBackgroundColor: UIColor(
-                red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0
-            )
+            primaryButtonBackgroundColor: UIColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0)
         )
     }
 
@@ -41,10 +30,10 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             backgroundBlurStyle: .dark,
             title: ShieldConfiguration.Label(text: "Site Bloqueado", color: .white),
             subtitle: ShieldConfiguration.Label(
-                text: "Abra o PPPIX para desbloquear",
-                color: UIColor(white: 0.6, alpha: 1.0)
+                text: "Digite sua senha no PPPIX para abrir",
+                color: UIColor(white: 0.5, alpha: 1.0)
             ),
-            primaryButtonLabel: ShieldConfiguration.Label(text: "Abrir PPPIX", color: .white),
+            primaryButtonLabel: ShieldConfiguration.Label(text: "Digitar Senha", color: .white),
             primaryButtonBackgroundColor: UIColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0)
         )
     }
