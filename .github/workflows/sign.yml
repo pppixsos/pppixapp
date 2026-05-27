@@ -110,14 +110,14 @@ jobs:
           echo "Done" 
 
       - name: Resolve SPM
-        run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX -resolvePackageDependencies -clonedSourcePackagesDirPath $RUNNER_TEMP/spm
+        run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX-Full -resolvePackageDependencies -clonedSourcePackagesDirPath $RUNNER_TEMP/spm
 
       - name: Archive
         run: |
           security unlock-keychain -p temppass123 build.keychain
           xcodebuild \
             -project PPPIX.xcodeproj \
-            -scheme PPPIX \
+            -scheme PPPIX-Full \
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
