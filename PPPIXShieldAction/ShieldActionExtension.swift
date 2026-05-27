@@ -5,15 +5,15 @@ class ShieldActionExtension: ShieldActionDelegate {
     override func handle(action: ShieldAction, for application: Application, completionHandler: @escaping (ShieldActionResponse) -> Void) {
         switch action {
         case .primaryButtonPressed:
-            // Abre o PPPIX direto na tela de senha de desbloqueio
+            // Abre PPPIX direto na tela de senha
             if let url = URL(string: "pppix://unlock") {
                 self.open(url)
             }
             completionHandler(.defer)
         case .secondaryButtonPressed:
-            completionHandler(.close)
+            completionHandler(.defer)  // .defer mantém o shield aberto em vez de fechar
         @unknown default:
-            completionHandler(.close)
+            completionHandler(.defer)
         }
     }
 
@@ -25,7 +25,7 @@ class ShieldActionExtension: ShieldActionDelegate {
             }
             completionHandler(.defer)
         default:
-            completionHandler(.close)
+            completionHandler(.defer)
         }
     }
 }
