@@ -3,15 +3,12 @@ import UIKit
 
 // Representa um app instalado no iPhone
 struct InstalledApp: Identifiable, Codable {
-    let id: String       // bundle ID
+    let id: String
     let name: String
-    let iconData: Data?  // ícone PNG
+    let iconData: Data?
     var isBlocked: Bool
     var profileInstalled: Bool
 }
-
-#if !targetEnvironment(simulator)
-import FamilyControls
 
 @MainActor
 final class AppBlockManager: ObservableObject {
@@ -61,7 +58,7 @@ final class AppBlockManager: ObservableObject {
             var iconData: Data? = nil
             if let bundleURL = app.perform(Selector(("bundleURL")))?.takeUnretainedValue() as? URL,
                let bundle = Bundle(url: bundleURL) {
-                iconData = iconDataFromBundle(bundle)
+                iconData = Self.iconDataFromBundle(bundle)
             }
             result.append(InstalledApp(id: bundleId, name: appName, iconData: iconData, isBlocked: false, profileInstalled: false))
         }
@@ -97,16 +94,11 @@ final class AppBlockManager: ObservableObject {
     }
 
     func unblockApp(_ app: InstalledApp) {
-        restoreBlockedApplications(excluding: app.id)
         removeBlockedApp(id: app.id)
     }
 
     func openRealApp(bundleId: String) {
-        restoreBlockedApplications(excluding: bundleId)
         openAppByBundleId(bundleId)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
-            self?.restoreBlockedApplications(excluding: nil)
-        }
     }
 
     private func openAppByBundleId(_ bundleId: String) {
@@ -118,17 +110,6 @@ final class AppBlockManager: ObservableObject {
         if workspace.responds(to: sel) {
             workspace.perform(sel, with: bundleId)
         }
-    }
-
-    func saveToken(_ token: ApplicationToken, forBundleId bundleId: String) {
-        if let data = try? JSONEncoder().encode(token) {
-            sharedDefaults?.set(data, forKey: "pppix_token_\(bundleId)")
-        }
-    }
-
-    private func restoreBlockedApplications(excluding bundleId: String?) {
-        // O bloqueio é feito via perfil .mobileconfig (web clip)
-        // ManagedSettingsStore não é necessário para esta lógica
     }
 
     private func saveBlockedApp(_ app: InstalledApp) {
@@ -160,21 +141,3 @@ final class AppBlockManager: ObservableObject {
         blockedApps = apps
     }
 }
-
-#else
-
-// Stub para simulador
-@MainActor
-final class AppBlockManager: ObservableObject {
-    static let shared = AppBlockManager()
-    private init() {}
-    @Published var installedApps: [InstalledApp] = []
-    @Published var blockedApps: [InstalledApp] = []
-    @Published var isLoadingApps = false
-    func loadInstalledApps() {}
-    func blockApp(_ app: InstalledApp, completion: @escaping (Bool) -> Void) { completion(false) }
-    func unblockApp(_ app: InstalledApp) {}
-    func openRealApp(bundleId: String) {}
-}
-
-#endif
