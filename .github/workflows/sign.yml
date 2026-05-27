@@ -91,9 +91,39 @@ jobs:
           fi
 
       - name: Update project.yml and generate xcodeproj
+        env:
+          CERT_IDENTITY: ${{ env.CERT_IDENTITY }}
         run: |
-          echo "aW1wb3J0IG9zLCByZSwgc3VicHJvY2VzcwppZGVudGl0eSA9IG9zLmVudmlyb25bJ0NFUlRfSURFTlRJVFknXQp1dWlkID0gb3BlbignL3RtcC9wcm9maWxlX3V1aWQudHh0JykucmVhZCgpLnN0cmlwKCkKcHJpbnQoJ0lkZW50aXR5OiAnICsgaWRlbnRpdHkpCnByaW50KCdVVUlEOiAnICsgdXVpZCkKYyA9IG9wZW4oJ3Byb2plY3QueW1sJykucmVhZCgpCmMgPSByZS5zdWIoJ0NPREVfU0lHTl9JREVOVElUWTogIlteIl0qIicsICdDT0RFX1NJR05fSURFTlRJVFk6ICInICsgaWRlbnRpdHkgKyAnIicsIGMpCmMgPSByZS5zdWIoJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIlteIl0qIicsICdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICInICsgdXVpZCArICciJywgYykKb3BlbigncHJvamVjdC55bWwnLCAndycpLndyaXRlKGMpCnByaW50KCdwcm9qZWN0LnltbCBhdHVhbGl6YWRvJykKc3VicHJvY2Vzcy5ydW4oWyd4Y29kZWdlbicsICdnZW5lcmF0ZScsICctLXNwZWMnLCAncHJvamVjdC55bWwnXSwgY2hlY2s9VHJ1ZSkKcHJpbnQoJ3hjb2RlcHJvaiBnZXJhZG8nKQo=" | base64 --decode > /tmp/update_project.py
-          python3 /tmp/update_project.py
+          UUID=$(cat /tmp/profile_uuid.txt)
+          echo "Identity: $CERT_IDENTITY"
+          echo "UUID principal: $UUID"
+
+          # Atualizar CODE_SIGN_IDENTITY em todos os targets
+          sed -i '' -e "s/CODE_SIGN_IDENTITY: \"[^\"]*\"/CODE_SIGN_IDENTITY: \"$CERT_IDENTITY\"/g" project.yml
+
+          # Atualizar PROVISIONING_PROFILE_SPECIFIER apenas do target PPPIX principal (primeira ocorrência)
+          python3 - <<PYEOF
+import re
+c = open('project.yml').read()
+import os
+uuid = open('/tmp/profile_uuid.txt').read().strip()
+identity = os.environ['CERT_IDENTITY']
+
+# Substituir apenas a PRIMEIRA ocorrência de PROVISIONING_PROFILE_SPECIFIER (target PPPIX)
+# As extensões já têm seus UUIDs hardcoded e não devem ser alteradas
+c = c.replace('PROVISIONING_PROFILE_SPECIFIER: "PPPIX AppStore"', 'PROVISIONING_PROFILE_SPECIFIER: "' + uuid + '"', 1)
+
+# Garantir que as extensões tenham seus UUIDs corretos
+c = c.replace('PROVISIONING_PROFILE_SPECIFIER: "PPPIX Block AppStore"', 'PROVISIONING_PROFILE_SPECIFIER: "cb0b5280-96e5-421d-b04c-07f989b07727"')
+c = c.replace('PROVISIONING_PROFILE_SPECIFIER: "PPPIX Monitor AppStore"', 'PROVISIONING_PROFILE_SPECIFIER: "b2745fe0-3030-44e9-a2a1-13695e252a31"')
+c = c.replace('PROVISIONING_PROFILE_SPECIFIER: "PPPIX Shield AppStore"', 'PROVISIONING_PROFILE_SPECIFIER: "4ce74b51-de94-4e75-8b55-d5465613b23f"')
+
+open('project.yml', 'w').write(c)
+print('project.yml atualizado')
+PYEOF
+
+          xcodegen generate --spec project.yml
+          echo 'xcodeproj gerado'
           echo '--- project.yml signing ---'
           grep -E 'CODE_SIGN|PROVISIONING' project.yml
 
