@@ -7,6 +7,7 @@ struct ContactsView: View {
     @State private var showAddSheet = false
     @State private var errorMessage = ""
     @State private var successMessage = ""
+    @State private var debugInfo = ""
 
     private var myEmail: String { SessionManager.shared.userEmail }
 
@@ -25,7 +26,7 @@ struct ContactsView: View {
                                 Label("Grupo de Emergência", systemImage: "person.2.fill")
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundColor(Color(hex: "#3366FF"))
-                                Text("Estes contatos receberão alertas quando você usar a senha de emergência. Eles também recebem sua localização e dados do veículo.")
+                                Text("Estes contatos receberão alertas quando você usar a senha de emergência.")
                                     .font(.caption)
                                     .foregroundColor(Color(white: 0.6))
                             }
@@ -39,6 +40,20 @@ struct ContactsView: View {
                         }
                         if !errorMessage.isEmpty {
                             ErrorBanner(message: errorMessage)
+                        }
+
+                        // Debug temporário — mostra o que a API retornou
+                        if !debugInfo.isEmpty {
+                            PPPIXCard {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Debug API")
+                                        .font(.caption.bold())
+                                        .foregroundColor(Color(hex: "#FF9900"))
+                                    Text(debugInfo)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(Color(white: 0.6))
+                                }
+                            }
                         }
 
                         if connections.isEmpty {
@@ -72,7 +87,6 @@ struct ContactsView: View {
                 }
             }
 
-            // FAB
             VStack {
                 Spacer()
                 HStack {
@@ -85,8 +99,7 @@ struct ContactsView: View {
                             .background(
                                 LinearGradient(
                                     colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                                    startPoint: .topLeading, endPoint: .bottomTrailing
                                 )
                             )
                             .clipShape(Circle())
@@ -110,19 +123,26 @@ struct ContactsView: View {
         .refreshable { await loadContacts() }
     }
 
-    // MARK: - Actions
-
     private func loadContacts() async {
         isLoading = true
         errorMessage = ""
+        debugInfo = ""
         defer { isLoading = false }
 
         do {
+            // Buscar raw data para debug
+            let acceptedData = try await APIClient.shared.rawGetPublic("connections/accepted/")
+            let pendingData  = try await APIClient.shared.rawGetPublic("connections/pending/")
+
+            let acceptedStr = String(data: acceptedData, encoding: .utf8) ?? "nil"
+            let pendingStr  = String(data: pendingData, encoding: .utf8) ?? "nil"
+            debugInfo = "accepted: \(acceptedStr.prefix(200))\npending: \(pendingStr.prefix(200))"
+
             let accepted = try await APIClient.shared.getAcceptedConnections()
             let pending  = try await APIClient.shared.getPendingConnections()
             connections = pending + accepted
         } catch {
-            errorMessage = "Erro ao carregar contatos: \(error.localizedDescription)"
+            errorMessage = "Erro ao carregar: \(error.localizedDescription)"
             connections = []
         }
     }
@@ -130,11 +150,11 @@ struct ContactsView: View {
     private func acceptConnection(_ c: Connection) async {
         do {
             try await APIClient.shared.acceptConnection(id: c.id)
-            successMessage = "Contato aceito! Você está no grupo de emergência dele."
+            successMessage = "Contato aceito!"
             errorMessage = ""
             await loadContacts()
         } catch {
-            errorMessage = "Erro ao aceitar contato: \(error.localizedDescription)"
+            errorMessage = "Erro ao aceitar: \(error.localizedDescription)"
         }
     }
 
@@ -195,7 +215,7 @@ private struct ConnectionRow: View {
             HStack(spacing: 10) {
                 if isReceived {
                     Button(action: onAccept) {
-                        Label("Aceitar Convite", systemImage: "checkmark")
+                        Label("Aceitar", systemImage: "checkmark")
                             .font(.caption.bold())
                             .foregroundColor(.white)
                             .padding(.horizontal, 12)
@@ -204,12 +224,8 @@ private struct ConnectionRow: View {
                             .cornerRadius(8)
                     }
                 }
-
                 Spacer()
-
-                Button {
-                    showDeleteConfirm = true
-                } label: {
+                Button { showDeleteConfirm = true } label: {
                     Text(isPending ? "Cancelar" : "Remover")
                         .font(.caption.bold())
                         .foregroundColor(Color(hex: "#FF4444"))
@@ -223,18 +239,12 @@ private struct ConnectionRow: View {
         .padding(16)
         .background(Color(hex: "#141422"))
         .cornerRadius(14)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(isPending ? Color(hex: "#FF9900").opacity(0.2) : Color(hex: "#3366FF").opacity(0.2), lineWidth: 1)
-        )
+        .overlay(RoundedRectangle(cornerRadius: 14)
+            .stroke(isPending ? Color(hex: "#FF9900").opacity(0.2) : Color(hex: "#3366FF").opacity(0.2), lineWidth: 1))
         .confirmationDialog(isPending ? "Cancelar convite?" : "Remover contato?",
                            isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button(isPending ? "Cancelar Convite" : "Remover \(displayName)", role: .destructive, action: onDelete)
             Button("Voltar", role: .cancel) {}
-        } message: {
-            Text(isPending
-                 ? "Cancelar convite para \(displayName)?"
-                 : "Remover \(displayName) do seu grupo de emergência?")
         }
     }
 }
@@ -242,7 +252,6 @@ private struct ConnectionRow: View {
 // MARK: - AddContactSheet
 
 private struct AddContactSheet: View {
-
     let myEmail: String
     let onSent: (String) -> Void
 
@@ -255,7 +264,6 @@ private struct AddContactSheet: View {
         NavigationStack {
             ZStack {
                 Color(hex: "#0A0A12").ignoresSafeArea()
-
                 VStack(spacing: 24) {
                     VStack(spacing: 8) {
                         Image(systemName: "envelope.badge.fill")
@@ -264,28 +272,17 @@ private struct AddContactSheet: View {
                         Text("Adicionar Contato")
                             .font(.title2.bold())
                             .foregroundColor(.white)
-                        Text("A pessoa precisa ter o PPPIX instalado (iOS ou Android) e receberá uma notificação de convite")
+                        Text("A pessoa precisa ter o PPPIX instalado (iOS ou Android)")
                             .font(.subheadline)
                             .foregroundColor(Color(white: 0.5))
                             .multilineTextAlignment(.center)
                     }
-
-                    PPPIXTextField(
-                        title: "Email do Contato",
-                        placeholder: "email@exemplo.com",
-                        text: $email,
-                        keyboardType: .emailAddress,
-                        autocapitalization: .never
-                    )
-
-                    if !errorMessage.isEmpty {
-                        ErrorBanner(message: errorMessage)
-                    }
-
+                    PPPIXTextField(title: "Email do Contato", placeholder: "email@exemplo.com",
+                                  text: $email, keyboardType: .emailAddress, autocapitalization: .never)
+                    if !errorMessage.isEmpty { ErrorBanner(message: errorMessage) }
                     PPPIXButton(title: "Enviar Convite", isLoading: isSending) {
                         Task { await sendInvite() }
                     }
-
                     Spacer()
                 }
                 .padding(24)
@@ -302,34 +299,30 @@ private struct AddContactSheet: View {
 
     private func sendInvite() async {
         let trimmed = email.trimmingCharacters(in: .whitespaces).lowercased()
-        if trimmed.isEmpty  { errorMessage = "Digite o email do contato."; return }
-        if !trimmed.contains("@") { errorMessage = "Email inválido. Ex: nome@email.com"; return }
+        if trimmed.isEmpty { errorMessage = "Digite o email do contato."; return }
+        if !trimmed.contains("@") { errorMessage = "Email inválido."; return }
         if trimmed == myEmail.lowercased() { errorMessage = "Você não pode adicionar a si mesmo."; return }
 
         isSending = true
         do {
             try await APIClient.shared.sendConnectionRequest(email: trimmed)
-            onSent("Convite enviado! \(trimmed) receberá uma notificação para aceitar.")
+            onSent("Convite enviado para \(trimmed)!")
             dismiss()
         } catch APIError.badRequest(let msg) {
             let lower = msg.lowercased()
-            if lower.contains("already") || lower.contains("already_connected") {
-                errorMessage = "Você já está conectado com este contato."
-            } else if lower.contains("pending") {
-                errorMessage = "Convite já enviado. Aguarde a resposta."
+            if lower.contains("already") || lower.contains("already_connected") || lower.contains("pending") {
+                errorMessage = "Você já tem uma conexão com este contato."
             } else {
                 errorMessage = msg
             }
         } catch APIError.notFound {
-            errorMessage = "Email não encontrado. Verifique se a pessoa tem o PPPIX instalado."
+            errorMessage = "Email não encontrado. Verifique se a pessoa tem o PPPIX."
         } catch {
             errorMessage = "Erro de conexão. Verifique sua internet."
         }
         isSending = false
     }
 }
-
-// MARK: - Connection extension
 
 extension Connection {
     func displayEmail(myEmail: String) -> String {
