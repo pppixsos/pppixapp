@@ -4,6 +4,9 @@ import UIKit
 
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
+    // Mesmo nome de store que o ScreenTimeManager usa
+    private let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("pppix"))
+
     override func configuration(shielding application: Application) -> ShieldConfiguration {
         return makeConfig()
     }
@@ -16,12 +19,18 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
         ShieldConfiguration(
             backgroundBlurStyle: .dark,
             backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.08, alpha: 1.0),
-            title: ShieldConfiguration.Label(text: "App Bloqueado", color: .white),
+            title: ShieldConfiguration.Label(
+                text: "App Bloqueado pelo PPPIX",
+                color: .white
+            ),
             subtitle: ShieldConfiguration.Label(
-                text: "Toque em Desbloquear para continuar",
+                text: "Toque em Desbloquear para abrir o PPPIX",
                 color: UIColor(white: 0.7, alpha: 1.0)
             ),
-            primaryButtonLabel: ShieldConfiguration.Label(text: "Desbloquear", color: .white),
+            primaryButtonLabel: ShieldConfiguration.Label(
+                text: "Desbloquear",
+                color: .white
+            ),
             primaryButtonBackgroundColor: UIColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0)
         )
     }
