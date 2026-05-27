@@ -159,6 +159,11 @@ final class APIClient {
         return try decode(T.self, from: data)
     }
 
+    // Público para debug
+    func rawGetPublic(_ path: String) async throws -> Data {
+        return try await rawGet(path)
+    }
+
     private func rawGet(_ path: String) async throws -> Data {
         var request = try makeRequest(path: path, method: "GET", body: nil as EmptyBody?)
         return try await executeWithRefresh(&request)
