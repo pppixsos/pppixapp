@@ -11,7 +11,6 @@ struct InstalledApp: Identifiable, Codable {
 }
 
 #if !targetEnvironment(simulator)
-import ManagedSettings
 import FamilyControls
 
 @MainActor
@@ -20,7 +19,6 @@ final class AppBlockManager: ObservableObject {
     static let shared = AppBlockManager()
     private init() { loadBlockedApps() }
 
-    private let store = ManagedSettingsStore()
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
     private let server = LocalWebServer.shared
 
@@ -129,14 +127,8 @@ final class AppBlockManager: ObservableObject {
     }
 
     private func restoreBlockedApplications(excluding bundleId: String?) {
-        var allTokens: Set<ApplicationToken> = []
-        for app in blockedApps where app.id != bundleId {
-            if let data = sharedDefaults?.data(forKey: "pppix_token_\(app.id)"),
-               let token = try? JSONDecoder().decode(ApplicationToken.self, from: data) {
-                allTokens.insert(token)
-            }
-        }
-        store.application.blockedApplications = allTokens.isEmpty ? nil : allTokens as Set<ApplicationToken>?
+        // O bloqueio é feito via perfil .mobileconfig (web clip)
+        // ManagedSettingsStore não é necessário para esta lógica
     }
 
     private func saveBlockedApp(_ app: InstalledApp) {
