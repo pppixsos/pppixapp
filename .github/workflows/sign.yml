@@ -150,7 +150,7 @@ jobs:
         run: |
           unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1 | tee /tmp/xcode_build.log | grep -E "error:|warning:|ARCHIVE" || true
           echo '=== Authority (nao deve ser unavailable) ==='
-          codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | tee /tmp/xcode_build.log | grep -E "error:|warning:|ARCHIVE" || true | grep -E 'Authority|TeamID|Identifier'
+          codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | grep -E 'Authority|TeamID|Identifier' || true
 
       - name: Check entitlements in IPA
         run: |
