@@ -218,31 +218,74 @@ struct VehicleInfoPayload: Encodable {
 
 // MARK: - Connections
 
-struct Connection: Codable, Identifiable {
+struct Connection: Identifiable {
     let id: Int
     let from_user: Int
     let to_user: Int
     let from_user_email: String
     let to_user_email: String
-    let from_user_first_name: String
-    let to_user_first_name: String
-    let from_user_last_name: String
-    let to_user_last_name: String
+    let from_user_name: String
+    let to_user_name: String
     let status: String
 
     func displayName(myEmail: String) -> String {
         let isRecipient = to_user_email.lowercased() == myEmail.lowercased()
-        if isRecipient {
-            let name = "\(from_user_first_name) \(from_user_last_name)".trimmingCharacters(in: .whitespaces)
-            return name.isEmpty ? from_user_email : name
-        } else {
-            let name = "\(to_user_first_name) \(to_user_last_name)".trimmingCharacters(in: .whitespaces)
-            return name.isEmpty ? to_user_email : name
-        }
+        let name = isRecipient ? from_user_name : to_user_name
+        let email = isRecipient ? from_user_email : to_user_email
+        return name.trimmingCharacters(in: .whitespaces).isEmpty ? email : name
     }
 
     func userId(myEmail: String) -> Int {
         to_user_email.lowercased() == myEmail.lowercased() ? from_user : to_user
+    }
+}
+
+// Decodable separado para suportar tanto from_user_name quanto from_user_first_name
+extension Connection: Codable {
+    enum CodingKeys: String, CodingKey {
+        case id, from_user, to_user, from_user_email, to_user_email, status
+        case from_user_name, to_user_name
+        case from_user_first_name, from_user_last_name
+        case to_user_first_name, to_user_last_name
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id            = try c.decode(Int.self, forKey: .id)
+        from_user     = try c.decode(Int.self, forKey: .from_user)
+        to_user       = try c.decode(Int.self, forKey: .to_user)
+        from_user_email = try c.decode(String.self, forKey: .from_user_email)
+        to_user_email   = try c.decode(String.self, forKey: .to_user_email)
+        status          = try c.decode(String.self, forKey: .status)
+
+        // Suporta tanto "from_user_name" quanto "from_user_first_name + last_name"
+        if let name = try? c.decode(String.self, forKey: .from_user_name), !name.isEmpty {
+            from_user_name = name
+        } else {
+            let first = (try? c.decode(String.self, forKey: .from_user_first_name)) ?? ""
+            let last  = (try? c.decode(String.self, forKey: .from_user_last_name)) ?? ""
+            from_user_name = "\(first) \(last)".trimmingCharacters(in: .whitespaces)
+        }
+
+        if let name = try? c.decode(String.self, forKey: .to_user_name), !name.isEmpty {
+            to_user_name = name
+        } else {
+            let first = (try? c.decode(String.self, forKey: .to_user_first_name)) ?? ""
+            let last  = (try? c.decode(String.self, forKey: .to_user_last_name)) ?? ""
+            to_user_name = "\(first) \(last)".trimmingCharacters(in: .whitespaces)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(from_user, forKey: .from_user)
+        try c.encode(to_user, forKey: .to_user)
+        try c.encode(from_user_email, forKey: .from_user_email)
+        try c.encode(to_user_email, forKey: .to_user_email)
+        try c.encode(status, forKey: .status)
+        try c.encode(from_user_name, forKey: .from_user_name)
+        try c.encode(to_user_name, forKey: .to_user_name)
     }
 }
 
