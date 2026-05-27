@@ -141,7 +141,7 @@ private struct AppRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 14) {
-                AppIconView(iconData: app.iconData, size: 46)
+                AppIconView(app: app, size: 46)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(app.name)
@@ -188,7 +188,7 @@ private struct BlockedChip: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            AppIconView(iconData: app.iconData, size: 26)
+            AppIconView(app: app, size: 26)
             Text(app.name)
                 .font(.caption.bold())
                 .foregroundColor(.white)
@@ -210,22 +210,23 @@ private struct BlockedChip: View {
 
 // MARK: — Ícone do app (reutilizável)
 struct AppIconView: View {
-    let iconData: Data?
+    let app: InstalledApp
     let size: CGFloat
 
     var body: some View {
         Group {
-            if let data = iconData, let img = UIImage(data: data) {
+            if let img = UIImage(named: app.iconName) {
                 Image(uiImage: img)
                     .resizable()
                     .scaledToFill()
             } else {
-                Image(systemName: "app.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundColor(Color(white: 0.35))
-                    .padding(10)
-                    .background(Color(white: 0.13))
+                // Fallback: iniciais do app
+                ZStack {
+                    Color(hex: "#1A1A2E")
+                    Text(String(app.name.prefix(2)).uppercased())
+                        .font(.system(size: size * 0.35, weight: .bold))
+                        .foregroundColor(.white)
+                }
             }
         }
         .frame(width: size, height: size)
@@ -249,7 +250,7 @@ struct BlockingSetupSheet: View {
 
                 VStack(spacing: 28) {
                     // Ícone do app
-                    AppIconView(iconData: app.iconData, size: 76)
+                    AppIconView(app: app, size: 76)
                         .padding(.top, 8)
 
                     Text(step == 0 ? "Proteger \(app.name)" : "Instale o Perfil")
