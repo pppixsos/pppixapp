@@ -4,15 +4,11 @@ import UIKit
 
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
-    override func configuration(shielding application: ApplicationToken) -> ShieldConfiguration {
+    override func configuration(shielding application: Application) -> ShieldConfiguration {
         return makeConfig()
     }
 
-    override func configuration(shielding webDomain: WebDomainToken) -> ShieldConfiguration {
-        return makeConfig()
-    }
-
-    override func configuration(shielding category: ActivityCategoryToken) -> ShieldConfiguration {
+    override func configuration(shielding webDomain: WebDomain) -> ShieldConfiguration {
         return makeConfig()
     }
 
