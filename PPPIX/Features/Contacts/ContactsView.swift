@@ -7,8 +7,6 @@ struct ContactsView: View {
     @State private var showAddSheet = false
     @State private var errorMessage = ""
     @State private var successMessage = ""
-    @State private var debugInfo = ""
-
     private var myEmail: String { SessionManager.shared.userEmail }
 
     var body: some View {
@@ -40,20 +38,6 @@ struct ContactsView: View {
                         }
                         if !errorMessage.isEmpty {
                             ErrorBanner(message: errorMessage)
-                        }
-
-                        // Debug temporário — mostra o que a API retornou
-                        if !debugInfo.isEmpty {
-                            PPPIXCard {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Debug API")
-                                        .font(.caption.bold())
-                                        .foregroundColor(Color(hex: "#FF9900"))
-                                    Text(debugInfo)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundColor(Color(white: 0.6))
-                                }
-                            }
                         }
 
                         if connections.isEmpty {
@@ -126,18 +110,9 @@ struct ContactsView: View {
     private func loadContacts() async {
         isLoading = true
         errorMessage = ""
-        debugInfo = ""
         defer { isLoading = false }
 
         do {
-            // Buscar raw data para debug
-            let acceptedData = try await APIClient.shared.rawGetPublic("connections/accepted/")
-            let pendingData  = try await APIClient.shared.rawGetPublic("connections/pending/")
-
-            let acceptedStr = String(data: acceptedData, encoding: .utf8) ?? "nil"
-            let pendingStr  = String(data: pendingData, encoding: .utf8) ?? "nil"
-            debugInfo = "accepted: \(acceptedStr.prefix(200))\npending: \(pendingStr.prefix(200))"
-
             let accepted = try await APIClient.shared.getAcceptedConnections()
             let pending  = try await APIClient.shared.getPendingConnections()
             connections = pending + accepted
