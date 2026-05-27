@@ -64,7 +64,8 @@ final class LocalWebServer {
 
         // Ícone em base64 — se não tiver ícone, usar string vazia (iOS usa ícone padrão)
         var iconTag = ""
-        if let iconData = app.iconData, !iconData.isEmpty {
+        if let img = UIImage(named: app.iconName),
+           let iconData = img.pngData(), !iconData.isEmpty {
             let b64 = iconData.base64EncodedString()
             iconTag = "<key>Icon</key><data>\(b64)</data>"
         }
