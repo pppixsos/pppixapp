@@ -35,17 +35,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
-    // MARK: - URL Scheme: pppix://unlock
-    func application(_ app: UIApplication, open url: URL,
-                     options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        if url.scheme == "pppix" && url.host == "unlock" {
-            // Notifica RootView para abrir a tela de senha
-            NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
-            return true
-        }
-        return false
-    }
-
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
@@ -54,6 +43,24 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("[PPPIX] APNs registration failed: \(error.localizedDescription)")
+    }
+
+    // URL Scheme: pppix://unlock
+    func application(_ app: UIApplication,
+                     open url: URL,
+                     options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        if url.scheme == "pppix" && url.host == "unlock" {
+            // Extrair bundle ID e nome do app dos query params
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let bundleId = components?.queryItems?.first(where: { $0.name == "bundle" })?.value ?? ""
+            let appName = components?.queryItems?.first(where: { $0.name == "name" })?.value ?? "App"
+            NotificationCenter.default.post(
+                name: .openUnlockScreen,
+                object: nil,
+                userInfo: ["bundleId": bundleId, "appName": appName]
+            )
+        }
+        return true
     }
 }
 
@@ -65,6 +72,14 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let userInfo = notification.request.content.userInfo
+
+        // Notificação de desbloqueio da ShieldAction
+        if let action = userInfo["action"] as? String, action == "unlock" {
+            NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            completionHandler([]) // não mostra banner
+            return
+        }
+
         handleIncomingAlert(userInfo: userInfo)
         completionHandler([.banner, .sound, .badge])
     }
@@ -75,6 +90,14 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+
+        // Usuário tocou na notificação de desbloqueio
+        if let action = userInfo["action"] as? String, action == "unlock" {
+            NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            completionHandler()
+            return
+        }
+
         if let alertIdStr = userInfo["alert_id"] as? String,
            let alertId = Int(alertIdStr) {
             NotificationCenter.default.post(
