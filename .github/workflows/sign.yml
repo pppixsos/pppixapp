@@ -116,6 +116,20 @@ jobs:
       - name: Resolve SPM
         run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX-Full -resolvePackageDependencies -clonedSourcePackagesDirPath $RUNNER_TEMP/spm
 
+      - name: Install extension provisioning profiles
+        env:
+          PROVISIONING_PROFILE_BLOCK: ${{ secrets.PROVISIONING_PROFILE_BLOCK }}
+          PROVISIONING_PROFILE_MONITOR: ${{ secrets.PROVISIONING_PROFILE_MONITOR }}
+          PROVISIONING_PROFILE_SHIELD: ${{ secrets.PROVISIONING_PROFILE_SHIELD }}
+        run: |
+          PP_DIR=~/Library/MobileDevice/Provisioning\ Profiles
+          mkdir -p "$PP_DIR"
+          echo "$PROVISIONING_PROFILE_BLOCK" | base64 --decode > "$PP_DIR/cb0b5280-96e5-421d-b04c-07f989b07727.mobileprovision"
+          echo "$PROVISIONING_PROFILE_MONITOR" | base64 --decode > "$PP_DIR/b2745fe0-3030-44e9-a2a1-13695e252a31.mobileprovision"
+          echo "$PROVISIONING_PROFILE_SHIELD" | base64 --decode > "$PP_DIR/4ce74b51-de94-4e75-8b55-d5465613b23f.mobileprovision"
+          echo "Profiles instalados:"
+          ls "$PP_DIR/"
+
       - name: Archive
         run: |
           security unlock-keychain -p temppass123 build.keychain
