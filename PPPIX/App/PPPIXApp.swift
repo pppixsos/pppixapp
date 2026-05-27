@@ -23,7 +23,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
 
-        // Firebase — protegido contra crash no simulador
         if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            let _ = NSDictionary(contentsOfFile: path) {
             FirebaseApp.configure()
@@ -34,6 +33,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         BackgroundTaskManager.shared.registerTasks()
         return true
+    }
+
+    // MARK: - URL Scheme: pppix://unlock
+    func application(_ app: UIApplication, open url: URL,
+                     options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        if url.scheme == "pppix" && url.host == "unlock" {
+            // Notifica RootView para abrir a tela de senha
+            NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            return true
+        }
+        return false
     }
 
     func application(_ application: UIApplication,
@@ -104,4 +114,5 @@ extension Notification.Name {
     static let openAlertDetail        = Notification.Name("pppix.openAlertDetail")
     static let incomingEmergencyAlert = Notification.Name("pppix.incomingEmergencyAlert")
     static let sessionExpired         = Notification.Name("pppix.sessionExpired")
+    static let openUnlockScreen       = Notification.Name("pppix.openUnlockScreen")
 }
