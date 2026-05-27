@@ -25,8 +25,10 @@ final class ScreenTimeManager: ObservableObject {
     func blockApps(_ selection: FamilyActivitySelection) {
         store.shield.applications = selection.applicationTokens
         SessionManager.shared.isMonitorActive = true
-        // Salva a seleção para poder rebloquear após unlock temporário
-        SessionManager.shared.saveLastSelection(selection)
+        // Salva como Data para poder rebloquear depois
+        if let data = try? JSONEncoder().encode(selection) {
+            SessionManager.shared.saveLastSelectionData(data)
+        }
     }
 
     func unblockAll() {
@@ -34,11 +36,10 @@ final class ScreenTimeManager: ObservableObject {
         SessionManager.shared.isMonitorActive = false
     }
 
-    func reblockIfNeeded() {
-        guard SessionManager.shared.isMonitorActive else { return }
-        if let selection = SessionManager.shared.loadLastSelection() {
-            blockApps(selection)
-        }
+    func reblockFromSaved() {
+        guard let data = SessionManager.shared.loadLastSelectionData(),
+              let selection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data) else { return }
+        blockApps(selection)
     }
 }
 #else
@@ -49,6 +50,6 @@ final class ScreenTimeManager: ObservableObject {
     @Published var isAuthorized: Bool = false
     func requestAuthorization() async {}
     func unblockAll() {}
-    func reblockIfNeeded() {}
+    func reblockFromSaved() {}
 }
 #endif
