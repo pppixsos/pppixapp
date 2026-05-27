@@ -126,7 +126,7 @@ jobs:
           mkdir -p "$PP_DIR"
           echo "$PROVISIONING_PROFILE_BLOCK" | base64 --decode > "$PP_DIR/cb0b5280-96e5-421d-b04c-07f989b07727.mobileprovision"
           echo "$PROVISIONING_PROFILE_MONITOR" | base64 --decode > "$PP_DIR/b2745fe0-3030-44e9-a2a1-13695e252a31.mobileprovision"
-          echo "$PROVISIONING_PROFILE_SHIELD" | base64 --decode > "$PP_DIR/4ce74b51-de94-4e75-8b55-d5465613b23f.mobileprovision"
+          echo "$PROVISIONING_PROFILE_SHIELD" | base64 --decode > "$PP_DIR/6d34b5df-6dd3-4140-936e-d4307368a3a9.mobileprovision"
           echo "Profiles instalados:"
           ls "$PP_DIR/"
 
