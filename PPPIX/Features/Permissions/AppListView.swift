@@ -74,7 +74,23 @@ struct AppListView: View {
                         .background(Color(hex: "#141422"))
                         .cornerRadius(14)
 
-                        // Botão principal — abre o FamilyActivityPicker nativo do iOS
+                        // BOTÃO DE TESTE — abre tela de senha diretamente
+                Button {
+                    NotificationCenter.default.post(name: Notification.Name("pppix.openUnlockScreen"), object: nil)
+                } label: {
+                    HStack {
+                        Image(systemName: "key.fill")
+                            .font(.system(size: 18))
+                        Text("🧪 Testar Senha")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity).frame(height: 52)
+                    .background(Color(hex: "#FF6B00"))
+                    .cornerRadius(13)
+                }
+
+                // Botão principal — abre o FamilyActivityPicker nativo do iOS
                         // Este picker mostra TODOS os apps instalados com ícone real
                         Button {
                             tempSelection = manager.currentSelection
