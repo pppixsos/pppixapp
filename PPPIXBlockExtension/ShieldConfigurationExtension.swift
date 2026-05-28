@@ -32,29 +32,34 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     }
 
     private func sendUnlockNotification() {
-        // Sinaliza para o app principal
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        // Envia notificação para o usuário abrir o PPPIX
-        let content = UNMutableNotificationContent()
-        content.title = "🔐 App Protegido"
-        content.body = "Toque aqui para digitar sua senha"
-        content.sound = .none
-        content.userInfo = ["action": "unlock"]
-        content.categoryIdentifier = "PPPIX_UNLOCK"
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["pppix_unlock_1", "pppix_unlock_2", "pppix_unlock_3"])
 
-        UNUserNotificationCenter.current()
-            .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
+        // Envia 3 notificações espaçadas — a primeira aparece quando o shield fecha ao tocar o botão
+        // iOS suprime notificações enquanto o shield está visível, então as próximas servem de fallback
+        for i in 1...3 {
+            let content = UNMutableNotificationContent()
+            content.title = "🔐 App Protegido"
+            content.body = "Toque aqui para digitar sua senha"
+            content.sound = UNNotificationSound.default
+            content.userInfo = ["action": "unlock"]
+            content.categoryIdentifier = "PPPIX_UNLOCK"
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "pppix_unlock",
-            content: content,
-            trigger: trigger
-        )
-        UNUserNotificationCenter.current().add(request)
+            let trigger = UNTimeIntervalNotificationTrigger(
+                timeInterval: Double(i) * 1.0,
+                repeats: false
+            )
+            let request = UNNotificationRequest(
+                identifier: "pppix_unlock_\(i)",
+                content: content,
+                trigger: trigger
+            )
+            center.add(request)
+        }
     }
 
     private func pppixShield() -> ShieldConfiguration {
@@ -63,15 +68,15 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 0.97),
             icon: nil,
             title: ShieldConfiguration.Label(
-                text: "🔐 App Protegido",
+                text: "🔒 Você está fora de casa!",
                 color: .white
             ),
             subtitle: ShieldConfiguration.Label(
-                text: "Toque na notificação do PPPIX para digitar a senha",
+                text: "Desbloqueie o app clicando na notificação exibida...",
                 color: UIColor(white: 0.55, alpha: 1.0)
             ),
             primaryButtonLabel: ShieldConfiguration.Label(
-                text: "Digitar Senha →",
+                text: "OK",
                 color: .white
             ),
             primaryButtonBackgroundColor: UIColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0)
