@@ -9,7 +9,6 @@ struct RootView: View {
     @StateObject private var session = SessionManager.shared
     @State private var showAlertDetail: Int? = nil
     @State private var showPasswordScreen = false
-
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
@@ -43,6 +42,12 @@ struct RootView: View {
                 if !showPasswordScreen { showPasswordScreen = true }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            // didEnterBackground — app saiu completamente da tela
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.reblockOnBackground()
+            #endif
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             // Lição 7 do Habit Doom: verificação síncrona ao voltar pro foreground
             checkForPasswordRequest()
@@ -53,12 +58,17 @@ struct RootView: View {
     }
 
     private func checkForPasswordRequest() {
-        guard let defaults = sharedDefaults,
-              defaults.bool(forKey: "pppix_show_password_screen") else { return }
+        guard let defaults = sharedDefaults else { return }
+        guard defaults.bool(forKey: "pppix_show_password_screen") else { return }
 
         let requestTime = defaults.double(forKey: "pppix_password_request_time")
-        guard requestTime > 0, Date().timeIntervalSince1970 - requestTime < 60 else {
+        let age = Date().timeIntervalSince1970 - requestTime
+
+        // Ignorar se muito antigo (> 30s) ou se veio do app principal abrindo normalmente
+        guard requestTime > 0, age < 30, age > 0 else {
             defaults.removeObject(forKey: "pppix_show_password_screen")
+            defaults.removeObject(forKey: "pppix_password_request_time")
+            defaults.synchronize()
             return
         }
 
@@ -228,7 +238,7 @@ struct ShieldPasswordView: View {
     private func unlock() {
         #if !targetEnvironment(simulator)
         // Libera por 5 minutos — o shield é removido, o app protegido fica acessível
-        ScreenTimeManager.shared.unlockTemporarily(seconds: 300)
+        ScreenTimeManager.shared.unlockTemporarily(seconds: 60)
         #endif
         isPresented = false
         // O app que estava bloqueado já está embaixo, acessível após o shield ser removido
