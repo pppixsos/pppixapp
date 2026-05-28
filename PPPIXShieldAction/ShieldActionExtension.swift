@@ -4,12 +4,13 @@ import UserNotifications
 
 class ShieldActionExtension: ShieldActionDelegate {
 
+    private let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("pppix"))
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     override func handle(action: ShieldAction,
                          for application: ApplicationToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
-        requestUnlock()
+        requestUnlock(appToken: application)
         completionHandler(.close)
     }
 
@@ -27,13 +28,13 @@ class ShieldActionExtension: ShieldActionDelegate {
         completionHandler(.close)
     }
 
-    private func requestUnlock() {
+    private func requestUnlock(appToken: ApplicationToken? = nil) {
         // Sinaliza para o app principal via UserDefaults
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        // Notificação para abrir o PPPIX — usuário toca e o app abre
+        // Notificação silenciosa para abrir o PPPIX
         let content = UNMutableNotificationContent()
         content.title = "🔐 App Protegido"
         content.body = "Toque para digitar sua senha"
