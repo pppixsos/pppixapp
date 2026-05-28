@@ -38,6 +38,11 @@ struct RootView: View {
         .onReceive(timer) { _ in
             checkForPasswordRequest()
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.openUnlockScreen"))) { _ in
+            if !showPasswordScreen {
+                showPasswordScreen = true
+            }
+        }
         .onOpenURL { url in
             if url.scheme == "pppix" && url.host == "unlock" {
                 if !showPasswordScreen {
