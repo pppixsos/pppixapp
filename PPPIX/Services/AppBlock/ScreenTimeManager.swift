@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 import SwiftUI
 
 #if !targetEnvironment(simulator)
@@ -73,6 +74,32 @@ final class ScreenTimeManager: ObservableObject {
         store.shield.applications = apps.isEmpty ? nil : apps
         store.shield.applicationCategories = cats.isEmpty ? nil : .specific(cats)
         store.shield.webDomains = webs.isEmpty ? nil : webs
+        // Envia notificação persistente — usuário toca para abrir PPPIX e digitar senha
+        sendPersistentNotification()
+    }
+
+    private func sendPersistentNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "🔐 App Protegido"
+        content.body = "Toque aqui para digitar sua senha e liberar o acesso"
+        content.sound = .none
+        content.userInfo = ["action": "unlock"]
+        content.categoryIdentifier = "PPPIX_UNLOCK"
+
+        // Remove notificações anteriores
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: ["pppix_shield_active"])
+        UNUserNotificationCenter.current()
+            .removeDeliveredNotifications(withIdentifiers: ["pppix_shield_active"])
+
+        // Notificação imediata
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "pppix_shield_active",
+            content: content,
+            trigger: trigger
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     func removeShield() {
