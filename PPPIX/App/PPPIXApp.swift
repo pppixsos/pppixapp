@@ -23,16 +23,43 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
 
+        // Registrar categoria de notificação com action de desbloqueio
+        setupNotificationCategories()
+
         if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            let _ = NSDictionary(contentsOfFile: path) {
             FirebaseApp.configure()
-            UNUserNotificationCenter.current().delegate = self
             Messaging.messaging().delegate = self
             application.registerForRemoteNotifications()
         }
 
+        UNUserNotificationCenter.current().delegate = self
+
+        // Solicitar permissão de notificações
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            print("[PPPIX] Notificações: \(granted ? "autorizado" : "negado")")
+        }
+
         BackgroundTaskManager.shared.registerTasks()
         return true
+    }
+
+    private func setupNotificationCategories() {
+        // Action que abre o PPPIX — aparece como botão na notificação
+        let unlockAction = UNNotificationAction(
+            identifier: "UNLOCK_ACTION",
+            title: "🔑 Digitar Senha",
+            options: [.foreground] // .foreground abre o app ao tocar
+        )
+
+        let unlockCategory = UNNotificationCategory(
+            identifier: "PPPIX_UNLOCK",
+            actions: [unlockAction],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([unlockCategory])
     }
 
     func application(_ application: UIApplication,
@@ -50,15 +77,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         if url.scheme == "pppix" && url.host == "unlock" {
-            // Extrair bundle ID e nome do app dos query params
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            let bundleId = components?.queryItems?.first(where: { $0.name == "bundle" })?.value ?? ""
-            let appName = components?.queryItems?.first(where: { $0.name == "name" })?.value ?? "App"
-            NotificationCenter.default.post(
-                name: .openUnlockScreen,
-                object: nil,
-                userInfo: ["bundleId": bundleId, "appName": appName]
-            )
+            NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
         }
         return true
     }
@@ -66,6 +85,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
 
+    // Chamado quando notificação chega com app em FOREGROUND
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -73,10 +93,13 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     ) {
         let userInfo = notification.request.content.userInfo
 
-        // Notificação de desbloqueio da ShieldAction
         if let action = userInfo["action"] as? String, action == "unlock" {
-            NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
-            completionHandler([]) // não mostra banner
+            // App em foreground — abrir tela de senha diretamente
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            }
+            // Mostrar banner TAMBÉM para o usuário saber que precisa interagir
+            completionHandler([.banner, .sound])
             return
         }
 
@@ -84,6 +107,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound, .badge])
     }
 
+    // Chamado quando usuário TOCA na notificação
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -91,9 +115,20 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     ) {
         let userInfo = response.notification.request.content.userInfo
 
-        // Usuário tocou na notificação de desbloqueio
+        // Toque no banner ou no botão "Digitar Senha"
         if let action = userInfo["action"] as? String, action == "unlock" {
-            NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            }
+            completionHandler()
+            return
+        }
+
+        // Botão de ação "UNLOCK_ACTION"
+        if response.actionIdentifier == "UNLOCK_ACTION" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            }
             completionHandler()
             return
         }
