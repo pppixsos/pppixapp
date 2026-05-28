@@ -38,6 +38,13 @@ struct RootView: View {
         .onReceive(timer) { _ in
             checkForPasswordRequest()
         }
+        .onOpenURL { url in
+            if url.scheme == "pppix" && url.host == "unlock" {
+                if !showPasswordScreen {
+                    showPasswordScreen = true
+                }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             checkForPasswordRequest()
             // Ao voltar pro app, rebloquear se necessário
