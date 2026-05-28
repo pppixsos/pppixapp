@@ -220,21 +220,38 @@ struct ShieldPasswordView: View {
         ScreenTimeManager.shared.unblockAll()
         #endif
         isPresented = false
-        // Abrir Santander diretamente após senha correta
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // Tenta abrir via URL scheme do Santander Brasil
-            let santanderURLs = ["santander://", "com.santander.app://", "santanderbrasil://"]
-            for scheme in santanderURLs {
-                if let url = URL(string: scheme), UIApplication.shared.canOpenURL(url) {
-                    UIApplication.shared.open(url)
-                    return
-                }
-            }
-            // Fallback: abre via openApplication pelo bundle ID
-            if let url = URL(string: "app-settings:") {
-                // não encontrou scheme — abre a tela inicial
+            let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
+            let bundleId = defaults?.string(forKey: "pppix_target_bundle_id") ?? ""
+
+            // Mapa bundle ID -> URL scheme
+            let schemeMap: [String: String] = [
+                "com.santander.app": "santander://",
+                "com.santander.SantanderBrasil": "santander://",
+                "com.nubank.app": "nubank://",
+                "com.itau.iphone": "itauaplicativo://",
+                "com.bradesco.app": "bradesco://",
+                "com.bb.bolsodigital": "bbdigi://",
+                "com.caixa.app": "caixatem://",
+                "com.inter.Inter": "interapp://",
+                "com.c6bank.ios": "c6bank://",
+                "com.picpay.ios": "picpay://",
+                "com.mercadopago.ios": "mercadopago://",
+                "net.whatsapp.WhatsApp": "whatsapp://",
+                "com.burbn.instagram": "instagram://",
+                "com.facebook.Facebook": "fb://",
+                "com.zhiliaoapp.musically": "tiktok://",
+                "com.ubercab.UberClient": "uber://",
+            ]
+
+            let scheme = schemeMap[bundleId] ?? "santander://"
+
+            if let url = URL(string: scheme) {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
             }
         }
+
         // Rebloquear após 60 segundos
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
             #if !targetEnvironment(simulator)
