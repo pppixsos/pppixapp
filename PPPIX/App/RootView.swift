@@ -65,7 +65,7 @@ struct RootView: View {
         let age = Date().timeIntervalSince1970 - requestTime
 
         // Ignorar se muito antigo (> 30s) ou se veio do app principal abrindo normalmente
-        guard requestTime > 0, age < 30, age > 0 else {
+        guard requestTime > 0, age < 60, age > 0 else {
             defaults.removeObject(forKey: "pppix_show_password_screen")
             defaults.removeObject(forKey: "pppix_password_request_time")
             defaults.synchronize()
