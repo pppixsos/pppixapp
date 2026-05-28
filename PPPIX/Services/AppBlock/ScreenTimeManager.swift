@@ -74,32 +74,6 @@ final class ScreenTimeManager: ObservableObject {
         store.shield.applications = apps.isEmpty ? nil : apps
         store.shield.applicationCategories = cats.isEmpty ? nil : .specific(cats)
         store.shield.webDomains = webs.isEmpty ? nil : webs
-        // Envia notificação persistente — usuário toca para abrir PPPIX e digitar senha
-        sendPersistentNotification()
-    }
-
-    private func sendPersistentNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = "🔐 App Protegido"
-        content.body = "Toque aqui para digitar sua senha e liberar o acesso"
-        content.sound = .none
-        content.userInfo = ["action": "unlock"]
-        content.categoryIdentifier = "PPPIX_UNLOCK"
-
-        // Remove notificações anteriores
-        UNUserNotificationCenter.current()
-            .removePendingNotificationRequests(withIdentifiers: ["pppix_shield_active"])
-        UNUserNotificationCenter.current()
-            .removeDeliveredNotifications(withIdentifiers: ["pppix_shield_active"])
-
-        // Notificação imediata
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "pppix_shield_active",
-            content: content,
-            trigger: trigger
-        )
-        UNUserNotificationCenter.current().add(request)
     }
 
     func removeShield() {
@@ -110,46 +84,46 @@ final class ScreenTimeManager: ObservableObject {
 
     // MARK: - Desbloqueio temporário após senha
 
+    private var reblockWorkItem: DispatchWorkItem?
+
     func unlockTemporarily(seconds: Int = 60) {
         let until = Date().timeIntervalSince1970 + Double(seconds)
         sharedDefaults?.set(until, forKey: Self.unlockedUntilKey)
         sharedDefaults?.synchronize()
-        // Remove shield para o usuário acessar o app
+
+        // Remove shield para o usuário acessar o app protegido
         removeShield()
-        // Agenda reblocking com schedule curto (max 44 min conforme Habit Doom)
-        scheduleReblock(afterSeconds: seconds)
+
+        // Cancela reblock anterior se existir
+        reblockWorkItem?.cancel()
+
+        // Agenda reblock após X segundos via DispatchQueue — simples e confiável
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.applyShield()
+            self.sharedDefaults?.removeObject(forKey: Self.unlockedUntilKey)
+            self.sharedDefaults?.synchronize()
+        }
+        reblockWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(seconds), execute: workItem)
     }
 
-    // Compatibilidade
+    // Chamado quando PPPIX vai para background — rebloqueia imediatamente
+    func reblockOnBackground() {
+        let unlockedUntil = sharedDefaults?.double(forKey: Self.unlockedUntilKey) ?? 0
+        let isUnlocked = unlockedUntil > Date().timeIntervalSince1970
+        guard isUnlocked else { return }
+
+        // Cancela o timer de 1 minuto e rebloqueia agora
+        reblockWorkItem?.cancel()
+        reblockWorkItem = nil
+        applyShield()
+        sharedDefaults?.removeObject(forKey: Self.unlockedUntilKey)
+        sharedDefaults?.synchronize()
+    }
+
     func unblockAll() { unlockTemporarily(seconds: 60) }
     func reblockAfterUnlock() { syncCheckAndReblock() }
-
-    // MARK: - Agendamento de reblock via DeviceActivity
-
-    private func scheduleReblock(afterSeconds seconds: Int) {
-        activityCenter.stopMonitoring([Self.activityName])
-
-        let now = Date()
-        let target = now.addingTimeInterval(Double(seconds) + 60) // +1 min buffer
-        let cal = Calendar.current
-        let comps = cal.dateComponents([.hour, .minute], from: target)
-
-        guard let hour = comps.hour, let minute = comps.minute else { return }
-
-        // Schedule curto, não repeating — dispara uma vez para rebloquear
-        let schedule = DeviceActivitySchedule(
-            intervalStart: DateComponents(hour: cal.component(.hour, from: now),
-                                          minute: cal.component(.minute, from: now)),
-            intervalEnd: DateComponents(hour: hour, minute: minute),
-            repeats: false
-        )
-
-        do {
-            try activityCenter.startMonitoring(Self.activityName, during: schedule)
-        } catch {
-            print("[PPPIX] Erro ao agendar reblock: \(error)")
-        }
-    }
 
     // MARK: - Persistência
 
