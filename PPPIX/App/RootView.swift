@@ -1,6 +1,5 @@
 import SwiftUI
 
-// Int: Identifiable — necessário para .sheet(item: $Int?)
 extension Int: @retroactive Identifiable {
     public var id: Int { self }
 }
@@ -11,8 +10,7 @@ struct RootView: View {
     @State private var showAlertDetail: Int? = nil
     @State private var showPasswordScreen = false
 
-    // Timer que monitora UserDefaults para saber quando o ShieldAction pediu senha
-    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     var body: some View {
@@ -34,29 +32,22 @@ struct RootView: View {
                 showAlertDetail = alertId
             }
         }
-        // Monitora quando o ShieldAction sinaliza que o usuário quer digitar senha
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.openUnlockScreen"))) { _ in
+            if !showPasswordScreen { showPasswordScreen = true }
+        }
         .onReceive(timer) { _ in
             checkForPasswordRequest()
         }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.openUnlockScreen"))) { _ in
-            if !showPasswordScreen {
-                showPasswordScreen = true
-            }
-        }
         .onOpenURL { url in
             if url.scheme == "pppix" && url.host == "unlock" {
-                if !showPasswordScreen {
-                    showPasswordScreen = true
-                }
+                if !showPasswordScreen { showPasswordScreen = true }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Lição 7 do Habit Doom: verificação síncrona ao voltar pro foreground
             checkForPasswordRequest()
-            // Ao voltar pro app, rebloquear se necessário
             #if !targetEnvironment(simulator)
-            Task { @MainActor in
-                ScreenTimeManager.shared.reblockAfterUnlock()
-            }
+            ScreenTimeManager.shared.syncCheckAndReblock()
             #endif
         }
     }
@@ -65,9 +56,8 @@ struct RootView: View {
         guard let defaults = sharedDefaults,
               defaults.bool(forKey: "pppix_show_password_screen") else { return }
 
-        // Evitar abrir múltiplas vezes
         let requestTime = defaults.double(forKey: "pppix_password_request_time")
-        guard requestTime > 0, Date().timeIntervalSince1970 - requestTime < 30 else {
+        guard requestTime > 0, Date().timeIntervalSince1970 - requestTime < 60 else {
             defaults.removeObject(forKey: "pppix_show_password_screen")
             return
         }
@@ -76,59 +66,72 @@ struct RootView: View {
         defaults.removeObject(forKey: "pppix_password_request_time")
         defaults.synchronize()
 
-        if !showPasswordScreen {
-            showPasswordScreen = true
-        }
+        if !showPasswordScreen { showPasswordScreen = true }
     }
 }
 
-// MARK: — Tela de senha que aparece quando o usuário toca "Digitar Senha" no shield
+// MARK: - Tela de senha
 struct ShieldPasswordView: View {
     @Binding var isPresented: Bool
     @State private var password = ""
     @State private var errorMsg = ""
     @State private var isLoading = false
-    @State private var showSuccess = false
     @FocusState private var isFocused: Bool
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         ZStack {
             Color(hex: "#0A0A12").ignoresSafeArea()
 
-            VStack(spacing: 28) {
+            VStack(spacing: 0) {
 
                 // Header
-                VStack(spacing: 8) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 56))
-                        .foregroundStyle(LinearGradient(
-                            colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                            startPoint: .top, endPoint: .bottom
-                        ))
+                VStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(
+                                colors: [Color(hex: "#3366FF").opacity(0.2), Color(hex: "#6633FF").opacity(0.1)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            ))
+                            .frame(width: 88, height: 88)
 
-                    Text("Digite sua senha")
+                        Image(systemName: "lock.shield.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(LinearGradient(
+                                colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
+                                startPoint: .top, endPoint: .bottom
+                            ))
+                    }
+
+                    Text("App Protegido")
                         .font(.title2.bold())
                         .foregroundColor(.white)
 
-                    Text("Para desbloquear o app protegido")
+                    Text("Digite sua senha para continuar")
                         .font(.subheadline)
-                        .foregroundColor(Color(white: 0.5))
+                        .foregroundColor(Color(white: 0.45))
                 }
-                .padding(.top, 48)
+                .padding(.top, 64)
+                .padding(.bottom, 40)
 
                 // Campo de senha
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     SecureField("Senha", text: $password)
-                        .font(.system(size: 18))
+                        .font(.system(size: 17))
                         .foregroundColor(.white)
-                        .accentColor(Color(hex: "#3366FF"))
                         .multilineTextAlignment(.center)
-                        .padding(16)
-                        .background(Color(white: 0.08))
-                        .cornerRadius(13)
+                        .padding(.horizontal, 20)
+                        .frame(height: 54)
+                        .background(Color(white: 0.07))
+                        .cornerRadius(14)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 13)
-                                .stroke(errorMsg.isEmpty ? Color(white: 0.15) : Color(hex: "#FF4444"), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(
+                                    errorMsg.isEmpty
+                                        ? Color(white: 0.12)
+                                        : Color(hex: "#FF4444"),
+                                    lineWidth: 1
+                                )
                         )
                         .focused($isFocused)
                         .onSubmit { verify() }
@@ -139,36 +142,43 @@ struct ShieldPasswordView: View {
                             .foregroundColor(Color(hex: "#FF4444"))
                     }
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 28)
 
-                // Botões
-                VStack(spacing: 12) {
-                    Button { verify() } label: {
-                        Group {
-                            if isLoading {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text("Confirmar")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
+                Spacer().frame(height: 24)
+
+                // Botão confirmar
+                Button { verify() } label: {
+                    ZStack {
+                        if isLoading {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text("Confirmar")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
                         }
-                        .frame(maxWidth: .infinity).frame(height: 52)
-                        .background(LinearGradient(
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(
+                        LinearGradient(
                             colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
                             startPoint: .leading, endPoint: .trailing
-                        ))
-                        .cornerRadius(13)
-                    }
-                    .disabled(isLoading || password.isEmpty)
-                    .padding(.horizontal, 32)
-
-                    Button("Cancelar") {
-                        isPresented = false
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(Color(white: 0.4))
+                        )
+                    )
+                    .cornerRadius(14)
                 }
+                .disabled(isLoading || password.isEmpty)
+                .padding(.horizontal, 28)
+
+                Spacer().frame(height: 12)
+
+                // Botão cancelar
+                Button("Cancelar") {
+                    isPresented = false
+                }
+                .font(.subheadline)
+                .foregroundColor(Color(white: 0.35))
+                .padding(.bottom, 40)
 
                 Spacer()
             }
@@ -183,10 +193,12 @@ struct ShieldPasswordView: View {
 
         Task {
             do {
-                let response = try await APIClient.shared.verifyPassword(body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
+                let response = try await APIClient.shared.verifyPassword(
+                    body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil)
+                )
                 await MainActor.run {
                     isLoading = false
-                    handlePasswordResponse(response)
+                    handleResponse(response)
                 }
             } catch {
                 await MainActor.run {
@@ -198,16 +210,14 @@ struct ShieldPasswordView: View {
         }
     }
 
-    private func handlePasswordResponse(_ response: VerifyPasswordResponse) {
+    private func handleResponse(_ response: VerifyPasswordResponse) {
         switch response.action {
         case "open_bank":
-            // Senha normal — desbloquear e o usuário abre o app normalmente
-            unlockApps()
+            unlock()
 
         case "open_bank_alert":
-            // Senha de emergência — desbloquear + enviar alerta silencioso
-            unlockApps()
-            sendEmergencyAlert()
+            unlock()
+            NotificationCenter.default.post(name: .sendEmergencyAlert, object: nil)
 
         default:
             errorMsg = "Senha incorreta"
@@ -215,53 +225,13 @@ struct ShieldPasswordView: View {
         }
     }
 
-    private func unlockApps() {
+    private func unlock() {
         #if !targetEnvironment(simulator)
-        ScreenTimeManager.shared.unblockAll()
+        // Libera por 5 minutos — o shield é removido, o app protegido fica acessível
+        ScreenTimeManager.shared.unlockTemporarily(seconds: 300)
         #endif
         isPresented = false
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
-            let bundleId = defaults?.string(forKey: "pppix_target_bundle_id") ?? ""
-
-            // Mapa bundle ID -> URL scheme
-            let schemeMap: [String: String] = [
-                "com.santander.app": "santander://",
-                "com.santander.SantanderBrasil": "santander://",
-                "com.nubank.app": "nubank://",
-                "com.itau.iphone": "itauaplicativo://",
-                "com.bradesco.app": "bradesco://",
-                "com.bb.bolsodigital": "bbdigi://",
-                "com.caixa.app": "caixatem://",
-                "com.inter.Inter": "interapp://",
-                "com.c6bank.ios": "c6bank://",
-                "com.picpay.ios": "picpay://",
-                "com.mercadopago.ios": "mercadopago://",
-                "net.whatsapp.WhatsApp": "whatsapp://",
-                "com.burbn.instagram": "instagram://",
-                "com.facebook.Facebook": "fb://",
-                "com.zhiliaoapp.musically": "tiktok://",
-                "com.ubercab.UberClient": "uber://",
-            ]
-
-            let scheme = schemeMap[bundleId] ?? "santander://"
-
-            if let url = URL(string: scheme) {
-                UIApplication.shared.open(url, options: [:], completionHandler: nil)
-            }
-        }
-
-        // Rebloquear após 60 segundos
-        DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
-            #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.reblockAfterUnlock()
-            #endif
-        }
-    }
-
-    private func sendEmergencyAlert() {
-        NotificationCenter.default.post(name: .sendEmergencyAlert, object: nil)
+        // O app que estava bloqueado já está embaixo, acessível após o shield ser removido
     }
 }
 
