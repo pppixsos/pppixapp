@@ -219,10 +219,24 @@ struct ShieldPasswordView: View {
         #if !targetEnvironment(simulator)
         ScreenTimeManager.shared.unblockAll()
         #endif
-        // Fechar tela de senha — o app bloqueado volta a estar acessível
         isPresented = false
-        // Rebloquear após 30 segundos (tempo para o usuário abrir o app)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+        // Abrir Santander diretamente após senha correta
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // Tenta abrir via URL scheme do Santander Brasil
+            let santanderURLs = ["santander://", "com.santander.app://", "santanderbrasil://"]
+            for scheme in santanderURLs {
+                if let url = URL(string: scheme), UIApplication.shared.canOpenURL(url) {
+                    UIApplication.shared.open(url)
+                    return
+                }
+            }
+            // Fallback: abre via openApplication pelo bundle ID
+            if let url = URL(string: "app-settings:") {
+                // não encontrou scheme — abre a tela inicial
+            }
+        }
+        // Rebloquear após 60 segundos
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.reblockAfterUnlock()
             #endif
