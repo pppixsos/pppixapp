@@ -4,11 +4,18 @@ import UserNotifications
 
 class ShieldActionExtension: ShieldActionDelegate {
 
+    private let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("pppix"))
+
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     override func handle(action: ShieldAction,
                          for application: ApplicationToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
+        // Salvar bundle ID do app bloqueado para abrir após senha
+        if let bundleId = application.bundleIdentifier {
+            sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
+            sharedDefaults?.synchronize()
+        }
         sendUnlockNotification()
         completionHandler(.close)
     }
@@ -27,9 +34,12 @@ class ShieldActionExtension: ShieldActionDelegate {
         completionHandler(.close)
     }
 
-    private func sendUnlockNotification() {
+    private func sendUnlockNotification(bundleId: String = "") {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
+        if !bundleId.isEmpty {
+            sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
+        }
         sharedDefaults?.synchronize()
 
         let center = UNUserNotificationCenter.current()
