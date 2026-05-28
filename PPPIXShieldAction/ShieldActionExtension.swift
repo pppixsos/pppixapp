@@ -27,7 +27,13 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        // .close fecha a tela shield — o PPPIX detecta via UserDefaults e abre a tela de senha
+
+        // Abre o app principal via NSExtensionContext — funciona em extensões de shield
+        if let url = URL(string: "pppix://unlock") {
+            let ctx = NSExtensionContext()
+            ctx.open(url, completionHandler: nil)
+        }
+
         completionHandler(.close)
     }
 }
