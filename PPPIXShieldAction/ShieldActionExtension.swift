@@ -28,35 +28,43 @@ class ShieldActionExtension: ShieldActionDelegate {
     }
 
     private func sendUnlockNotification() {
-        // Sinaliza via UserDefaults para o app principal
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        // Envia notificação local imediata — usuário toca e o PPPIX abre
+        let center = UNUserNotificationCenter.current()
+
+        // Registrar categoria com botão que abre o app (foreground)
+        let unlockAction = UNNotificationAction(
+            identifier: "UNLOCK_ACTION",
+            title: "🔑 Digitar Senha",
+            options: [.foreground]
+        )
+        let category = UNNotificationCategory(
+            identifier: "PPPIX_UNLOCK",
+            actions: [unlockAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([category])
+
         let content = UNMutableNotificationContent()
-        content.title = "🔐 App Protegido"
-        content.body = "Toque aqui para digitar sua senha e abrir o app"
+        content.title = "🔐 App Protegido pelo PPPIX"
+        content.body = "Toque para digitar sua senha e abrir o app"
         content.sound = .default
         content.userInfo = ["action": "unlock"]
+        content.categoryIdentifier = "PPPIX_UNLOCK"
 
-        // URL scheme no categoryIdentifier para abrir diretamente
-        if let url = URL(string: "pppix://unlock") {
-            content.userInfo["url"] = url.absoluteString
-        }
+        // Remover notificações antigas pendentes
+        center.removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
 
-        // Disparo imediato (0.1 segundos)
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
         let request = UNNotificationRequest(
-            identifier: "pppix_unlock_\(Date().timeIntervalSince1970)",
+            identifier: "pppix_unlock",
             content: content,
             trigger: trigger
         )
 
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("[PPPIX Shield] Erro notificação: \(error)")
-            }
-        }
+        center.add(request)
     }
 }
