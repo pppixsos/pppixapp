@@ -1,83 +1,38 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>tech.pppix.app.refresh</string>
-		<string>tech.pppix.app.processing</string>
-	</array>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<key>CFBundleDisplayName</key>
-	<string>PPPIX</string>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>itauaplicativo</string>
-		<string>bradesco</string>
-		<string>bbdigi</string>
-		<string>santander</string>
-		<string>caixatemapp</string>
-		<string>nubank</string>
-		<string>c6bank</string>
-		<string>interapp</string>
-		<string>sicredi</string>
-		<string>picpay</string>
-		<string>mercadopago</string>
-		<string>xpapp</string>
-		<string>btgpactual</string>
-		<string>shoebox</string>
-		<string>pagaleve</string>
-		<string>guiabolso</string>
-		<string>neon</string>
-		<string>original</string>
-		<string>agibank</string>
-		<string>sofisa</string>
-		<string>fb</string>
-		<string>instagram</string>
-		<string>whatsapp</string>
-		<string>snapchat</string>
-		<string>twitter</string>
-		<string>tiktok</string>
-		<string>discord</string>
-		<string>tg</string>
-		<string>comgooglemaps</string>
-		<string>uber</string>
-		<string>taxis99</string>
-		<string>ifood</string>
-		<string>rappi</string>
-	</array>
-	<key>NSFamilyControlsUsageDescription</key>
-	<string>O PPPIX usa o Screen Time para proteger seus apps financeiros com senha.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>O PPPIX usa sua localização para enviar alertas de emergência.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>remote-notification</string>
-		<string>processing</string>
-	</array>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-</dict>
-</plist>
+import ManagedSettings
+import Foundation
+
+class ShieldActionExtension: ShieldActionDelegate {
+
+    private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
+
+    override func handle(action: ShieldAction,
+                         for application: ApplicationToken,
+                         completionHandler: @escaping (ShieldActionResponse) -> Void) {
+        requestUnlock(completionHandler: completionHandler)
+    }
+
+    override func handle(action: ShieldAction,
+                         for webDomain: WebDomainToken,
+                         completionHandler: @escaping (ShieldActionResponse) -> Void) {
+        requestUnlock(completionHandler: completionHandler)
+    }
+
+    override func handle(action: ShieldAction,
+                         for category: ActivityCategoryToken,
+                         completionHandler: @escaping (ShieldActionResponse) -> Void) {
+        requestUnlock(completionHandler: completionHandler)
+    }
+
+    private func requestUnlock(completionHandler: @escaping (ShieldActionResponse) -> Void) {
+        sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
+        sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
+        sharedDefaults?.synchronize()
+
+        // Abre o PPPIX via URL scheme — iOS abre o app registrado com esse scheme
+        if let url = URL(string: "pppix://unlock") {
+            completionHandler(.open(url))
+        } else {
+            completionHandler(.close)
+        }
+    }
+}
