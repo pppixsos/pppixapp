@@ -1,7 +1,5 @@
 import Foundation
 
-/// Equivalente ao RetrofitClient.kt + PPPIXApi.kt do Android.
-/// Auto-refresh de token no 401, idêntico ao interceptor do OkHttp.
 final class APIClient {
 
     static let shared = APIClient()
@@ -28,13 +26,9 @@ final class APIClient {
 
     func getPasswords() async throws -> [SavedPasswordsResponse] {
         let data = try await rawGet("passwords/")
-        if let list = try? JSONDecoder().decode([SavedPasswordsResponse].self, from: data) {
-            return list
-        }
+        if let list = try? JSONDecoder().decode([SavedPasswordsResponse].self, from: data) { return list }
         if let paged = try? JSONDecoder().decode(SavedPasswordsResponse.self, from: data),
-           let results = paged.results {
-            return results
-        }
+           let results = paged.results { return results }
         return []
     }
 
@@ -114,11 +108,34 @@ final class APIClient {
         return []
     }
 
+    // Busca TODOS os pendentes — enviados E recebidos
+    // O backend Django retorna todos onde o usuário é from_user ou to_user com status=pending
     func getPendingConnections() async throws -> [Connection] {
         let data = try await rawGet("connections/pending/")
         if let list = try? JSONDecoder().decode([Connection].self, from: data) { return list }
         if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
            let results = paged.results { return results }
+        return []
+    }
+
+    // Busca convites recebidos (onde EU sou o to_user) — endpoint separado se existir
+    func getReceivedConnectionRequests() async throws -> [Connection] {
+        // Tenta endpoint dedicado primeiro
+        do {
+            let data = try await rawGet("connections/received/")
+            if let list = try? JSONDecoder().decode([Connection].self, from: data) { return list }
+            if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
+               let results = paged.results { return results }
+        } catch {}
+
+        // Fallback: filtra do endpoint geral
+        do {
+            let data = try await rawGet("connections/?status=pending")
+            if let list = try? JSONDecoder().decode([Connection].self, from: data) { return list }
+            if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
+               let results = paged.results { return results }
+        } catch {}
+
         return []
     }
 
@@ -142,14 +159,10 @@ final class APIClient {
             user: userId,
             device_token: token,
             platform: platform,
-            device_name: UIDeviceName(),
+            device_name: "iPhone",
             is_active: true
         )
         let _: EmptyResponse = try await post("fcm-devices/", body: body)
-    }
-
-    private func UIDeviceName() -> String {
-        return "iPhone"
     }
 
     // MARK: - HTTP Primitives
@@ -159,7 +172,6 @@ final class APIClient {
         return try decode(T.self, from: data)
     }
 
-    // Público para debug
     func rawGetPublic(_ path: String) async throws -> Data {
         return try await rawGet(path)
     }
@@ -192,42 +204,27 @@ final class APIClient {
         _ = try await executeWithRefresh(&request)
     }
 
-    // MARK: - Request builder
-
     private func makeRequest<B: Encodable>(
-        path: String,
-        method: String,
-        body: B?,
-        auth: Bool = true
+        path: String, method: String, body: B?, auth: Bool = true
     ) throws -> URLRequest {
-        guard let url = URL(string: baseURL + path) else {
-            throw APIError.invalidURL
-        }
+        guard let url = URL(string: baseURL + path) else { throw APIError.invalidURL }
         var request = URLRequest(url: url, timeoutInterval: 15)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
         if auth, let token = SessionManager.shared.accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-
         if let body = body, !(body is EmptyBody) {
             request.httpBody = try JSONEncoder().encode(body)
         }
         return request
     }
 
-    // MARK: - Execute with auto token refresh
-
     private func executeWithRefresh(_ request: inout URLRequest, auth: Bool = true) async throws -> Data {
         let (data, response) = try await session.data(for: request)
-
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-
         if http.statusCode == 401 && auth {
-            guard let newToken = try? await refreshAccessToken() else {
-                throw APIError.unauthorized
-            }
+            guard let newToken = try? await refreshAccessToken() else { throw APIError.unauthorized }
             request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
             let (retryData, retryResp) = try await session.data(for: request)
             guard let retryHttp = retryResp as? HTTPURLResponse else { throw APIError.invalidResponse }
@@ -235,7 +232,6 @@ final class APIClient {
             try checkStatus(retryHttp.statusCode, data: retryData)
             return retryData
         }
-
         try checkStatus(http.statusCode, data: data)
         return data
     }
@@ -250,8 +246,6 @@ final class APIClient {
         SessionManager.shared.saveTokens(access: refreshed.access, refresh: refresh)
         return refreshed.access
     }
-
-    // MARK: - Helpers
 
     private func checkStatus(_ code: Int, data: Data) throws {
         switch code {
@@ -270,42 +264,20 @@ final class APIClient {
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         if T.self == EmptyResponse.self { return EmptyResponse() as! T }
-        do {
-            return try JSONDecoder().decode(type, from: data)
-        } catch {
-            throw APIError.decodingError(error.localizedDescription)
-        }
+        do { return try JSONDecoder().decode(type, from: data) }
+        catch { throw APIError.decodingError(error.localizedDescription) }
     }
 
-    /// Parseia erros da API Django que podem vir em vários formatos:
-    /// {"detail": "..."}, {"message": "..."}, {"field": ["erro"]}, {"non_field_errors": ["..."]}
     private func parseErrorMessage(_ data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-
-        // Formato simples
-        if let detail = json["detail"] as? String { return detail }
-        if let msg = json["message"] as? String { return msg }
-        if let error = json["error"] as? String { return error }
-
-        // non_field_errors: ["mensagem"]
-        if let nonField = json["non_field_errors"] as? [String], let first = nonField.first {
-            return first
-        }
-
-        // Erros de campo: {"to_user_email": ["Usuário não encontrado"]}
-        // Pega o primeiro erro de qualquer campo
+        if let d = json["detail"] as? String { return d }
+        if let m = json["message"] as? String { return m }
+        if let e = json["error"] as? String { return e }
+        if let nf = json["non_field_errors"] as? [String], let f = nf.first { return f }
         for (key, value) in json {
-            if let arr = value as? [String], let first = arr.first {
-                // Traduz nomes de campo técnicos para português amigável
-                let fieldName = friendlyFieldName(key)
-                return "\(fieldName): \(first)"
-            }
-            if let str = value as? String {
-                let fieldName = friendlyFieldName(key)
-                return "\(fieldName): \(str)"
-            }
+            if let arr = value as? [String], let f = arr.first { return "\(friendlyFieldName(key)): \(f)" }
+            if let str = value as? String { return "\(friendlyFieldName(key)): \(str)" }
         }
-
         return nil
     }
 
@@ -314,27 +286,15 @@ final class APIClient {
         case "to_user_email": return "Email"
         case "email": return "Email"
         case "password": return "Senha"
-        case "cpf": return "CPF"
-        case "phone": return "Telefone"
-        case "birth_date": return "Data de nascimento"
-        case "cep": return "CEP"
-        case "username": return "Nome de usuário"
         default: return key.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
 }
 
-// MARK: - Errors
-
 enum APIError: LocalizedError {
-    case invalidURL
-    case invalidResponse
-    case unauthorized
-    case badRequest(String)
-    case notFound
-    case serverError
-    case decodingError(String)
-    case unknown(String)
+    case invalidURL, invalidResponse, unauthorized
+    case badRequest(String), notFound, serverError
+    case decodingError(String), unknown(String)
 
     var errorDescription: String? {
         switch self {
@@ -348,8 +308,6 @@ enum APIError: LocalizedError {
         }
     }
 }
-
-// MARK: - Helpers
 
 private struct EmptyBody: Encodable {}
 private struct EmptyResponse: Decodable {}
