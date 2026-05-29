@@ -1,21 +1,23 @@
 import ManagedSettingsUI
 import ManagedSettings
 import UIKit
-import UserNotifications
 import FamilyControls
 
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
+    private let store = ManagedSettingsStore(named: .init("pppix"))
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     override func configuration(shielding application: Application) -> ShieldConfiguration {
-        saveAppInfo(application)
+        // CAMADA 1 DE REBLOCK: verifica se o unlock expirou
+        // Chamado toda vez que o usuário toca no app bloqueado
+        checkAndReblockIfExpired(application: application)
         return pppixShield()
     }
 
     override func configuration(shielding application: Application,
                                 in category: ActivityCategory) -> ShieldConfiguration {
-        saveAppInfo(application)
+        checkAndReblockIfExpired(application: application)
         return pppixShield()
     }
 
@@ -28,30 +30,25 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
         return pppixShield()
     }
 
-    private func saveAppInfo(_ application: Application) {
-        // Salva bundle ID
-        if let bundleId = application.bundleIdentifier {
-            sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
+    // Verifica se o período de unlock expirou e reaplica o shield se necessário
+    private func checkAndReblockIfExpired(application: Application) {
+        let unlockUntil = sharedDefaults?.double(forKey: "pppix_unlocked_until") ?? 0
+        if unlockUntil > 0 && Date().timeIntervalSince1970 > unlockUntil {
+            // Unlock expirou — reaplica todos os shields
+            reapplyFullShield()
+            sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
+            sharedDefaults?.synchronize()
         }
+    }
 
-        // FIX UNLOCK INDIVIDUAL:
-        // Salva o ApplicationToken diretamente como Data — mais confiável que FamilyActivitySelection
-        // O ScreenTimeManager lê "pppix_single_app_token_data" para remover só esse token
-        if let token = application.token,
-           let tokenData = try? JSONEncoder().encode(token) {
-            sharedDefaults?.set(tokenData, forKey: "pppix_single_app_token_data")
-        }
+    private func reapplyFullShield() {
+        guard let data = sharedDefaults?.data(forKey: "pppix_activity_selection"),
+              let selection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data)
+        else { return }
 
-        // Também salva via FamilyActivitySelection como fallback
-        var singleSelection = FamilyActivitySelection()
-        if let token = application.token {
-            singleSelection.applicationTokens = [token]
-        }
-        if let data = try? JSONEncoder().encode(singleSelection) {
-            sharedDefaults?.set(data, forKey: "pppix_single_unlock_selection")
-        }
-
-        sharedDefaults?.synchronize()
+        store.shield.applications = selection.applicationTokens.isEmpty ? nil : selection.applicationTokens
+        store.shield.applicationCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens)
+        store.shield.webDomains = selection.webDomainTokens.isEmpty ? nil : selection.webDomainTokens
     }
 
     private func pppixShield() -> ShieldConfiguration {
@@ -61,18 +58,12 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             backgroundBlurStyle: .systemUltraThinMaterialDark,
             backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 0.97),
             icon: houseIcon,
-            title: ShieldConfiguration.Label(
-                text: "🔒 Você está fora de casa!",
-                color: .white
-            ),
+            title: ShieldConfiguration.Label(text: "🔒 Você está fora de casa!", color: .white),
             subtitle: ShieldConfiguration.Label(
                 text: "Clique em Desbloquear e abra a notificação exibida",
                 color: UIColor(white: 0.55, alpha: 1.0)
             ),
-            primaryButtonLabel: ShieldConfiguration.Label(
-                text: "Desbloquear",
-                color: .white
-            ),
+            primaryButtonLabel: ShieldConfiguration.Label(text: "Desbloquear", color: .white),
             primaryButtonBackgroundColor: UIColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0)
         )
     }
