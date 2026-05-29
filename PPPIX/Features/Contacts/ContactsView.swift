@@ -2,8 +2,11 @@ import SwiftUI
 
 struct ContactsView: View {
 
-    @State private var connections: [Connection] = []
-    @State private var isLoading = true
+    // Separados por tipo para nunca confundir "enviado" com "recebido"
+    @State private var accepted:  [Connection] = []
+    @State private var received:  [Connection] = []  // convites QUE EU RECEBI
+    @State private var sent:      [Connection] = []  // convites QUE EU ENVIEI
+    @State private var isLoading  = true
     @State private var showAddSheet = false
     @State private var errorMessage = ""
     @State private var successMessage = ""
@@ -31,16 +34,55 @@ struct ContactsView: View {
                         }
 
                         if !successMessage.isEmpty {
-                            Text(successMessage)
-                                .font(.footnote)
+                            Text(successMessage).font(.footnote)
                                 .foregroundColor(Color(hex: "#44FF88"))
                                 .multilineTextAlignment(.center)
                         }
-                        if !errorMessage.isEmpty {
-                            ErrorBanner(message: errorMessage)
+                        if !errorMessage.isEmpty { ErrorBanner(message: errorMessage) }
+
+                        // CONVITES RECEBIDOS (aguardando minha resposta)
+                        if !received.isEmpty {
+                            sectionHeader("Convites Recebidos", icon: "envelope.badge.fill", color: Color(hex: "#FF9900"))
+                            ForEach(received) { conn in
+                                ConnectionRow(
+                                    connection: conn,
+                                    myEmail: myEmail,
+                                    rowType: .received,
+                                    onAccept: { Task { await acceptConnection(conn) } },
+                                    onDelete: { Task { await deleteConnection(conn) } }
+                                )
+                            }
                         }
 
-                        if connections.isEmpty {
+                        // CONVITES ENVIADOS (aguardando resposta do outro)
+                        if !sent.isEmpty {
+                            sectionHeader("Aguardando Resposta", icon: "clock.fill", color: Color(hex: "#8888FF"))
+                            ForEach(sent) { conn in
+                                ConnectionRow(
+                                    connection: conn,
+                                    myEmail: myEmail,
+                                    rowType: .sent,
+                                    onAccept: {},
+                                    onDelete: { Task { await deleteConnection(conn) } }
+                                )
+                            }
+                        }
+
+                        // CONTATOS ACEITOS
+                        if !accepted.isEmpty {
+                            sectionHeader("Contatos Ativos", icon: "checkmark.shield.fill", color: Color(hex: "#44FF88"))
+                            ForEach(accepted) { conn in
+                                ConnectionRow(
+                                    connection: conn,
+                                    myEmail: myEmail,
+                                    rowType: .accepted,
+                                    onAccept: {},
+                                    onDelete: { Task { await deleteConnection(conn) } }
+                                )
+                            }
+                        }
+
+                        if accepted.isEmpty && received.isEmpty && sent.isEmpty {
                             VStack(spacing: 12) {
                                 Image(systemName: "person.badge.plus")
                                     .font(.system(size: 48))
@@ -48,26 +90,15 @@ struct ContactsView: View {
                                 Text("Nenhum contato de emergência")
                                     .foregroundColor(Color(white: 0.4))
                                 Text("Adicione pessoas de confiança que receberão alertas caso você precise de ajuda")
-                                    .font(.caption)
-                                    .foregroundColor(Color(white: 0.3))
+                                    .font(.caption).foregroundColor(Color(white: 0.3))
                                     .multilineTextAlignment(.center)
                             }
                             .padding(.vertical, 32)
-                        } else {
-                            ForEach(connections) { connection in
-                                ConnectionRow(
-                                    connection: connection,
-                                    myEmail: myEmail,
-                                    onAccept: { Task { await acceptConnection(connection) } },
-                                    onDelete: { Task { await deleteConnection(connection) } }
-                                )
-                            }
                         }
 
                         Spacer(minLength: 80)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
+                    .padding(.horizontal, 20).padding(.top, 16)
                 }
             }
 
@@ -80,17 +111,13 @@ struct ContactsView: View {
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.white)
                             .frame(width: 56, height: 56)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing
-                                )
-                            )
+                            .background(LinearGradient(
+                                colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
                             .clipShape(Circle())
                             .shadow(color: Color(hex: "#3366FF").opacity(0.5), radius: 8)
                     }
-                    .padding(.trailing, 24)
-                    .padding(.bottom, 24)
+                    .padding(.trailing, 24).padding(.bottom, 24)
                 }
             }
         }
@@ -107,18 +134,48 @@ struct ContactsView: View {
         .refreshable { await loadContacts() }
     }
 
+    private func sectionHeader(_ title: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 12)).foregroundColor(color)
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundColor(color)
+            Spacer()
+        }
+        .padding(.horizontal, 4).padding(.top, 4)
+    }
+
     private func loadContacts() async {
         isLoading = true
         errorMessage = ""
         defer { isLoading = false }
 
         do {
-            let accepted = try await APIClient.shared.getAcceptedConnections()
-            let pending  = try await APIClient.shared.getPendingConnections()
-            connections = pending + accepted
+            // Busca os 3 grupos em paralelo
+            async let accTask  = APIClient.shared.getAcceptedConnections()
+            async let pendTask = APIClient.shared.getPendingConnections()
+
+            let accResult  = (try? await accTask)  ?? []
+            let pendResult = (try? await pendTask) ?? []
+
+            // Separa enviados dos recebidos pelo email
+            let myLower = myEmail.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            let recv = pendResult.filter {
+                $0.to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) == myLower
+            }
+            let snt = pendResult.filter {
+                $0.to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) != myLower
+            }
+
+            // Tenta também o endpoint de recebidos dedicado e mescla sem duplicatas
+            let recvExtra = (try? await APIClient.shared.getReceivedConnectionRequests()) ?? []
+            let recvIds = Set(recv.map { $0.id })
+            let merged = recv + recvExtra.filter { !recvIds.contains($0.id) }
+
+            accepted = accResult
+            received = merged
+            sent     = snt
+
         } catch {
             errorMessage = "Erro ao carregar: \(error.localizedDescription)"
-            connections = []
         }
     }
 
@@ -143,94 +200,114 @@ struct ContactsView: View {
     }
 }
 
-// MARK: - ConnectionRow
+// MARK: - Row
+
+enum ConnectionRowType { case received, sent, accepted }
 
 private struct ConnectionRow: View {
     let connection: Connection
     let myEmail: String
+    let rowType: ConnectionRowType
     let onAccept: () -> Void
     let onDelete: () -> Void
 
     @State private var showDeleteConfirm = false
 
-    private var isPending: Bool { connection.status == "pending" }
-    // isReceived = true quando EU recebi o convite (sou o to_user) e ainda não aceitei
-    // isReceived = false quando EU enviei o convite e aguardo resposta (sou o from_user)
-    private var isReceived: Bool {
-        guard isPending else { return false }
-        return connection.to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-            == myEmail.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-    }
     private var displayName: String { connection.displayName(myEmail: myEmail) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                // Avatar
                 Text(String(displayName.prefix(1)).uppercased())
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 18, weight: .bold)).foregroundColor(.white)
                     .frame(width: 44, height: 44)
-                    .background(isPending ? Color(white: 0.3) : Color(hex: "#3366FF"))
-                    .clipShape(Circle())
+                    .background(avatarColor).clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayName)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
                     Text(connection.displayEmail(myEmail: myEmail))
-                        .font(.caption)
-                        .foregroundColor(Color(white: 0.5))
+                        .font(.caption).foregroundColor(Color(white: 0.5))
                 }
 
                 Spacer()
 
-                Text(isPending ? (isReceived ? "Convite Recebido" : "Aguardando") : "Aceito ✓")
-                    .font(.caption2.bold())
-                    .foregroundColor(isPending ? Color(hex: "#FF9900") : Color(hex: "#44FF88"))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(isPending ? Color(hex: "#FF9900").opacity(0.15) : Color(hex: "#44FF88").opacity(0.15))
-                    .cornerRadius(6)
+                // Badge de status
+                Text(statusLabel)
+                    .font(.caption2.bold()).foregroundColor(statusColor)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(statusColor.opacity(0.15)).cornerRadius(6)
             }
 
             HStack(spacing: 10) {
-                if isReceived {
+                // Botão ACEITAR — só aparece quando EU recebi o convite
+                if rowType == .received {
                     Button(action: onAccept) {
-                        Label("Aceitar", systemImage: "checkmark")
-                            .font(.caption.bold())
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color(hex: "#228B22"))
-                            .cornerRadius(8)
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark").font(.system(size: 12, weight: .bold))
+                            Text("Aceitar Convite").font(.system(size: 13, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        .background(Color(hex: "#228B22")).cornerRadius(10)
                     }
                 }
+
                 Spacer()
+
                 Button { showDeleteConfirm = true } label: {
-                    Text(isPending ? "Cancelar" : "Remover")
-                        .font(.caption.bold())
-                        .foregroundColor(Color(hex: "#FF4444"))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color(hex: "#FF4444").opacity(0.1))
-                        .cornerRadius(8)
+                    Text(rowType == .accepted ? "Remover" : "Cancelar")
+                        .font(.caption.bold()).foregroundColor(Color(hex: "#FF4444"))
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Color(hex: "#FF4444").opacity(0.1)).cornerRadius(8)
                 }
             }
         }
         .padding(16)
-        .background(Color(hex: "#141422"))
-        .cornerRadius(14)
-        .overlay(RoundedRectangle(cornerRadius: 14)
-            .stroke(isPending ? Color(hex: "#FF9900").opacity(0.2) : Color(hex: "#3366FF").opacity(0.2), lineWidth: 1))
-        .confirmationDialog(isPending ? "Cancelar convite?" : "Remover contato?",
-                           isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button(isPending ? "Cancelar Convite" : "Remover \(displayName)", role: .destructive, action: onDelete)
+        .background(Color(hex: "#141422")).cornerRadius(14)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(borderColor.opacity(0.25), lineWidth: 1))
+        .confirmationDialog(
+            rowType == .accepted ? "Remover contato?" : "Cancelar convite?",
+            isPresented: $showDeleteConfirm, titleVisibility: .visible
+        ) {
+            Button(rowType == .accepted ? "Remover \(displayName)" : "Cancelar Convite",
+                   role: .destructive, action: onDelete)
             Button("Voltar", role: .cancel) {}
+        }
+    }
+
+    private var statusLabel: String {
+        switch rowType {
+        case .received: return "Convite Recebido"
+        case .sent:     return "Aguardando"
+        case .accepted: return "Aceito ✓"
+        }
+    }
+    private var statusColor: Color {
+        switch rowType {
+        case .received: return Color(hex: "#FF9900")
+        case .sent:     return Color(hex: "#8888FF")
+        case .accepted: return Color(hex: "#44FF88")
+        }
+    }
+    private var avatarColor: Color {
+        switch rowType {
+        case .received: return Color(hex: "#FF9900")
+        case .sent:     return Color(white: 0.3)
+        case .accepted: return Color(hex: "#3366FF")
+        }
+    }
+    private var borderColor: Color {
+        switch rowType {
+        case .received: return Color(hex: "#FF9900")
+        case .sent:     return Color(hex: "#8888FF")
+        case .accepted: return Color(hex: "#3366FF")
         }
     }
 }
 
-// MARK: - AddContactSheet
+// MARK: - Add Contact Sheet
 
 private struct AddContactSheet: View {
     let myEmail: String
@@ -247,15 +324,11 @@ private struct AddContactSheet: View {
                 Color(hex: "#0A0A12").ignoresSafeArea()
                 VStack(spacing: 24) {
                     VStack(spacing: 8) {
-                        Image(systemName: "envelope.badge.fill")
-                            .font(.system(size: 44))
+                        Image(systemName: "envelope.badge.fill").font(.system(size: 44))
                             .foregroundColor(Color(hex: "#3366FF"))
-                        Text("Adicionar Contato")
-                            .font(.title2.bold())
-                            .foregroundColor(.white)
+                        Text("Adicionar Contato").font(.title2.bold()).foregroundColor(.white)
                         Text("A pessoa precisa ter o PPPIX instalado (iOS ou Android)")
-                            .font(.subheadline)
-                            .foregroundColor(Color(white: 0.5))
+                            .font(.subheadline).foregroundColor(Color(white: 0.5))
                             .multilineTextAlignment(.center)
                     }
                     PPPIXTextField(title: "Email do Contato", placeholder: "email@exemplo.com",
@@ -268,8 +341,7 @@ private struct AddContactSheet: View {
                 }
                 .padding(24)
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancelar") { dismiss() }.foregroundColor(Color(white: 0.6))
@@ -283,19 +355,15 @@ private struct AddContactSheet: View {
         if trimmed.isEmpty { errorMessage = "Digite o email do contato."; return }
         if !trimmed.contains("@") { errorMessage = "Email inválido."; return }
         if trimmed == myEmail.lowercased() { errorMessage = "Você não pode adicionar a si mesmo."; return }
-
         isSending = true
         do {
             try await APIClient.shared.sendConnectionRequest(email: trimmed)
             onSent("Convite enviado para \(trimmed)!")
             dismiss()
         } catch APIError.badRequest(let msg) {
-            let lower = msg.lowercased()
-            if lower.contains("already") || lower.contains("already_connected") || lower.contains("pending") {
-                errorMessage = "Você já tem uma conexão com este contato."
-            } else {
-                errorMessage = msg
-            }
+            let l = msg.lowercased()
+            errorMessage = (l.contains("already") || l.contains("pending"))
+                ? "Você já tem uma conexão com este contato." : msg
         } catch APIError.notFound {
             errorMessage = "Email não encontrado. Verifique se a pessoa tem o PPPIX."
         } catch {
@@ -310,6 +378,7 @@ extension Connection {
         to_user_email.lowercased() == myEmail.lowercased() ? from_user_email : to_user_email
     }
     func isRecipient(myEmail: String) -> Bool {
-        to_user_email.lowercased() == myEmail.lowercased()
+        to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            == myEmail.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
