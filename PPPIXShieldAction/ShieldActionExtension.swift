@@ -37,23 +37,28 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        // Notificação genérica
         let content = UNMutableNotificationContent()
         content.title = "Acesso protegido"
-        content.body = "Desbloqueie o uso fora de casa do seu aplicativo..."
+        content.body = "Toque aqui para digitar a senha"
         content.sound = UNNotificationSound.default
         content.userInfo = ["action": "unlock"]
         content.categoryIdentifier = "PPPIX_UNLOCK"
 
+        // FIX DELAY: .timeSensitive + relevanceScore = 1.0 + trigger nil
+        // Isso bypassa o Apple Intelligence classifier que causa 10s de delay
+        // trigger nil = entrega IMEDIATA segundo a documentação Apple
+        // 0.001s trigger paradoxalmente é MAIS lento que nil
+        content.interruptionLevel = .timeSensitive
+        content.relevanceScore = 1.0
+
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
 
-        // Trigger instantâneo — mínimo de iOS é 0.001s para máxima velocidade
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.001, repeats: false)
+        // trigger = nil → entrega instantânea (sem passar pelo Intelligence classifier)
         let request = UNNotificationRequest(
             identifier: "pppix_unlock",
             content: content,
-            trigger: trigger
+            trigger: nil   // nil = imediato, sem delay de AI
         )
         UNUserNotificationCenter.current().add(request)
     }
