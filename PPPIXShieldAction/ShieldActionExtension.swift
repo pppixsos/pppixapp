@@ -10,42 +10,42 @@ class ShieldActionExtension: ShieldActionDelegate {
     override func handle(action: ShieldAction,
                          for application: ApplicationToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
-        requestUnlock(appToken: application)
+        openPPPIX()
         completionHandler(.close)
     }
 
     override func handle(action: ShieldAction,
                          for webDomain: WebDomainToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
-        requestUnlock()
+        openPPPIX()
         completionHandler(.close)
     }
 
     override func handle(action: ShieldAction,
                          for category: ActivityCategoryToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
-        requestUnlock()
+        openPPPIX()
         completionHandler(.close)
     }
 
-    private func requestUnlock(appToken: ApplicationToken? = nil) {
+    private func openPPPIX() {
         // Sinaliza para o app principal via UserDefaults
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        // Notificação silenciosa para abrir o PPPIX
+        // Envia notificação para abrir o PPPIX — aparece assim que o shield fecha
         let content = UNMutableNotificationContent()
-        content.title = "🔐 App Protegido"
+        content.title = "🔐 PPPIX"
         content.body = "Toque para digitar sua senha"
-        content.sound = .none
+        content.sound = UNNotificationSound.default
         content.userInfo = ["action": "unlock"]
         content.categoryIdentifier = "PPPIX_UNLOCK"
 
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.3, repeats: false)
         let request = UNNotificationRequest(
             identifier: "pppix_unlock",
             content: content,
