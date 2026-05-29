@@ -6,7 +6,6 @@ import FamilyControls
 
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
-    private let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("pppix"))
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     override func configuration(shielding application: Application) -> ShieldConfiguration {
@@ -35,9 +34,19 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
         }
 
-        // Salva token via FamilyActivitySelection (mais confiável que encode direto)
+        // FIX UNLOCK INDIVIDUAL:
+        // Salva o ApplicationToken diretamente como Data — mais confiável que FamilyActivitySelection
+        // O ScreenTimeManager lê "pppix_single_app_token_data" para remover só esse token
+        if let token = application.token,
+           let tokenData = try? JSONEncoder().encode(token) {
+            sharedDefaults?.set(tokenData, forKey: "pppix_single_app_token_data")
+        }
+
+        // Também salva via FamilyActivitySelection como fallback
         var singleSelection = FamilyActivitySelection()
-        if let token = application.token { singleSelection.applicationTokens = [token] }
+        if let token = application.token {
+            singleSelection.applicationTokens = [token]
+        }
         if let data = try? JSONEncoder().encode(singleSelection) {
             sharedDefaults?.set(data, forKey: "pppix_single_unlock_selection")
         }
