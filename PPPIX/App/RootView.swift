@@ -43,7 +43,7 @@ struct RootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
-            // didEnterBackground — app saiu completamente da tela
+            // Rebloquear só se não estiver no período de desbloqueio
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.reblockOnBackground()
             #endif
@@ -237,11 +237,38 @@ struct ShieldPasswordView: View {
 
     private func unlock() {
         #if !targetEnvironment(simulator)
-        // Libera por 5 minutos — o shield é removido, o app protegido fica acessível
         ScreenTimeManager.shared.unlockTemporarily(seconds: 60)
         #endif
         isPresented = false
-        // O app que estava bloqueado já está embaixo, acessível após o shield ser removido
+
+        // Redirecionar para o app que estava bloqueado
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?
+                .string(forKey: "pppix_target_bundle_id") ?? ""
+
+            let schemeMap: [String: String] = [
+                "com.santander.app":             "santander://",
+                "com.santander.SantanderBrasil": "santander://",
+                "com.nubank.app":                "nubank://",
+                "com.itau.iphone":               "itauaplicativo://",
+                "com.bradesco.app":              "bradesco://",
+                "com.bb.bolsodigital":           "bbdigi://",
+                "com.caixa.app":                 "caixatem://",
+                "com.inter.Inter":               "interapp://",
+                "com.c6bank.ios":                "c6bank://",
+                "com.picpay.ios":                "picpay://",
+                "com.mercadopago.ios":           "mercadopago://",
+                "net.whatsapp.WhatsApp":         "whatsapp://",
+                "com.burbn.instagram":           "instagram://",
+                "com.facebook.Facebook":         "fb://",
+                "com.zhiliaoapp.musically":      "tiktok://",
+            ]
+
+            let scheme = schemeMap[bundleId] ?? "santander://"
+            if let url = URL(string: scheme) {
+                openURL(url)
+            }
+        }
     }
 }
 
