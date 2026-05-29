@@ -20,6 +20,10 @@ final class ScreenTimeManager: ObservableObject {
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
     static let selectionKey = "pppix_activity_selection"
 
+    // Reblock timer — DispatchWorkItem + UIBackgroundTask para 10s garantidos
+    private var reblockWorkItem: DispatchWorkItem?
+    private var bgTask: UIBackgroundTaskIdentifier = .invalid
+
     // MARK: - Autorização
 
     func requestAuthorization() async {
@@ -28,31 +32,25 @@ final class ScreenTimeManager: ObservableObject {
             isAuthorized = true
             loadSavedSelection()
             applyShield()
-        } catch {
-            isAuthorized = false
-        }
+        } catch { isAuthorized = false }
     }
 
     func checkAuthorization() {
         isAuthorized = AuthorizationCenter.shared.authorizationStatus == .approved
         if isAuthorized {
             loadSavedSelection()
-            if !isCurrentlyUnlocked() {
-                applyShield()
-            }
+            if !isCurrentlyUnlocked() { applyShield() }
         }
     }
 
     func syncCheckAndReblock() {
         guard isAuthorized, hasBlockedApps else { return }
-        if !isCurrentlyUnlocked() {
-            applyShield()
-        }
+        if !isCurrentlyUnlocked() { applyShield() }
     }
 
     func isCurrentlyUnlocked() -> Bool {
-        let unlockUntil = sharedDefaults?.double(forKey: "pppix_unlocked_until") ?? 0
-        return unlockUntil > Date().timeIntervalSince1970
+        let until = sharedDefaults?.double(forKey: "pppix_unlocked_until") ?? 0
+        return until > Date().timeIntervalSince1970
     }
 
     // MARK: - Shield
@@ -76,75 +74,77 @@ final class ScreenTimeManager: ObservableObject {
         store.shield.webDomains = nil
         sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
         sharedDefaults?.synchronize()
+        cancelReblock()
     }
 
     // MARK: - Unlock individual (chamado APÓS senha correta)
 
     func unlockSingleApp(reblockAfterSeconds: Int = 10) {
-        // Lê o token do app que o usuário tocou (salvo pelo ShieldActionExtension)
-        guard let tokenData = sharedDefaults?.data(forKey: "pppix_single_app_token_data"),
-              let singleToken = try? JSONDecoder().decode(ApplicationToken.self, from: tokenData) else {
-            // Fallback: remove todos os shields por 10s
-            unlockAll(reblockAfterSeconds: reblockAfterSeconds)
-            return
+        // Limpa o token de solicitação para permitir nova solicitação após usar o app
+        sharedDefaults?.removeObject(forKey: "pppix_password_request_time")
+
+        // Tenta ler o token do app específico salvo pelo ShieldActionExtension
+        if let tokenData = sharedDefaults?.data(forKey: "pppix_single_app_token_data"),
+           let singleToken = try? JSONDecoder().decode(ApplicationToken.self, from: tokenData) {
+            // Remove APENAS esse token
+            var remaining = currentSelection.applicationTokens
+            remaining.remove(singleToken)
+            store.shield.applications = remaining.isEmpty ? nil : remaining
+        } else {
+            // Fallback: remove todos
+            store.shield.applications = nil
         }
 
-        // Remove APENAS o token do app tocado
-        var remaining = currentSelection.applicationTokens
-        remaining.remove(singleToken)
-        store.shield.applications = remaining.isEmpty ? nil : remaining
-        // Categorias e webDomains permanecem bloqueados
-
-        // Salva timestamp do unlock
+        // Salva timestamp
         let until = Date().timeIntervalSince1970 + Double(reblockAfterSeconds)
         sharedDefaults?.set(until, forKey: "pppix_unlocked_until")
         sharedDefaults?.synchronize()
 
-        // Agenda reblock via DeviceActivity (mais confiável que DispatchQueue em background)
+        // Agenda reblock via DispatchQueue + UIBackgroundTask (confiável para 10-30s)
         scheduleReblock(afterSeconds: reblockAfterSeconds)
     }
 
-    private func unlockAll(reblockAfterSeconds: Int) {
-        store.shield.applications = nil
-        let until = Date().timeIntervalSince1970 + Double(reblockAfterSeconds)
-        sharedDefaults?.set(until, forKey: "pppix_unlocked_until")
-        sharedDefaults?.synchronize()
-        scheduleReblock(afterSeconds: reblockAfterSeconds)
-    }
-
-    // MARK: - Reblock via DeviceActivityCenter
-    // Mais confiável que DispatchQueue — sobrevive ao app ser morto
+    // MARK: - Reblock agendado
+    // DispatchQueue é confiável para 10s com UIBackgroundTask (garante ~30s de execução em background)
+    // DeviceActivityCenter mínimo é 15 minutos — não serve para reblock rápido
 
     private func scheduleReblock(afterSeconds seconds: Int) {
-        let center = DeviceActivityCenter()
+        cancelReblock()
 
-        // Para qualquer monitoramento anterior de reblock
-        center.stopMonitoring([DeviceActivityName("pppix.reblock")])
+        // Solicita tempo de execução em background
+        bgTask = UIApplication.shared.beginBackgroundTask(withName: "pppix.reblock") { [weak self] in
+            // Expiration handler — rebloqueia imediatamente antes do iOS matar
+            self?.performReblock()
+        }
 
-        let now = Date()
-        let reblockAt = now.addingTimeInterval(Double(seconds))
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.performReblock()
+        }
+        reblockWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(seconds), execute: workItem)
+    }
 
-        let cal = Calendar.current
-        let startComponents = cal.dateComponents([.hour, .minute, .second], from: now)
-        let endComponents = cal.dateComponents([.hour, .minute, .second], from: reblockAt)
+    private func cancelReblock() {
+        reblockWorkItem?.cancel()
+        reblockWorkItem = nil
+        if bgTask != .invalid {
+            UIApplication.shared.endBackgroundTask(bgTask)
+            bgTask = .invalid
+        }
+    }
 
-        let schedule = DeviceActivitySchedule(
-            intervalStart: startComponents,
-            intervalEnd: endComponents,
-            repeats: false
-        )
-
-        try? center.startMonitoring(
-            DeviceActivityName("pppix.reblock"),
-            during: schedule
-        )
+    private func performReblock() {
+        sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
+        sharedDefaults?.synchronize()
+        applyShield()
+        cancelReblock()
     }
 
     func reblockOnBackground() {
         if !isCurrentlyUnlocked() {
             applyShield()
         }
-        // Se ainda desbloqueado, o DeviceActivityMonitor vai rebloquear quando o tempo acabar
+        // Se ainda desbloqueado, o workItem já está agendado e vai rebloquear
     }
 
     // Compatibilidade
@@ -170,8 +170,7 @@ final class ScreenTimeManager: ObservableObject {
     }
 
     var hasBlockedApps: Bool {
-        !currentSelection.applicationTokens.isEmpty ||
-        !currentSelection.categoryTokens.isEmpty
+        !currentSelection.applicationTokens.isEmpty || !currentSelection.categoryTokens.isEmpty
     }
 }
 
