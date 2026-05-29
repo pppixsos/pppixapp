@@ -13,7 +13,6 @@ class PPPIXAuthState: ObservableObject {
     // Senha 2: padrão TRUE — se o usuário tem as senhas salvas, sempre pede
     static var hasAppPassword: Bool {
         get {
-            // Padrão: true (pede senha ao abrir)
             if UserDefaults.standard.object(forKey: "pppix_app_password_enabled") == nil {
                 return true
             }
@@ -27,7 +26,32 @@ struct RootView: View {
     @StateObject private var session = SessionManager.shared
     @StateObject private var auth = PPPIXAuthState.shared
     @State private var showAlertDetail: Int? = nil
-    @State private var showUnlockScreen = false
+
+    // FIX COLD START: inicializa JÁ com true se notificação abriu o app
+    // Sem onAppear, sem delay — SwiftUI lê isso ANTES de renderizar qualquer coisa
+    @State private var showUnlockScreen: Bool = {
+        if AppDelegate.pendingUnlockScreen {
+            AppDelegate.pendingUnlockScreen = false
+            return true
+        }
+        // Verificar UserDefaults como backup (app em background)
+        let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
+        if let defaults = defaults,
+           defaults.bool(forKey: "pppix_show_password_screen") {
+            let requestTime = defaults.double(forKey: "pppix_password_request_time")
+            let age = Date().timeIntervalSince1970 - requestTime
+            if requestTime > 0, age >= 0, age < 120 {
+                defaults.removeObject(forKey: "pppix_show_password_screen")
+                defaults.removeObject(forKey: "pppix_password_request_time")
+                defaults.synchronize()
+                return true
+            }
+            defaults.removeObject(forKey: "pppix_show_password_screen")
+            defaults.removeObject(forKey: "pppix_password_request_time")
+            defaults.synchronize()
+        }
+        return false
+    }()
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
@@ -43,14 +67,10 @@ struct RootView: View {
                 HomeView()
             }
         }
-        .onAppear {
-            // Resetar flag após primeira aparição
-            AppDelegate.pendingUnlockScreen = false
-        }
         .sheet(item: $showAlertDetail) { alertId in
             AlertDetailView(alertId: alertId)
         }
-        // Tela de unlock — contém a tela de seta internamente (sem flash)
+        // Tela de unlock — abre instantaneamente (state já inicializado acima)
         .fullScreenCover(isPresented: $showUnlockScreen) {
             UnlockPasswordView(
                 isPresented: $showUnlockScreen,
@@ -61,13 +81,11 @@ struct RootView: View {
             )
         }
         .onAppear {
-            // Inicializar Screen Time ao abrir o app
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.checkAuthorization()
             #endif
-            // Verificar flag do UserDefaults sem delay (backup para background)
-            checkPasswordFlag()
         }
+        // Recebe notificação quando app já está em foreground/background ativo
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.forceOpenUnlockScreen"))) { _ in
             openUnlockScreen()
         }
@@ -83,7 +101,6 @@ struct RootView: View {
             #endif
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            // Verificar flag imediatamente — SEM delay
             checkPasswordFlag()
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.syncCheckAndReblock()
@@ -194,11 +211,11 @@ struct PPPIXLoginView: View {
                     body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
                 await MainActor.run {
                     isLoading = false
-                    if response.action == "open_pppix" {
+                    // Aceita "open_pppix" (correto) e "open_ppix" (typo legado) como senha 2
+                    if response.action == "open_pppix" || response.action == "open_ppix" {
                         onAuthenticated()
                     } else {
-                        // DEBUG: mostrar qual ação retornou para diagnóstico
-                        errorMsg = "Senha incorreta (cod: \(response.action))"
+                        errorMsg = "Senha incorreta"
                         password = ""
                     }
                 }
@@ -217,7 +234,7 @@ struct UnlockPasswordView: View {
     @State private var password = ""
     @State private var errorMsg = ""
     @State private var isLoading = false
-    @State private var showArrow = false      // tela de seta — dentro desta view (sem flash)
+    @State private var showArrow = false
     @State private var unlockedAppName = ""
     @FocusState private var isFocused: Bool
 
@@ -282,9 +299,8 @@ struct UnlockPasswordView: View {
             }
         }
         .onAppear { isFocused = true }
-        // Tela de seta abre POR CIMA desta view — sem flash da HomeView
         .fullScreenCover(isPresented: $showArrow, onDismiss: {
-            isPresented = false  // fecha unlock view depois que seta é fechada
+            isPresented = false
         }) {
             ArrowUnlockView(appName: unlockedAppName, isPresented: $showArrow)
         }
@@ -312,18 +328,18 @@ struct UnlockPasswordView: View {
         let appName = appDisplayName(for: bundleId)
 
         switch response.action {
-        case "open_pppix":
+        case "open_pppix", "open_ppix":
             // Senha 2 → acessa o PPPIX
             isPresented = false
             onPPPIXAccess()
 
         case "open_bank":
-            // Senha 1 → desbloqueia app + tela de seta (sem redirecionar via URL)
+            // Senha 1 → desbloqueia app + tela de seta
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.unlockSingleApp(seconds: 60)
             #endif
             unlockedAppName = appName
-            showArrow = true   // abre tela de seta POR CIMA, sem fechar esta view primeiro
+            showArrow = true
 
         case "open_bank_alert":
             // Senha 3 → desbloqueia + alerta silencioso + tela de seta
@@ -372,7 +388,6 @@ struct ArrowUnlockView: View {
             Color(hex: "#0A0A12").ignoresSafeArea()
             VStack(spacing: 0) {
 
-                // Seta apontando para o ◄ botão nativo do iOS (canto sup. esq.)
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         Image(systemName: "arrow.up.left")
@@ -393,7 +408,6 @@ struct ArrowUnlockView: View {
 
                 Spacer()
 
-                // Conteúdo central
                 VStack(spacing: 20) {
                     ZStack {
                         Circle()
