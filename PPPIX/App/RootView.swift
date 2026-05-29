@@ -209,7 +209,9 @@ struct PPPIXLoginView: View {
                 )
                 await MainActor.run {
                     isLoading = false
-                    if response.action == "open_pppix" {
+                    // Aceita open_pppix (quando API implementar), open_bank ou open_bank_alert
+                    let validActions = ["open_pppix", "open_bank", "open_bank_alert"]
+                    if validActions.contains(response.action) {
                         onAuthenticated()
                     } else {
                         errorMsg = "Senha incorreta"
