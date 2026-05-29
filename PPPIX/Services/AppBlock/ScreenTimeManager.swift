@@ -78,6 +78,12 @@ final class ScreenTimeManager: ObservableObject {
         store.shield.webDomains = webs.isEmpty ? nil : webs
     }
 
+    func removeShield() {
+        store.shield.applications = nil
+        store.shield.applicationCategories = nil
+        store.shield.webDomains = nil
+    }
+
     // MARK: - Unlock apenas para o app específico
 
     func unlockSingleApp(seconds: Int = 60) {
@@ -158,6 +164,7 @@ final class ScreenTimeManager: ObservableObject {
     func checkAuthorization() {}
     func applySelection(_ selection: Any) {}
     func applyShield() {}
+    func removeShield() {}
     func unlockSingleApp(seconds: Int = 60) {}
     func unlockTemporarily(seconds: Int = 60) {}
     func unblockAll() {}
