@@ -23,6 +23,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
 
+        // Inicializar Screen Time ao abrir o app (fix para rebloquear automaticamente)
+        Task { @MainActor in
+            ScreenTimeManager.shared.checkAuthorization()
+        }
+
         setupNotificationCategories()
 
         if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
