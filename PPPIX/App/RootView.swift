@@ -9,9 +9,7 @@ struct RootView: View {
     @StateObject private var session = SessionManager.shared
     @State private var showAlertDetail: Int? = nil
     @State private var showPasswordScreen = false
-    @State private var passwordRequestHandled = false // evita múltiplas telas
 
-    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     var body: some View {
@@ -25,32 +23,26 @@ struct RootView: View {
         .sheet(item: $showAlertDetail) { alertId in
             AlertDetailView(alertId: alertId)
         }
-        .fullScreenCover(isPresented: $showPasswordScreen, onDismiss: {
-            // Quando a tela de senha é fechada, permitir nova requisição
-            passwordRequestHandled = false
-        }) {
+        .fullScreenCover(isPresented: $showPasswordScreen) {
             ShieldPasswordView(isPresented: $showPasswordScreen)
         }
         .onAppear {
-            // Verificar ao abrir o app (cold start ou retorno)
+            // Verificar ao abrir o app (cold start)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                checkForPasswordRequest()
+                checkPasswordFlag()
             }
+        }
+        // Notificação normal do sistema
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.openUnlockScreen"))) { _ in
+            openPasswordScreen()
+        }
+        // Notificação forçada (da notificação local — sempre abre)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.forceOpenUnlockScreen"))) { _ in
+            showPasswordScreen = true
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.openAlertDetail"))) { notif in
             if let alertId = notif.userInfo?["alert_id"] as? Int {
                 showAlertDetail = alertId
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.openUnlockScreen"))) { _ in
-            showPasswordIfNeeded()
-        }
-        .onReceive(timer) { _ in
-            checkForPasswordRequest()
-        }
-        .onOpenURL { url in
-            if url.scheme == "pppix" && url.host == "unlock" {
-                showPasswordIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
@@ -60,7 +52,7 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                checkForPasswordRequest()
+                checkPasswordFlag()
             }
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.syncCheckAndReblock()
@@ -68,17 +60,15 @@ struct RootView: View {
         }
     }
 
-    private func showPasswordIfNeeded() {
-        guard !showPasswordScreen, !passwordRequestHandled else { return }
-        passwordRequestHandled = true
+    private func openPasswordScreen() {
+        guard !showPasswordScreen else { return }
         showPasswordScreen = true
     }
 
-    private func checkForPasswordRequest() {
+    private func checkPasswordFlag() {
         guard let defaults = sharedDefaults else { return }
         guard defaults.bool(forKey: "pppix_show_password_screen") else { return }
         guard !showPasswordScreen else {
-            // Já está mostrando — limpar flag mas não abrir de novo
             defaults.removeObject(forKey: "pppix_show_password_screen")
             defaults.synchronize()
             return
@@ -86,8 +76,6 @@ struct RootView: View {
 
         let requestTime = defaults.double(forKey: "pppix_password_request_time")
         let age = Date().timeIntervalSince1970 - requestTime
-
-        // Flag válida por até 120 segundos
         guard requestTime > 0, age >= 0, age < 120 else {
             defaults.removeObject(forKey: "pppix_show_password_screen")
             defaults.removeObject(forKey: "pppix_password_request_time")
@@ -98,8 +86,7 @@ struct RootView: View {
         defaults.removeObject(forKey: "pppix_show_password_screen")
         defaults.removeObject(forKey: "pppix_password_request_time")
         defaults.synchronize()
-
-        showPasswordIfNeeded()
+        openPasswordScreen()
     }
 }
 
@@ -116,8 +103,6 @@ struct ShieldPasswordView: View {
             Color(hex: "#0A0A12").ignoresSafeArea()
 
             VStack(spacing: 0) {
-
-                // Header
                 VStack(spacing: 12) {
                     ZStack {
                         Circle()
@@ -146,7 +131,6 @@ struct ShieldPasswordView: View {
                 .padding(.top, 64)
                 .padding(.bottom, 40)
 
-                // Campo de senha
                 VStack(spacing: 8) {
                     SecureField("Senha", text: $password)
                         .font(.system(size: 17))
@@ -159,14 +143,11 @@ struct ShieldPasswordView: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
                                 .stroke(
-                                    errorMsg.isEmpty
-                                        ? Color(white: 0.12)
-                                        : Color(hex: "#FF4444"),
+                                    errorMsg.isEmpty ? Color(white: 0.12) : Color(hex: "#FF4444"),
                                     lineWidth: 1
                                 )
                         )
                         .focused($isFocused)
-                        // REMOVIDO .onSubmit para evitar envio acidental pelo teclado
 
                     if !errorMsg.isEmpty {
                         Text(errorMsg)
@@ -178,7 +159,6 @@ struct ShieldPasswordView: View {
 
                 Spacer().frame(height: 24)
 
-                // Botão confirmar — ÚNICO jeito de enviar
                 Button {
                     verify()
                 } label: {
@@ -261,10 +241,9 @@ struct ShieldPasswordView: View {
         ScreenTimeManager.shared.unlockSingleApp(seconds: 60)
         #endif
 
-        // Fechar tela de senha PRIMEIRO
         isPresented = false
 
-        // Redirecionar para o app que foi desbloqueado
+        // Abrir o app que estava bloqueado após um pequeno delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?
                 .string(forKey: "pppix_target_bundle_id") ?? ""
