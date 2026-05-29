@@ -9,7 +9,12 @@ class PPPIXAuthState: ObservableObject {
     static let shared = PPPIXAuthState()
     private init() {}
     @Published var isAuthenticated = false
-    @Published var showUnlockFlow = false // veio de notificação de app bloqueado
+
+    // Verifica se o usuário registrou senha 2 para proteger o PPPIX
+    static var hasAppPassword: Bool {
+        get { UserDefaults.standard.bool(forKey: "pppix_app_password_enabled") }
+        set { UserDefaults.standard.set(newValue, forKey: "pppix_app_password_enabled") }
+    }
 }
 
 struct RootView: View {
@@ -28,8 +33,8 @@ struct RootView: View {
         Group {
             if !session.isLoggedIn {
                 LoginView()
-            } else if !auth.isAuthenticated {
-                // PPPIX sempre pede senha 2 ao abrir
+            } else if !auth.isAuthenticated && PPPIXAuthState.hasAppPassword {
+                // Só pede senha 2 se o usuário registrou
                 PPPIXLoginView(onAuthenticated: {
                     auth.isAuthenticated = true
                 })
@@ -209,9 +214,7 @@ struct PPPIXLoginView: View {
                 )
                 await MainActor.run {
                     isLoading = false
-                    // Aceita open_pppix (quando API implementar), open_bank ou open_bank_alert
-                    let validActions = ["open_pppix", "open_bank", "open_bank_alert"]
-                    if validActions.contains(response.action) {
+                    if response.action == "open_pppix" {
                         onAuthenticated()
                     } else {
                         errorMsg = "Senha incorreta"
