@@ -1,5 +1,4 @@
 import Foundation
-import UserNotifications
 import SwiftUI
 
 #if !targetEnvironment(simulator)
@@ -13,17 +12,15 @@ final class ScreenTimeManager: ObservableObject {
     static let shared = ScreenTimeManager()
     private init() {}
 
-    // Store com nome — essencial para a ShieldConfigurationExtension reconhecer
     let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("pppix"))
     @Published var isAuthorized = false
     @Published var currentSelection = FamilyActivitySelection()
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
-    private let activityCenter = DeviceActivityCenter()
+    private var reblockWorkItem: DispatchWorkItem?
 
-    static let selectionKey        = "pppix_activity_selection"
-    static let unlockedUntilKey    = "pppix_unlocked_until"
-    static let activityName        = DeviceActivityName("pppix.reblock")
+    static let selectionKey     = "pppix_activity_selection"
+    static let unlockedUntilKey = "pppix_unlocked_until"
 
     // MARK: - Autorização
 
@@ -41,32 +38,32 @@ final class ScreenTimeManager: ObservableObject {
         isAuthorized = AuthorizationCenter.shared.authorizationStatus == .approved
         if isAuthorized {
             loadSavedSelection()
-            // Verificação síncrona ao abrir o app — aplica shield se necessário
             syncCheckAndReblock()
         }
     }
 
-    // Verificação síncrona ANTES de qualquer async — padrão do Habit Doom
+    // Verifica e reaplica shield se necessário — chamar sempre que app vier ao foreground
     func syncCheckAndReblock() {
-        guard isAuthorized else { return }
-        let unlockedUntil = sharedDefaults?.double(forKey: Self.unlockedUntilKey) ?? 0
-        let isUnlocked = unlockedUntil > Date().timeIntervalSince1970
+        guard isAuthorized, hasBlockedApps else { return }
+        let isUnlocked = isCurrentlyUnlocked()
         if !isUnlocked {
-            // Não está desbloqueado — aplica shield imediatamente
             applyShield()
         }
     }
 
-    // MARK: - Seleção de apps
+    func isCurrentlyUnlocked() -> Bool {
+        let unlockedUntil = sharedDefaults?.double(forKey: Self.unlockedUntilKey) ?? 0
+        return unlockedUntil > Date().timeIntervalSince1970
+    }
+
+    // MARK: - Shield
 
     func applySelection(_ selection: FamilyActivitySelection) {
         currentSelection = selection
         saveSelection(selection)
-        // Aplica shield imediatamente
         applyShield()
     }
 
-    // Aplica o shield — 3 propriedades obrigatórias (apps + categorias + webdomains)
     func applyShield() {
         let apps = currentSelection.applicationTokens
         let cats = currentSelection.categoryTokens
@@ -82,26 +79,40 @@ final class ScreenTimeManager: ObservableObject {
         store.shield.webDomains = nil
     }
 
-    // MARK: - Desbloqueio temporário após senha
+    // MARK: - Unlock seletivo (apenas o app específico, mantém os outros bloqueados)
 
-    private var reblockWorkItem: DispatchWorkItem?
-
-    func unlockTemporarily(seconds: Int = 60) {
-        // 1. Salva o timestamp de desbloqueio PRIMEIRO
+    func unlockSingleApp(seconds: Int = 60) {
+        // 1. Marcar como desbloqueado
         let until = Date().timeIntervalSince1970 + Double(seconds)
         sharedDefaults?.set(until, forKey: Self.unlockedUntilKey)
         sharedDefaults?.synchronize()
 
-        // 2. Cancela reblock anterior
+        // 2. Cancelar timer anterior
         reblockWorkItem?.cancel()
         reblockWorkItem = nil
 
-        // 3. Remove o shield completamente
-        store.shield.applications = nil
-        store.shield.applicationCategories = nil
-        store.shield.webDomains = nil
+        // 3. Remover APENAS o token do app específico — manter os outros bloqueados
+        if let tokenData = sharedDefaults?.data(forKey: "pppix_target_app_token"),
+           let token = try? JSONDecoder().decode(ApplicationToken.self, from: tokenData) {
+            // Remove só o app que o usuário está tentando abrir
+            var remainingApps = currentSelection.applicationTokens
+            remainingApps.remove(token)
+            store.shield.applications = remainingApps.isEmpty ? nil : remainingApps
+            // Categorias e webdomains permanecem bloqueados
+        } else {
+            // Fallback: remove tudo (comportamento anterior)
+            store.shield.applications = nil
+            store.shield.applicationCategories = nil
+            store.shield.webDomains = nil
+        }
 
-        // 4. Agenda reblock após X segundos
+        // 4. Reagendar reblock após X segundos
+        scheduleReblock(after: seconds)
+    }
+
+    // Reblock via BGAppRefreshTask + DispatchQueue (dupla proteção)
+    private func scheduleReblock(after seconds: Int) {
+        // DispatchQueue (funciona quando app está em foreground)
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.sharedDefaults?.removeObject(forKey: Self.unlockedUntilKey)
@@ -112,18 +123,15 @@ final class ScreenTimeManager: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(seconds), execute: workItem)
     }
 
-    // Chamado quando PPPIX vai para background
-    // SÓ rebloqueia se o usuário saiu sem abrir o app protegido (não após desbloquear)
+    // Chamado quando PPPIX vai ao background — rebloqueia se não há unlock ativo
     func reblockOnBackground() {
-        let unlockedUntil = sharedDefaults?.double(forKey: Self.unlockedUntilKey) ?? 0
-        let isUnlocked = unlockedUntil > Date().timeIntervalSince1970
-        // Se está desbloqueado, o usuário provavelmente foi para o app protegido — não rebloquear
-        // O timer de 60s vai rebloquear automaticamente
-        guard !isUnlocked else { return }
+        guard !isCurrentlyUnlocked() else { return }
         applyShield()
     }
 
-    func unblockAll() { unlockTemporarily(seconds: 60) }
+    // Compatibilidade
+    func unlockTemporarily(seconds: Int = 60) { unlockSingleApp(seconds: seconds) }
+    func unblockAll() { unlockSingleApp(seconds: 60) }
     func reblockAfterUnlock() { syncCheckAndReblock() }
 
     // MARK: - Persistência
@@ -160,11 +168,14 @@ final class ScreenTimeManager: ObservableObject {
     func applySelection(_ selection: Any) {}
     func applyShield() {}
     func removeShield() {}
+    func unlockSingleApp(seconds: Int = 60) {}
     func unlockTemporarily(seconds: Int = 60) {}
     func unblockAll() {}
     func reblockAfterUnlock() {}
+    func reblockOnBackground() {}
     func syncCheckAndReblock() {}
     func loadSavedSelection() {}
+    func isCurrentlyUnlocked() -> Bool { false }
     var hasBlockedApps: Bool { false }
 }
 
