@@ -42,7 +42,7 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     }
 
     private func pppixShield() -> ShieldConfiguration {
-        let lockIcon = UIImage(systemName: "lock.fill",
+        let lockIcon = UIImage(systemName: "house.fill",
                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .medium))
         return ShieldConfiguration(
             backgroundBlurStyle: .systemUltraThinMaterialDark,
