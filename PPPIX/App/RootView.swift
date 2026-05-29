@@ -388,14 +388,25 @@ struct UnlockPasswordView: View {
         isLoading = true; errorMsg = ""
         Task {
             do {
-                let coord = await LocationService.shared.getCurrentLocation()
+                // FIX VELOCIDADE: verifica senha SEM localização primeiro (rápido)
+                // Localização só é buscada se a ação for open_bank_alert (senha 3)
                 let r = try await APIClient.shared.verifyPassword(
-                    body: VerifyPasswordRequest(password: password,
-                                                latitude: coord?.latitude,
-                                                longitude: coord?.longitude))
-                await MainActor.run {
-                    isLoading = false
-                    handleResponse(r, coord: coord)
+                    body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
+
+                if r.action == "open_bank_alert" {
+                    // Senha 3: busca localização em paralelo com o unlock
+                    async let coord = LocationService.shared.getCurrentLocation()
+                    await MainActor.run {
+                        isLoading = false
+                        handleResponse(r, coord: nil) // unlock imediato
+                    }
+                    let location = await coord
+                    sendEmergencyAlert(coord: location)
+                } else {
+                    await MainActor.run {
+                        isLoading = false
+                        handleResponse(r, coord: nil)
+                    }
                 }
             } catch {
                 await MainActor.run { isLoading = false; errorMsg = "Senha incorreta"; password = "" }
@@ -424,12 +435,13 @@ struct UnlockPasswordView: View {
             showArrow = true
 
         case "open_bank_alert":
+            // FIX SENHA 3: mesmo unlock individual que senha 1
+            // O alerta é disparado separadamente em verify() após buscar localização
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 10)
             #endif
             unlockedApp = appName
             showArrow = true
-            sendEmergencyAlert(coord: coord)
 
         default:
             errorMsg = "Senha incorreta"
@@ -483,6 +495,7 @@ struct UnlockPasswordView: View {
 }
 
 // MARK: - Tela de seta
+// MARK: - Tela pós-desbloqueio (substitui ArrowUnlockView)
 struct ArrowUnlockView: View {
     let appName: String
     @Binding var isPresented: Bool
@@ -491,37 +504,86 @@ struct ArrowUnlockView: View {
         ZStack {
             Color(hex: "#0A0A12").ignoresSafeArea()
             VStack(spacing: 0) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Image(systemName: "arrow.up.left")
-                            .font(.system(size: 60, weight: .bold))
-                            .foregroundStyle(LinearGradient(colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        Text("Toque aqui para\nabrir o \(appName)")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(Color(white: 0.5)).lineSpacing(3)
-                    }
-                    .padding(.top, 56).padding(.leading, 28)
-                    Spacer()
-                }
                 Spacer()
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
+                    // Ícone de sucesso
                     ZStack {
-                        Circle().fill(Color(hex: "#44FF88").opacity(0.12)).frame(width: 88, height: 88)
-                        Image(systemName: "checkmark.shield.fill").font(.system(size: 44)).foregroundColor(Color(hex: "#44FF88"))
+                        Circle()
+                            .fill(Color(hex: "#44FF88").opacity(0.12))
+                            .frame(width: 100, height: 100)
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.system(size: 52))
+                            .foregroundColor(Color(hex: "#44FF88"))
                     }
+
                     VStack(spacing: 10) {
-                        Text("\(appName) Desbloqueado").font(.title2.bold()).foregroundColor(.white)
-                        Text("Agora você pode usá-lo normalmente.\nEle está minimizado no canto superior esquerdo.")
-                            .font(.subheadline).foregroundColor(Color(white: 0.45))
-                            .multilineTextAlignment(.center).lineSpacing(4).padding(.horizontal, 32)
+                        Text("\(appName) Desbloqueado")
+                            .font(.title2.bold())
+                            .foregroundColor(.white)
+                        Text("Você pode usar o \(appName) normalmente.\nEle ficará disponível por 10 segundos após você minimizar este app.")
+                            .font(.subheadline)
+                            .foregroundColor(Color(white: 0.45))
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(4)
+                            .padding(.horizontal, 32)
+                    }
+
+                    // Botão principal — minimiza o PPPIX e abre o app
+                    Button {
+                        openUnlockedApp()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "arrow.up.forward.app.fill")
+                                .font(.system(size: 18, weight: .bold))
+                            Text("Abrir \(appName)")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .background(LinearGradient(
+                            colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
+                            startPoint: .leading, endPoint: .trailing))
+                        .cornerRadius(14)
+                    }
+                    .padding(.horizontal, 28)
+
+                    Button { isPresented = false } label: {
+                        Text("Fechar")
+                            .font(.subheadline)
+                            .foregroundColor(Color(white: 0.35))
                     }
                 }
                 Spacer()
-                Button { isPresented = false } label: {
-                    Text("Fechar").font(.system(size: 16, weight: .medium)).foregroundColor(Color(white: 0.35))
-                        .frame(maxWidth: .infinity).frame(height: 48)
-                }
-                .padding(.horizontal, 28).padding(.bottom, 40)
+            }
+        }
+    }
+
+    private func openUnlockedApp() {
+        let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?.string(forKey: "pppix_target_bundle_id") ?? ""
+        let schemes: [String: String] = [
+            "com.santander.app":             "santander://",
+            "com.santander.SantanderBrasil": "santander://",
+            "com.nubank.app":                "nubank://",
+            "com.itau.iphone":               "itauaplicativo://",
+            "com.bradesco.app":              "bradesco://",
+            "com.bb.bolsodigital":           "bbdigi://",
+            "com.caixa.app":                 "caixatemapp://",
+            "com.inter.Inter":               "interapp://",
+            "com.c6bank.ios":                "c6bank://",
+            "com.picpay.ios":                "picpay://",
+            "com.mercadopago.ios":           "mercadopago://",
+            "net.whatsapp.WhatsApp":         "whatsapp://",
+            "com.burbn.instagram":           "instagram://",
+            "com.facebook.Facebook":         "fb://",
+            "com.zhiliaoapp.musically":      "tiktok://",
+        ]
+        // Minimiza o PPPIX primeiro
+        isPresented = false
+        // Abre o app após um frame para o dismiss completar
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if let scheme = schemes[bundleId], let url = URL(string: scheme) {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
             }
         }
     }
