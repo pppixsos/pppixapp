@@ -4,7 +4,7 @@ import SwiftUI
 import FamilyControls
 
 struct AppListView: View {
-    @StateObject private var manager = ScreenTimeManager.shared
+    @ObservedObject private var manager = ScreenTimeManager.shared
     @State private var showPicker = false
     @State private var tempSelection = FamilyActivitySelection()
     @State private var showConfirm = false
