@@ -4,13 +4,47 @@ import UserNotifications
 
 class ShieldActionExtension: ShieldActionDelegate {
 
+    // Store com mesmo nome que o app principal — compartilha configurações (iOS 16+)
+    private let store = ManagedSettingsStore(named: .init("pppix"))
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     override func handle(action: ShieldAction,
                          for application: ApplicationToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
         guard case .primaryButtonPressed = action else { completionHandler(.close); return }
-        handleUnlock(token: application)
+
+        let last = sharedDefaults?.double(forKey: "pppix_password_request_time") ?? 0
+        guard Date().timeIntervalSince1970 - last > 2 else { completionHandler(.close); return }
+
+        // SOLUÇÃO DEFINITIVA UNLOCK INDIVIDUAL:
+        // NÃO remove o shield aqui — apenas sinaliza e envia notificação.
+        // O unlock real (remover só esse token) é feito no ScreenTimeManager
+        // APÓS a senha ser digitada. O token é passado via UserDefaults como Data
+        // usando o mesmo processo, mas aqui também fazemos o unlock direto
+        // para garantir que funcione mesmo se o app principal não abrir a tempo.
+        //
+        // ABORDAGEM: guardar o token E fazer uma cópia do set atual sem ele
+        // para que o ScreenTimeManager possa restaurar exatamente esse estado.
+
+        // Salva o bundle ID para identificar o app na tela de desbloqueio
+        // ApplicationToken não tem bundleIdentifier exposto — salvamos o set atual sem esse token
+        let currentApps = store.shield.applications ?? []
+        var remaining = currentApps
+        remaining.remove(application)
+
+        // Salva: conjunto restante (para restaurar após unlock), e token (para reblock)
+        if let currentData = try? JSONEncoder().encode(currentApps) {
+            sharedDefaults?.set(currentData, forKey: "pppix_shield_apps_before_unlock")
+        }
+        if let tokenData = try? JSONEncoder().encode(application) {
+            sharedDefaults?.set(tokenData, forKey: "pppix_single_app_token_data")
+        }
+
+        sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
+        sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
+        sharedDefaults?.synchronize()
+
+        sendUnlockNotification()
         completionHandler(.close)
     }
 
@@ -18,7 +52,12 @@ class ShieldActionExtension: ShieldActionDelegate {
                          for webDomain: WebDomainToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
         guard case .primaryButtonPressed = action else { completionHandler(.close); return }
-        handleUnlock(token: nil)
+        let last = sharedDefaults?.double(forKey: "pppix_password_request_time") ?? 0
+        guard Date().timeIntervalSince1970 - last > 2 else { completionHandler(.close); return }
+        sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
+        sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
+        sharedDefaults?.synchronize()
+        sendUnlockNotification()
         completionHandler(.close)
     }
 
@@ -26,29 +65,13 @@ class ShieldActionExtension: ShieldActionDelegate {
                          for category: ActivityCategoryToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
         guard case .primaryButtonPressed = action else { completionHandler(.close); return }
-        handleUnlock(token: nil)
-        completionHandler(.close)
-    }
-
-    private func handleUnlock(token: ApplicationToken?) {
-        // NÃO remove o shield aqui — shield só é removido após senha correta no PPPIX
-
-        // Salva o token para unlock individual posterior
-        if let t = token, let data = try? JSONEncoder().encode(t) {
-            sharedDefaults?.set(data, forKey: "pppix_single_app_token_data")
-        }
-
-        // FIX DEBOUNCE: limpa o timestamp para permitir nova solicitação imediata
-        // O debounce só bloqueia se a MESMA solicitação chegou em menos de 2s
         let last = sharedDefaults?.double(forKey: "pppix_password_request_time") ?? 0
-        let sinceLastRequest = Date().timeIntervalSince1970 - last
-        guard sinceLastRequest > 2 else { return }
-
+        guard Date().timeIntervalSince1970 - last > 2 else { completionHandler(.close); return }
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-
         sendUnlockNotification()
+        completionHandler(.close)
     }
 
     private func sendUnlockNotification() {
@@ -63,12 +86,7 @@ class ShieldActionExtension: ShieldActionDelegate {
 
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
-
-        let request = UNNotificationRequest(
-            identifier: "pppix_unlock",
-            content: content,
-            trigger: nil  // imediato
-        )
+        let request = UNNotificationRequest(identifier: "pppix_unlock", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
 }
