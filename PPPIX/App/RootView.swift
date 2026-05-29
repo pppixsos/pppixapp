@@ -43,6 +43,10 @@ struct RootView: View {
                 HomeView()
             }
         }
+        .onAppear {
+            // Resetar flag após primeira aparição
+            AppDelegate.pendingUnlockScreen = false
+        }
         .sheet(item: $showAlertDetail) { alertId in
             AlertDetailView(alertId: alertId)
         }
@@ -61,9 +65,8 @@ struct RootView: View {
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.checkAuthorization()
             #endif
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                checkPasswordFlag()
-            }
+            // Verificar flag do UserDefaults sem delay (backup para background)
+            checkPasswordFlag()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pppix.forceOpenUnlockScreen"))) { _ in
             openUnlockScreen()
@@ -80,9 +83,8 @@ struct RootView: View {
             #endif
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                checkPasswordFlag()
-            }
+            // Verificar flag imediatamente — SEM delay
+            checkPasswordFlag()
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.syncCheckAndReblock()
             #endif
