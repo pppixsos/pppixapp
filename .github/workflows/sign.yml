@@ -57,7 +57,7 @@ jobs:
           echo "CERT_ID=$CERT_ID_SECRET" >> $GITHUB_ENV
           echo "Usando: $CERT_IDENTITY"
 
-            - name: Create and install provisioning profile
+      - name: Create and install provisioning profile
         env:
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
