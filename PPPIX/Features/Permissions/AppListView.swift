@@ -157,30 +157,6 @@ struct AppListView: View {
                     )
                 }
 
-                // Botão de teste
-                Button {
-                    NotificationCenter.default.post(
-                        name: Notification.Name("pppix.openUnlockScreen"),
-                        object: nil
-                    )
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "key.fill")
-                            .font(.system(size: 14))
-                        Text("Testar Tela de Senha")
-                            .font(.system(size: 14, weight: .medium))
-                    }
-                    .foregroundColor(Color(hex: "#FF9500"))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .background(Color(hex: "#FF9500").opacity(0.1))
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(hex: "#FF9500").opacity(0.25), lineWidth: 1)
-                    )
-                }
-
                 if manager.hasBlockedApps {
                     // Como funciona
                     howItWorksCard
