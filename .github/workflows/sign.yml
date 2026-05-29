@@ -45,7 +45,6 @@ jobs:
       - name: Setup keychain
         run: |
           if openssl x509 -inform DER -in /tmp/new_cert.cer -out /tmp/new_cert.pem 2>/dev/null; then echo "DER->PEM OK"; else cp /tmp/new_cert.cer /tmp/new_cert.pem && echo "ja era PEM"; fi
-          openssl x509 -in /tmp/new_cert.pem -noout -subject
           curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCA.cer -o /tmp/AppleWWDRCA.cer
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
