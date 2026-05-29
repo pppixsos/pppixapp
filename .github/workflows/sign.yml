@@ -48,8 +48,8 @@ jobs:
           curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCA.cer -o /tmp/AppleWWDRCA.cer
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
-          openssl x509 -inform DER -in /tmp/AppleWWDRCA.cer  -out /tmp/AppleWWDRCA.pem
-          openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem
+          openssl x509 -inform DER -in /tmp/AppleWWDRCA.cer  -out /tmp/AppleWWDRCA.pem  2>/dev/null || cp /tmp/AppleWWDRCA.cer  /tmp/AppleWWDRCA.pem
+          openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem 2>/dev/null || cp /tmp/AppleWWDRCAG3.cer /tmp/AppleWWDRCAG3.pem
           cat /tmp/AppleWWDRCAG3.pem /tmp/AppleWWDRCA.pem > /tmp/chain.pem
           openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/chain.pem -passout pass:pppix123 -legacy
           security create-keychain -p temppass123 build.keychain
