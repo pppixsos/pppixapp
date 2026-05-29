@@ -23,7 +23,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
 
-        // Registrar categoria de notificação com action de desbloqueio
         setupNotificationCategories()
 
         if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
@@ -34,31 +33,23 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
 
         UNUserNotificationCenter.current().delegate = self
-
-        // Solicitar permissão de notificações
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-            print("[PPPIX] Notificações: \(granted ? "autorizado" : "negado")")
-        }
-
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         BackgroundTaskManager.shared.registerTasks()
         return true
     }
 
     private func setupNotificationCategories() {
-        // Action que abre o PPPIX — aparece como botão na notificação
         let unlockAction = UNNotificationAction(
             identifier: "UNLOCK_ACTION",
             title: "🔑 Digitar Senha",
-            options: [.foreground] // .foreground abre o app ao tocar
+            options: [.foreground]
         )
-
         let unlockCategory = UNNotificationCategory(
             identifier: "PPPIX_UNLOCK",
             actions: [unlockAction],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-
         UNUserNotificationCenter.current().setNotificationCategories([unlockCategory])
     }
 
@@ -68,24 +59,31 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication,
-                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("[PPPIX] APNs registration failed: \(error.localizedDescription)")
-    }
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {}
 
-    // URL Scheme: pppix://unlock
     func application(_ app: UIApplication,
                      open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         if url.scheme == "pppix" && url.host == "unlock" {
-            NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            postUnlockNotification()
         }
         return true
+    }
+
+    private func postUnlockNotification() {
+        // Sem delay — abre instantaneamente
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: Notification.Name("pppix.forceOpenUnlockScreen"),
+                object: nil
+            )
+        }
     }
 }
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
 
-    // Chamado quando notificação chega com app em FOREGROUND
+    // Notificação chega com app em FOREGROUND
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -94,9 +92,11 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         let userInfo = notification.request.content.userInfo
 
         if let action = userInfo["action"] as? String, action == "unlock" {
-            // App em foreground — abrir tela de senha diretamente
             DispatchQueue.main.async {
-                NotificationCenter.default.post(name: Notification.Name("pppix.forceOpenUnlockScreen"), object: nil)
+                NotificationCenter.default.post(
+                    name: Notification.Name("pppix.forceOpenUnlockScreen"),
+                    object: nil
+                )
             }
             completionHandler([.banner, .sound])
             return
@@ -106,7 +106,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound, .badge])
     }
 
-    // Chamado quando usuário TOCA na notificação
+    // Usuário TOCA na notificação
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -114,20 +114,42 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     ) {
         let userInfo = response.notification.request.content.userInfo
 
-        // Toque no banner ou no botão "Digitar Senha"
         if let action = userInfo["action"] as? String, action == "unlock" {
-            // forceOpenUnlockScreen — bypassa todos os guards, sempre abre a tela de senha
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                NotificationCenter.default.post(name: Notification.Name("pppix.forceOpenUnlockScreen"), object: nil)
+            // Setar flag no UserDefaults como backup (para cold start)
+            let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
+            defaults?.set(true, forKey: "pppix_show_password_screen")
+            defaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
+            defaults?.synchronize()
+            // Postar notificação imediatamente — sem delay
+            NotificationCenter.default.post(
+                name: Notification.Name("pppix.forceOpenUnlockScreen"),
+                object: nil
+            )
+            // Backup com delay curto para cold start
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(
+                    name: Notification.Name("pppix.forceOpenUnlockScreen"),
+                    object: nil
+                )
             }
             completionHandler()
             return
         }
 
-        // Botão de ação "UNLOCK_ACTION"
         if response.actionIdentifier == "UNLOCK_ACTION" {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                NotificationCenter.default.post(name: Notification.Name("pppix.forceOpenUnlockScreen"), object: nil)
+            let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
+            defaults?.set(true, forKey: "pppix_show_password_screen")
+            defaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
+            defaults?.synchronize()
+            NotificationCenter.default.post(
+                name: Notification.Name("pppix.forceOpenUnlockScreen"),
+                object: nil
+            )
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(
+                    name: Notification.Name("pppix.forceOpenUnlockScreen"),
+                    object: nil
+                )
             }
             completionHandler()
             return
