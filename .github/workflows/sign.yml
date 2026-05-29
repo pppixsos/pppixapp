@@ -45,12 +45,18 @@ jobs:
       - name: Setup keychain
         run: |
           if openssl x509 -inform DER -in /tmp/new_cert.cer -out /tmp/new_cert.pem 2>/dev/null; then echo "DER->PEM OK"; else cp /tmp/new_cert.cer /tmp/new_cert.pem && echo "ja era PEM"; fi
-          curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
-          curl -s https://www.apple.com/certificateauthority/AppleWWDRCA.cer -o /tmp/AppleWWDRCA.cer
-          curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
-          openssl x509 -inform DER -in /tmp/AppleWWDRCA.cer  -out /tmp/AppleWWDRCA.pem  2>/dev/null || cp /tmp/AppleWWDRCA.cer  /tmp/AppleWWDRCA.pem
-          openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem 2>/dev/null || cp /tmp/AppleWWDRCAG3.cer /tmp/AppleWWDRCAG3.pem
-          cat /tmp/AppleWWDRCAG3.pem /tmp/AppleWWDRCA.pem > /tmp/chain.pem
+          # Baixar Root + todos os intermediarios WWDR (G2-G6) — cert novo usa G6
+          curl -fsSL https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG2.cer -o /tmp/WWDRG2.cer
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/WWDRG3.cer
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer -o /tmp/WWDRG4.cer
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG5.cer -o /tmp/WWDRG5.cer
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer -o /tmp/WWDRG6.cer
+          # Converter cada um (DER ou PEM)
+          for f in WWDRG2 WWDRG3 WWDRG4 WWDRG5 WWDRG6; do
+            openssl x509 -inform DER -in /tmp/${f}.cer -out /tmp/${f}.pem 2>/dev/null || cp /tmp/${f}.cer /tmp/${f}.pem
+          done
+          cat /tmp/WWDRG2.pem /tmp/WWDRG3.pem /tmp/WWDRG4.pem /tmp/WWDRG5.pem /tmp/WWDRG6.pem > /tmp/chain.pem
           openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/chain.pem -passout pass:pppix123
           security create-keychain -p temppass123 build.keychain
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
@@ -58,8 +64,9 @@ jobs:
           security unlock-keychain -p temppass123 build.keychain
           security set-keychain-settings -t 7200 -u build.keychain
           sudo security add-trusted-cert -d -r trustRoot   -k /Library/Keychains/System.keychain /tmp/AppleRoot.cer
-          sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/AppleWWDRCA.cer
-          sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/AppleWWDRCAG3.cer
+          for f in WWDRG2 WWDRG3 WWDRG4 WWDRG5 WWDRG6; do
+            sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/${f}.cer
+          done
           security import /tmp/pppix.p12 -k build.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
           echo '=== Identidades ==='
