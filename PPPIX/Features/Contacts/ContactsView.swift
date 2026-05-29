@@ -154,7 +154,13 @@ private struct ConnectionRow: View {
     @State private var showDeleteConfirm = false
 
     private var isPending: Bool { connection.status == "pending" }
-    private var isReceived: Bool { connection.isRecipient(myEmail: myEmail) && isPending }
+    // isReceived = true quando EU recebi o convite (sou o to_user) e ainda não aceitei
+    // isReceived = false quando EU enviei o convite e aguardo resposta (sou o from_user)
+    private var isReceived: Bool {
+        guard isPending else { return false }
+        return connection.to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            == myEmail.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     private var displayName: String { connection.displayName(myEmail: myEmail) }
 
     var body: some View {
