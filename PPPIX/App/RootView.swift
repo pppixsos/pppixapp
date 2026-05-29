@@ -4,28 +4,30 @@ extension Int: @retroactive Identifiable {
     public var id: Int { self }
 }
 
-// MARK: - Estado de autenticação do PPPIX (em memória)
+// MARK: - Auth State
 class PPPIXAuthState: ObservableObject {
     static let shared = PPPIXAuthState()
     private init() {}
     @Published var isAuthenticated = false
 
-    // Verifica se o usuário registrou senha 2 para proteger o PPPIX
+    // Senha 2: padrão TRUE — se o usuário tem as senhas salvas, sempre pede
     static var hasAppPassword: Bool {
-        get { UserDefaults.standard.bool(forKey: "pppix_app_password_enabled") }
+        get {
+            // Padrão: true (pede senha ao abrir)
+            if UserDefaults.standard.object(forKey: "pppix_app_password_enabled") == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: "pppix_app_password_enabled")
+        }
         set { UserDefaults.standard.set(newValue, forKey: "pppix_app_password_enabled") }
     }
 }
 
 struct RootView: View {
-
     @StateObject private var session = SessionManager.shared
     @StateObject private var auth = PPPIXAuthState.shared
     @State private var showAlertDetail: Int? = nil
-    @State private var showUnlockScreen = false    // tela de senha do app bloqueado
-    @State private var showPPPIXLogin = false      // senha 2 para entrar no PPPIX
-    @State private var showArrowScreen = false     // após desbloquear
-    @State private var unlockedAppName = ""
+    @State private var showUnlockScreen = false
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
@@ -34,7 +36,6 @@ struct RootView: View {
             if !session.isLoggedIn {
                 LoginView()
             } else if !auth.isAuthenticated && PPPIXAuthState.hasAppPassword {
-                // Só pede senha 2 se o usuário registrou
                 PPPIXLoginView(onAuthenticated: {
                     auth.isAuthenticated = true
                 })
@@ -45,30 +46,21 @@ struct RootView: View {
         .sheet(item: $showAlertDetail) { alertId in
             AlertDetailView(alertId: alertId)
         }
-        // Tela de senha para desbloquear app protegido
+        // Tela de unlock — contém a tela de seta internamente (sem flash)
         .fullScreenCover(isPresented: $showUnlockScreen) {
             UnlockPasswordView(
                 isPresented: $showUnlockScreen,
-                onUnlocked: { appName in
-                    unlockedAppName = appName
-                    showUnlockScreen = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        showArrowScreen = true
-                    }
-                },
                 onPPPIXAccess: {
-                    // Senha 2 na tela de unlock → acessa PPPIX
                     showUnlockScreen = false
                     auth.isAuthenticated = true
                 }
             )
         }
-        // Tela de seta após desbloqueio
-        .fullScreenCover(isPresented: $showArrowScreen) {
-            ArrowUnlockView(appName: unlockedAppName, isPresented: $showArrowScreen)
-        }
         .onAppear {
-            // Verificar se veio de notificação (cold start)
+            // Inicializar Screen Time ao abrir o app
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.checkAuthorization()
+            #endif
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 checkPasswordFlag()
             }
@@ -82,7 +74,6 @@ struct RootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
-            // Rebloquear PPPIX ao fechar (requer senha 2 na próxima abertura)
             auth.isAuthenticated = false
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.reblockOnBackground()
@@ -99,7 +90,7 @@ struct RootView: View {
     }
 
     private func openUnlockScreen() {
-        guard !showUnlockScreen, !showArrowScreen else { return }
+        guard !showUnlockScreen else { return }
         showUnlockScreen = true
     }
 
@@ -111,7 +102,6 @@ struct RootView: View {
             defaults.synchronize()
             return
         }
-
         let requestTime = defaults.double(forKey: "pppix_password_request_time")
         let age = Date().timeIntervalSince1970 - requestTime
         guard requestTime > 0, age >= 0, age < 120 else {
@@ -120,7 +110,6 @@ struct RootView: View {
             defaults.synchronize()
             return
         }
-
         defaults.removeObject(forKey: "pppix_show_password_screen")
         defaults.removeObject(forKey: "pppix_password_request_time")
         defaults.synchronize()
@@ -128,7 +117,7 @@ struct RootView: View {
     }
 }
 
-// MARK: - Senha 2 para acessar o PPPIX
+// MARK: - Login do PPPIX (senha 2)
 struct PPPIXLoginView: View {
     let onAuthenticated: () -> Void
     @State private var password = ""
@@ -146,38 +135,29 @@ struct PPPIXLoginView: View {
                         Circle()
                             .fill(LinearGradient(
                                 colors: [Color(hex: "#3366FF").opacity(0.2), Color(hex: "#6633FF").opacity(0.1)],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            ))
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 88, height: 88)
                         Image(systemName: "lock.fill")
                             .font(.system(size: 36))
                             .foregroundStyle(LinearGradient(
                                 colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                                startPoint: .top, endPoint: .bottom
-                            ))
+                                startPoint: .top, endPoint: .bottom))
                     }
-                    Text("PPPIX")
-                        .font(.title.bold())
-                        .foregroundColor(.white)
+                    Text("PPPIX").font(.title.bold()).foregroundColor(.white)
                     Text("Digite sua senha para continuar")
-                        .font(.subheadline)
-                        .foregroundColor(Color(white: 0.45))
+                        .font(.subheadline).foregroundColor(Color(white: 0.45))
                 }
                 .padding(.bottom, 40)
 
                 VStack(spacing: 8) {
                     SecureField("Senha", text: $password)
-                        .font(.system(size: 17))
-                        .foregroundColor(.white)
+                        .font(.system(size: 17)).foregroundColor(.white)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                        .frame(height: 54)
-                        .background(Color(white: 0.07))
-                        .cornerRadius(14)
+                        .padding(.horizontal, 20).frame(height: 54)
+                        .background(Color(white: 0.07)).cornerRadius(14)
                         .overlay(RoundedRectangle(cornerRadius: 14)
                             .stroke(errorMsg.isEmpty ? Color(white: 0.12) : Color(hex: "#FF4444"), lineWidth: 1))
                         .focused($isFocused)
-
                     if !errorMsg.isEmpty {
                         Text(errorMsg).font(.caption).foregroundColor(Color(hex: "#FF4444"))
                     }
@@ -197,7 +177,6 @@ struct PPPIXLoginView: View {
                 }
                 .disabled(isLoading || password.isEmpty)
                 .padding(.horizontal, 28)
-
                 Spacer()
             }
         }
@@ -210,15 +189,14 @@ struct PPPIXLoginView: View {
         Task {
             do {
                 let response = try await APIClient.shared.verifyPassword(
-                    body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil)
-                )
+                    body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
                 await MainActor.run {
                     isLoading = false
-                    if response.action == "open_pppix" {
+                    let validActions = ["open_pppix", "open_bank", "open_bank_alert"]
+                    if validActions.contains(response.action) {
                         onAuthenticated()
                     } else {
-                        errorMsg = "Senha incorreta"
-                        password = ""
+                        errorMsg = "Senha incorreta"; password = ""
                     }
                 }
             } catch {
@@ -228,15 +206,16 @@ struct PPPIXLoginView: View {
     }
 }
 
-// MARK: - Tela de senha para desbloquear app protegido
+// MARK: - Tela de desbloqueio de app protegido
 struct UnlockPasswordView: View {
     @Binding var isPresented: Bool
-    let onUnlocked: (String) -> Void
     let onPPPIXAccess: () -> Void
 
     @State private var password = ""
     @State private var errorMsg = ""
     @State private var isLoading = false
+    @State private var showArrow = false      // tela de seta — dentro desta view (sem flash)
+    @State private var unlockedAppName = ""
     @FocusState private var isFocused: Bool
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
@@ -250,18 +229,15 @@ struct UnlockPasswordView: View {
                         Circle()
                             .fill(LinearGradient(
                                 colors: [Color(hex: "#3366FF").opacity(0.2), Color(hex: "#6633FF").opacity(0.1)],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            ))
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 88, height: 88)
                         Image(systemName: "lock.shield.fill")
                             .font(.system(size: 40))
                             .foregroundStyle(LinearGradient(
                                 colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                                startPoint: .top, endPoint: .bottom
-                            ))
+                                startPoint: .top, endPoint: .bottom))
                     }
-                    Text("App Protegido")
-                        .font(.title2.bold()).foregroundColor(.white)
+                    Text("App Protegido").font(.title2.bold()).foregroundColor(.white)
                     Text("Digite sua senha para continuar")
                         .font(.subheadline).foregroundColor(Color(white: 0.45))
                 }
@@ -276,7 +252,6 @@ struct UnlockPasswordView: View {
                         .overlay(RoundedRectangle(cornerRadius: 14)
                             .stroke(errorMsg.isEmpty ? Color(white: 0.12) : Color(hex: "#FF4444"), lineWidth: 1))
                         .focused($isFocused)
-
                     if !errorMsg.isEmpty {
                         Text(errorMsg).font(.caption).foregroundColor(Color(hex: "#FF4444"))
                     }
@@ -298,14 +273,18 @@ struct UnlockPasswordView: View {
                 .padding(.horizontal, 28)
 
                 Spacer().frame(height: 12)
-
                 Button("Cancelar") { isPresented = false }
                     .font(.subheadline).foregroundColor(Color(white: 0.35)).padding(.bottom, 40)
-
                 Spacer()
             }
         }
         .onAppear { isFocused = true }
+        // Tela de seta abre POR CIMA desta view — sem flash da HomeView
+        .fullScreenCover(isPresented: $showArrow, onDismiss: {
+            isPresented = false  // fecha unlock view depois que seta é fechada
+        }) {
+            ArrowUnlockView(appName: unlockedAppName, isPresented: $showArrow)
+        }
     }
 
     private func verify() {
@@ -314,8 +293,7 @@ struct UnlockPasswordView: View {
         Task {
             do {
                 let response = try await APIClient.shared.verifyPassword(
-                    body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil)
-                )
+                    body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
                 await MainActor.run {
                     isLoading = false
                     handleResponse(response)
@@ -337,26 +315,26 @@ struct UnlockPasswordView: View {
             onPPPIXAccess()
 
         case "open_bank":
-            // Senha normal → desbloqueia app + tela de seta
-            unlock(bundleId: bundleId)
-            onUnlocked(appName)
+            // Senha 1 → desbloqueia app + tela de seta (sem redirecionar via URL)
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.unlockSingleApp(seconds: 60)
+            #endif
+            unlockedAppName = appName
+            showArrow = true   // abre tela de seta POR CIMA, sem fechar esta view primeiro
 
         case "open_bank_alert":
-            // Senha emergência → desbloqueia + alerta silencioso + tela de seta
-            unlock(bundleId: bundleId)
+            // Senha 3 → desbloqueia + alerta silencioso + tela de seta
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.unlockSingleApp(seconds: 60)
+            #endif
             NotificationCenter.default.post(name: .sendEmergencyAlert, object: nil)
-            onUnlocked(appName)
+            unlockedAppName = appName
+            showArrow = true
 
         default:
             errorMsg = "Senha incorreta"
             password = ""
         }
-    }
-
-    private func unlock(bundleId: String) {
-        #if !targetEnvironment(simulator)
-        ScreenTimeManager.shared.unlockSingleApp(seconds: 60)
-        #endif
     }
 
     private func appDisplayName(for bundleId: String) -> String {
@@ -381,7 +359,7 @@ struct UnlockPasswordView: View {
     }
 }
 
-// MARK: - Tela de seta após desbloqueio
+// MARK: - Tela de seta (app minimizado no canto superior esquerdo)
 struct ArrowUnlockView: View {
     let appName: String
     @Binding var isPresented: Bool
@@ -389,41 +367,46 @@ struct ArrowUnlockView: View {
     var body: some View {
         ZStack {
             Color(hex: "#0A0A12").ignoresSafeArea()
-
             VStack(spacing: 0) {
-                // Seta para o canto superior esquerdo
-                HStack {
-                    Image(systemName: "arrow.up.left")
-                        .font(.system(size: 72, weight: .bold))
-                        .foregroundStyle(LinearGradient(
-                            colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        ))
-                        .padding(.top, 60)
-                        .padding(.leading, 32)
+
+                // Seta apontando para o ◄ botão nativo do iOS (canto sup. esq.)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Image(systemName: "arrow.up.left")
+                            .font(.system(size: 60, weight: .bold))
+                            .foregroundStyle(LinearGradient(
+                                colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
+
+                        Text("Toque aqui para\nabrir o \(appName)")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color(white: 0.5))
+                            .lineSpacing(3)
+                    }
+                    .padding(.top, 56)
+                    .padding(.leading, 28)
                     Spacer()
                 }
 
                 Spacer()
 
+                // Conteúdo central
                 VStack(spacing: 20) {
-                    // Ícone de sucesso
                     ZStack {
                         Circle()
                             .fill(Color(hex: "#44FF88").opacity(0.12))
-                            .frame(width: 80, height: 80)
-                        Image(systemName: "checkmark.circle.fill")
+                            .frame(width: 88, height: 88)
+                        Image(systemName: "checkmark.shield.fill")
                             .font(.system(size: 44))
                             .foregroundColor(Color(hex: "#44FF88"))
                     }
 
-                    VStack(spacing: 8) {
-                        Text("\(appName) desbloqueado")
+                    VStack(spacing: 10) {
+                        Text("\(appName) Desbloqueado")
                             .font(.title2.bold())
                             .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
 
-                        Text("Agora você pode usá-lo normalmente.\nToque no ícone no canto superior esquerdo.")
+                        Text("Agora você pode usá-lo normalmente.\nEle está minimizado no canto superior esquerdo.")
                             .font(.subheadline)
                             .foregroundColor(Color(white: 0.45))
                             .multilineTextAlignment(.center)
@@ -439,12 +422,10 @@ struct ArrowUnlockView: View {
                 } label: {
                     Text("Fechar")
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(Color(white: 0.4))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
+                        .foregroundColor(Color(white: 0.35))
+                        .frame(maxWidth: .infinity).frame(height: 48)
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 40)
+                .padding(.horizontal, 28).padding(.bottom, 40)
             }
         }
     }
