@@ -2,6 +2,7 @@ import ManagedSettingsUI
 import ManagedSettings
 import UIKit
 import UserNotifications
+import FamilyControls
 
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
@@ -9,26 +10,13 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     override func configuration(shielding application: Application) -> ShieldConfiguration {
-        // Salva bundle ID E token do app para unlock seletivo
-        if let bundleId = application.bundleIdentifier {
-            sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
-        }
-        if let data = try? JSONEncoder().encode(application.token) {
-            sharedDefaults?.set(data, forKey: "pppix_target_app_token")
-        }
-        sharedDefaults?.synchronize()
+        saveAppInfo(application)
         return pppixShield()
     }
 
     override func configuration(shielding application: Application,
                                 in category: ActivityCategory) -> ShieldConfiguration {
-        if let bundleId = application.bundleIdentifier {
-            sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
-        }
-        if let data = try? JSONEncoder().encode(application.token) {
-            sharedDefaults?.set(data, forKey: "pppix_target_app_token")
-        }
-        sharedDefaults?.synchronize()
+        saveAppInfo(application)
         return pppixShield()
     }
 
@@ -41,13 +29,29 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
         return pppixShield()
     }
 
+    private func saveAppInfo(_ application: Application) {
+        // Salva bundle ID
+        if let bundleId = application.bundleIdentifier {
+            sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
+        }
+
+        // Salva token via FamilyActivitySelection (mais confiável que encode direto)
+        var singleSelection = FamilyActivitySelection()
+        singleSelection.applicationTokens = [application.token]
+        if let data = try? JSONEncoder().encode(singleSelection) {
+            sharedDefaults?.set(data, forKey: "pppix_single_unlock_selection")
+        }
+
+        sharedDefaults?.synchronize()
+    }
+
     private func pppixShield() -> ShieldConfiguration {
-        let lockIcon = UIImage(systemName: "house.fill",
-                               withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .medium))
+        let houseIcon = UIImage(systemName: "house.fill",
+                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .medium))
         return ShieldConfiguration(
             backgroundBlurStyle: .systemUltraThinMaterialDark,
             backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 0.97),
-            icon: lockIcon,
+            icon: houseIcon,
             title: ShieldConfiguration.Label(
                 text: "🔒 Você está fora de casa!",
                 color: .white
