@@ -63,9 +63,15 @@ jobs:
           security default-keychain -s build.keychain
           security unlock-keychain -p temppass123 build.keychain
           security set-keychain-settings -t 7200 -u build.keychain
+          # Importar cadeia completa no build.keychain (necessario para codesign encontrar a chain)
+          for f in WWDRG2 WWDRG3 WWDRG4 WWDRG5 WWDRG6; do
+            security import /tmp/${f}.cer -k build.keychain -T /usr/bin/codesign 2>/dev/null || true
+          done
+          security import /tmp/AppleRoot.cer -k build.keychain -T /usr/bin/codesign 2>/dev/null || true
+          # Tambem no System keychain como trusted
           sudo security add-trusted-cert -d -r trustRoot   -k /Library/Keychains/System.keychain /tmp/AppleRoot.cer
           for f in WWDRG2 WWDRG3 WWDRG4 WWDRG5 WWDRG6; do
-            sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/${f}.cer
+            sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/${f}.cer 2>/dev/null || true
           done
           security import /tmp/pppix.p12 -k build.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
