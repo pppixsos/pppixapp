@@ -76,7 +76,7 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
                 color: UIColor(white: 0.55, alpha: 1.0)
             ),
             primaryButtonLabel: ShieldConfiguration.Label(
-                text: "OK",
+                text: "Desbloquear",
                 color: .white
             ),
             primaryButtonBackgroundColor: UIColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0)
