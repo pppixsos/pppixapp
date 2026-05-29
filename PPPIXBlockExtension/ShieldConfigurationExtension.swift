@@ -9,11 +9,14 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     override func configuration(shielding application: Application) -> ShieldConfiguration {
-        // Salva bundle ID para o app principal redirecionar após senha
+        // Salva bundle ID E token do app para unlock seletivo
         if let bundleId = application.bundleIdentifier {
             sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
-            sharedDefaults?.synchronize()
         }
+        if let data = try? JSONEncoder().encode(application.token) {
+            sharedDefaults?.set(data, forKey: "pppix_target_app_token")
+        }
+        sharedDefaults?.synchronize()
         return pppixShield()
     }
 
@@ -21,8 +24,11 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
                                 in category: ActivityCategory) -> ShieldConfiguration {
         if let bundleId = application.bundleIdentifier {
             sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
-            sharedDefaults?.synchronize()
         }
+        if let data = try? JSONEncoder().encode(application.token) {
+            sharedDefaults?.set(data, forKey: "pppix_target_app_token")
+        }
+        sharedDefaults?.synchronize()
         return pppixShield()
     }
 
@@ -36,10 +42,8 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     }
 
     private func pppixShield() -> ShieldConfiguration {
-        // Ícone de cadeado via SF Symbols — substitui a ampulheta padrão do iOS
         let lockIcon = UIImage(systemName: "lock.fill",
                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .medium))
-
         return ShieldConfiguration(
             backgroundBlurStyle: .systemUltraThinMaterialDark,
             backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 0.97),
@@ -49,7 +53,7 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
                 color: .white
             ),
             subtitle: ShieldConfiguration.Label(
-                text: "Clique em Desbloquear e abra a notificação exibida...",
+                text: "Clique em Desbloquear e abra a notificação exibida",
                 color: UIColor(white: 0.55, alpha: 1.0)
             ),
             primaryButtonLabel: ShieldConfiguration.Label(
