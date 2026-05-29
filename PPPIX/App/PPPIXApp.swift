@@ -23,12 +23,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        // Notificações PRIMEIRO — crítico para cold start rápido
+        // Notificações PRIMEIRO
         UNUserNotificationCenter.current().delegate = self
         setupNotificationCategories()
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge, .timeSensitive]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .sound, .badge, .timeSensitive]) { _, _ in }
 
-        // Screen Time
         Task { @MainActor in
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.checkAuthorization()
@@ -56,50 +56,59 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             title: "🔑 Digitar Senha",
             options: [.foreground]
         )
-        let unlockCategory = UNNotificationCategory(
+        let category = UNNotificationCategory(
             identifier: "PPPIX_UNLOCK",
             actions: [unlockAction],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        UNUserNotificationCenter.current().setNotificationCategories([unlockCategory])
+        UNUserNotificationCenter.current().setNotificationCategories([category])
     }
 
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
     }
-
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {}
 
-    func application(_ app: UIApplication,
-                     open url: URL,
+    func application(_ app: UIApplication, open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         if url.scheme == "pppix" && url.host == "unlock" {
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .pppixForceOpenUnlockScreen, object: nil)
-            }
+            triggerUnlockScreen()
         }
         return true
+    }
+
+    func triggerUnlockScreen() {
+        AppDelegate.pendingUnlockScreen = true
+        let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
+        defaults?.set(true, forKey: "pppix_show_password_screen")
+        defaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
+        defaults?.synchronize()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .pppixForceOpenUnlockScreen, object: nil)
+        }
     }
 }
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
 
+    // App em FOREGROUND — notificação chegou
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let userInfo = extractPayload(notification.request.content.userInfo)
+        let raw = notification.request.content.userInfo
+        let userInfo = Self.extractPayload(raw)
         let action = userInfo["action"] as? String ?? ""
 
         switch action {
         case "unlock":
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .pppixForceOpenUnlockScreen, object: nil)
-            }
+            // Abre a tela IMEDIATAMENTE sem esperar o usuário tocar no banner
+            triggerUnlockScreen()
+            // Também mostra o banner caso o app esteja atrás de outra coisa
             completionHandler([.banner, .sound])
 
         case "reblock":
@@ -116,77 +125,60 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         }
     }
 
+    // Usuário TOCOU na notificação
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let userInfo = extractPayload(response.notification.request.content.userInfo)
+        let raw = response.notification.request.content.userInfo
+        let userInfo = Self.extractPayload(raw)
         let action = userInfo["action"] as? String ?? ""
 
-        if action == "reblock" {
+        switch action {
+        case "reblock":
             Task { @MainActor in
                 #if !targetEnvironment(simulator)
                 ScreenTimeManager.shared.syncCheckAndReblock()
                 #endif
             }
-            completionHandler()
-            return
-        }
 
-        if action == "unlock" || response.actionIdentifier == "UNLOCK_ACTION" {
-            AppDelegate.pendingUnlockScreen = true
-            let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
-            defaults?.set(true, forKey: "pppix_show_password_screen")
-            defaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
-            defaults?.synchronize()
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .pppixForceOpenUnlockScreen, object: nil)
-            }
-            completionHandler()
-            return
-        }
+        case "unlock":
+            triggerUnlockScreen()
 
-        // Alerta de emergência — abre tela
-        let alertType = userInfo["alert_type"] as? String ?? ""
-        if alertType.contains("emergency") || alertType.contains("alert") || alertType == "wrong_password" {
-            let alertId = (userInfo["alert_id"] as? String).flatMap(Int.init)
-                       ?? userInfo["alert_id"] as? Int
-                       ?? 0
-            if alertId > 0 {
-                EmergencyAudioService.shared.playSiren()
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .incomingEmergencyAlert, object: nil, userInfo: ["alert_id": alertId])
-                }
-            }
-        }
-
-        if let alertIdStr = userInfo["alert_id"] as? String, let alertId = Int(alertIdStr) {
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .openAlertDetail, object: nil, userInfo: ["alert_id": alertId])
+        default:
+            // Pode ser alerta de emergência ou ação de unlock
+            if response.actionIdentifier == "UNLOCK_ACTION" {
+                triggerUnlockScreen()
+            } else {
+                handleIncomingAlert(userInfo: userInfo)
             }
         }
 
         completionHandler()
     }
 
-    // FIX ALERTAS: FCM às vezes envolve o payload em "data" ou "aps"
-    // Extrai os campos do nível correto
-    private func extractPayload(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
+    // Extrai campos do payload FCM — suporta flat e aninhado em "data"
+    // Android envia: { data: { alert_type, sender_email, alert_id, ... } }
+    // iOS recebe:   userInfo["data"] = [String: Any]  OU campos no nível raiz
+    static func extractPayload(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
         var result = [String: Any]()
 
-        // Copia campos do nível raiz
+        // Nível raiz
         for (key, value) in userInfo {
-            if let k = key as? String {
-                result[k] = value
-            }
+            if let k = key as? String { result[k] = value }
         }
 
-        // Se há um dict "data" aninhado, sobrescreve com seus campos
+        // Aninhado em "data" (padrão Android FCM)
+        if let data = userInfo["data"] as? [AnyHashable: Any] {
+            for (key, value) in data {
+                if let k = key as? String { result[k] = value }
+            }
+        }
         if let data = userInfo["data"] as? [String: Any] {
             for (k, v) in data { result[k] = v }
         }
-        // Também tenta "gcm.notification"
+        // "gcm.notification" (legado)
         if let notif = userInfo["gcm.notification"] as? [String: Any] {
             for (k, v) in notif { result[k] = v }
         }
@@ -195,21 +187,35 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     }
 
     private func handleIncomingAlert(userInfo: [String: Any]) {
-        let alertType = userInfo["alert_type"] as? String ?? ""
-        let senderEmail = userInfo["sender_email"] as? String ?? ""
-        let myEmail = SessionManager.shared.userEmail
-        guard !senderEmail.isEmpty, senderEmail.lowercased() != myEmail.lowercased() else { return }
+        // Converte todos os valores para String (NSString → String)
+        let alertType = (userInfo["alert_type"] as? String)
+                     ?? (userInfo["alert_type"] as? NSString).map(String.init)
+                     ?? ""
+        let senderEmail = (userInfo["sender_email"] as? String)
+                       ?? (userInfo["sender_email"] as? NSString).map(String.init)
+                       ?? ""
 
-        let isEmergency = alertType.contains("emergency") || alertType.contains("alert") || alertType == "wrong_password"
+        let myEmail = SessionManager.shared.userEmail
+        guard !senderEmail.isEmpty,
+              senderEmail.lowercased() != myEmail.lowercased() else { return }
+
+        let isEmergency = alertType.contains("emergency")
+                       || alertType.contains("alert")
+                       || alertType == "wrong_password"
         guard isEmergency else { return }
 
         let alertId = (userInfo["alert_id"] as? String).flatMap(Int.init)
+                   ?? (userInfo["alert_id"] as? NSString).flatMap { Int($0 as String) }
                    ?? userInfo["alert_id"] as? Int
                    ?? 0
 
         EmergencyAudioService.shared.playSiren()
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .incomingEmergencyAlert, object: nil, userInfo: ["alert_id": alertId])
+            NotificationCenter.default.post(
+                name: .incomingEmergencyAlert,
+                object: nil,
+                userInfo: ["alert_id": alertId]
+            )
         }
     }
 }
