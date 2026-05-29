@@ -48,7 +48,8 @@ class ShieldActionExtension: ShieldActionDelegate {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+        // Trigger instantâneo — mínimo de iOS é 0.001s para máxima velocidade
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.001, repeats: false)
         let request = UNNotificationRequest(
             identifier: "pppix_unlock",
             content: content,
