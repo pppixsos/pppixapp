@@ -87,39 +87,40 @@ final class ScreenTimeManager: ObservableObject {
     private var reblockWorkItem: DispatchWorkItem?
 
     func unlockTemporarily(seconds: Int = 60) {
+        // 1. Salva o timestamp de desbloqueio PRIMEIRO
         let until = Date().timeIntervalSince1970 + Double(seconds)
         sharedDefaults?.set(until, forKey: Self.unlockedUntilKey)
         sharedDefaults?.synchronize()
 
-        // Remove shield para o usuário acessar o app protegido
-        removeShield()
-
-        // Cancela reblock anterior se existir
+        // 2. Cancela reblock anterior
         reblockWorkItem?.cancel()
+        reblockWorkItem = nil
 
-        // Agenda reblock após X segundos via DispatchQueue — simples e confiável
+        // 3. Remove o shield completamente
+        store.shield.applications = nil
+        store.shield.applicationCategories = nil
+        store.shield.webDomains = nil
+
+        // 4. Agenda reblock após X segundos
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
-            self.applyShield()
             self.sharedDefaults?.removeObject(forKey: Self.unlockedUntilKey)
             self.sharedDefaults?.synchronize()
+            self.applyShield()
         }
         reblockWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(seconds), execute: workItem)
     }
 
-    // Chamado quando PPPIX vai para background — rebloqueia imediatamente
+    // Chamado quando PPPIX vai para background
+    // SÓ rebloqueia se o usuário saiu sem abrir o app protegido (não após desbloquear)
     func reblockOnBackground() {
         let unlockedUntil = sharedDefaults?.double(forKey: Self.unlockedUntilKey) ?? 0
         let isUnlocked = unlockedUntil > Date().timeIntervalSince1970
-        guard isUnlocked else { return }
-
-        // Cancela o timer de 1 minuto e rebloqueia agora
-        reblockWorkItem?.cancel()
-        reblockWorkItem = nil
+        // Se está desbloqueado, o usuário provavelmente foi para o app protegido — não rebloquear
+        // O timer de 60s vai rebloquear automaticamente
+        guard !isUnlocked else { return }
         applyShield()
-        sharedDefaults?.removeObject(forKey: Self.unlockedUntilKey)
-        sharedDefaults?.synchronize()
     }
 
     func unblockAll() { unlockTemporarily(seconds: 60) }
