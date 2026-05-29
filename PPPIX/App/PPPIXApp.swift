@@ -18,12 +18,14 @@ struct PPPIXApp: App {
 class AppDelegate: NSObject, UIApplicationDelegate {
 
     static var pendingUnlockScreen = false
+    // Impede que o próximo ciclo background→active mostre tela de senha
+    // Usado quando o usuário abre o app desbloqueado a partir do PPPIX
+    static var skipNextAuthReset = false
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        // Notificações PRIMEIRO
         UNUserNotificationCenter.current().delegate = self
         setupNotificationCategories()
         UNUserNotificationCenter.current().requestAuthorization(
@@ -35,7 +37,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             #endif
         }
 
-        // Firebase em background para não atrasar launch
         Task.detached(priority: .background) {
             if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
                 await MainActor.run {
@@ -69,8 +70,65 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
     }
+
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {}
+
+    // FIX ALERTAS: handler para mensagens FCM data-only (content-available: 1)
+    // Sem isso, mensagens do Android NÃO acordam o app iOS em background
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        let payload = Self.extractPayload(userInfo)
+        let alertType = (payload["alert_type"] as? String)
+                     ?? (payload["alert_type"] as? NSString).map(String.init)
+                     ?? ""
+        let senderEmail = (payload["sender_email"] as? String)
+                       ?? (payload["sender_email"] as? NSString).map(String.init)
+                       ?? ""
+        let myEmail = SessionManager.shared.userEmail
+
+        guard !alertType.isEmpty,
+              !senderEmail.isEmpty,
+              senderEmail.lowercased() != myEmail.lowercased() else {
+            completionHandler(.noData)
+            return
+        }
+
+        let isEmergency = alertType.contains("emergency") || alertType.contains("alert") || alertType == "wrong_password"
+        guard isEmergency else { completionHandler(.noData); return }
+
+        let alertId = (payload["alert_id"] as? String).flatMap(Int.init)
+                   ?? (payload["alert_id"] as? NSString).flatMap { Int($0 as String) }
+                   ?? payload["alert_id"] as? Int
+                   ?? 0
+
+        // Toca sirene e abre tela de emergência
+        EmergencyAudioService.shared.playSiren()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .incomingEmergencyAlert,
+                object: nil,
+                userInfo: ["alert_id": alertId]
+            )
+        }
+
+        // Dispara notificação local visível para o usuário (caso esteja com tela apagada)
+        let content = UNMutableNotificationContent()
+        content.title = "🚨 Alerta de Emergência"
+        content.body = senderEmail.isEmpty ? "Um contato precisa de ajuda!" : "\(senderEmail.components(separatedBy: "@").first ?? senderEmail) pode estar em perigo!"
+        content.sound = .defaultCritical
+        content.userInfo = ["alert_id": String(alertId), "alert_type": alertType, "sender_email": senderEmail]
+        content.interruptionLevel = .critical
+
+        let request = UNNotificationRequest(
+            identifier: "pppix_emergency_\(alertId)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+        completionHandler(.newData)
+    }
 
     func application(_ app: UIApplication, open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
@@ -94,23 +152,18 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
 
-    // App em FOREGROUND — notificação chegou
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let raw = notification.request.content.userInfo
-        let userInfo = Self.extractPayload(raw)
+        let userInfo = Self.extractPayload(notification.request.content.userInfo)
         let action = userInfo["action"] as? String ?? ""
 
         switch action {
         case "unlock":
-            // Abre a tela IMEDIATAMENTE sem esperar o usuário tocar no banner
             triggerUnlockScreen()
-            // Também mostra o banner caso o app esteja atrás de outra coisa
             completionHandler([.banner, .sound])
-
         case "reblock":
             Task { @MainActor in
                 #if !targetEnvironment(simulator)
@@ -118,21 +171,22 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                 #endif
             }
             completionHandler([])
-
         default:
-            handleIncomingAlert(userInfo: userInfo)
+            // Notificação de alerta de emergência em foreground
+            let alertType = (userInfo["alert_type"] as? String) ?? ""
+            if alertType.contains("emergency") || alertType.contains("alert") {
+                handleIncomingAlert(userInfo: userInfo)
+            }
             completionHandler([.banner, .sound, .badge])
         }
     }
 
-    // Usuário TOCOU na notificação
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let raw = response.notification.request.content.userInfo
-        let userInfo = Self.extractPayload(raw)
+        let userInfo = Self.extractPayload(response.notification.request.content.userInfo)
         let action = userInfo["action"] as? String ?? ""
 
         switch action {
@@ -142,80 +196,55 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                 ScreenTimeManager.shared.syncCheckAndReblock()
                 #endif
             }
-
         case "unlock":
             triggerUnlockScreen()
-
         default:
-            // Pode ser alerta de emergência ou ação de unlock
             if response.actionIdentifier == "UNLOCK_ACTION" {
                 triggerUnlockScreen()
             } else {
-                handleIncomingAlert(userInfo: userInfo)
+                // Toque em notificação de alerta de emergência
+                let alertType = (userInfo["alert_type"] as? String) ?? ""
+                if alertType.contains("emergency") || alertType.contains("alert") {
+                    handleIncomingAlert(userInfo: userInfo)
+                } else if let idStr = userInfo["alert_id"] as? String, let id = Int(idStr) {
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(name: .openAlertDetail, object: nil, userInfo: ["alert_id": id])
+                    }
+                }
             }
         }
-
         completionHandler()
     }
 
-    // Extrai campos do payload FCM — suporta flat e aninhado em "data"
-    // Android envia: { data: { alert_type, sender_email, alert_id, ... } }
-    // iOS recebe:   userInfo["data"] = [String: Any]  OU campos no nível raiz
+    // Extrai payload FCM independente do formato (flat ou aninhado em "data")
     static func extractPayload(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
         var result = [String: Any]()
-
-        // Nível raiz
         for (key, value) in userInfo {
             if let k = key as? String { result[k] = value }
         }
-
-        // Aninhado em "data" (padrão Android FCM)
+        // Android FCM envia dados dentro de "data"
         if let data = userInfo["data"] as? [AnyHashable: Any] {
-            for (key, value) in data {
-                if let k = key as? String { result[k] = value }
-            }
+            for (key, value) in data { if let k = key as? String { result[k] = value } }
         }
         if let data = userInfo["data"] as? [String: Any] {
             for (k, v) in data { result[k] = v }
         }
-        // "gcm.notification" (legado)
-        if let notif = userInfo["gcm.notification"] as? [String: Any] {
-            for (k, v) in notif { result[k] = v }
-        }
-
         return result
     }
 
     private func handleIncomingAlert(userInfo: [String: Any]) {
-        // Converte todos os valores para String (NSString → String)
-        let alertType = (userInfo["alert_type"] as? String)
-                     ?? (userInfo["alert_type"] as? NSString).map(String.init)
-                     ?? ""
-        let senderEmail = (userInfo["sender_email"] as? String)
-                       ?? (userInfo["sender_email"] as? NSString).map(String.init)
-                       ?? ""
-
-        let myEmail = SessionManager.shared.userEmail
-        guard !senderEmail.isEmpty,
-              senderEmail.lowercased() != myEmail.lowercased() else { return }
-
-        let isEmergency = alertType.contains("emergency")
-                       || alertType.contains("alert")
-                       || alertType == "wrong_password"
+        let alertType    = (userInfo["alert_type"] as? String) ?? (userInfo["alert_type"] as? NSString).map(String.init) ?? ""
+        let senderEmail  = (userInfo["sender_email"] as? String) ?? (userInfo["sender_email"] as? NSString).map(String.init) ?? ""
+        let myEmail      = SessionManager.shared.userEmail
+        guard !senderEmail.isEmpty, senderEmail.lowercased() != myEmail.lowercased() else { return }
+        let isEmergency  = alertType.contains("emergency") || alertType.contains("alert") || alertType == "wrong_password"
         guard isEmergency else { return }
-
         let alertId = (userInfo["alert_id"] as? String).flatMap(Int.init)
                    ?? (userInfo["alert_id"] as? NSString).flatMap { Int($0 as String) }
-                   ?? userInfo["alert_id"] as? Int
-                   ?? 0
-
+                   ?? userInfo["alert_id"] as? Int ?? 0
         EmergencyAudioService.shared.playSiren()
         DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .incomingEmergencyAlert,
-                object: nil,
-                userInfo: ["alert_id": alertId]
-            )
+            NotificationCenter.default.post(name: .incomingEmergencyAlert, object: nil, userInfo: ["alert_id": alertId])
         }
     }
 }
