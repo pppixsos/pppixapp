@@ -13,18 +13,11 @@ final class ScreenTimeManager: ObservableObject {
     static let shared = ScreenTimeManager()
     private init() {}
 
-    // Store principal — bloqueia todos os apps selecionados
     let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("pppix"))
     @Published var isAuthorized = false
     @Published var currentSelection = FamilyActivitySelection()
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
-
-    // Unlock state
-    private var unlockedUntil: Date = .distantPast
-    private var reblockWorkItem: DispatchWorkItem?
-    private var bgTask: UIBackgroundTaskIdentifier = .invalid
-
     static let selectionKey = "pppix_activity_selection"
 
     // MARK: - Autorização
@@ -50,6 +43,7 @@ final class ScreenTimeManager: ObservableObject {
         }
     }
 
+    // CAMADA 3: foreground check — chamado ao abrir o app
     func syncCheckAndReblock() {
         guard isAuthorized, hasBlockedApps else { return }
         if !isCurrentlyUnlocked() {
@@ -58,7 +52,8 @@ final class ScreenTimeManager: ObservableObject {
     }
 
     func isCurrentlyUnlocked() -> Bool {
-        return unlockedUntil > Date()
+        let unlockUntil = sharedDefaults?.double(forKey: "pppix_unlocked_until") ?? 0
+        return unlockUntil > Date().timeIntervalSince1970
     }
 
     // MARK: - Shield
@@ -80,79 +75,45 @@ final class ScreenTimeManager: ObservableObject {
         store.shield.applications = nil
         store.shield.applicationCategories = nil
         store.shield.webDomains = nil
+        sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
+        sharedDefaults?.synchronize()
     }
 
-    // MARK: - Unlock seletivo (apenas o app tocado)
-    //
-    // ESTRATÉGIA:
-    // O ShieldConfigurationExtension salva o ApplicationToken do app que foi
-    // tocado em "pppix_single_app_token_data" como Data bruto (não FamilyActivitySelection).
-    // Aqui, tentamos remover APENAS esse token do store principal.
-    // Se não conseguir decodificar, remove todos (fallback seguro para o usuário).
-    //
+    // MARK: - Unlock
+    // NOTA: o unlock individual é feito diretamente pelo ShieldActionExtension
+    // que já tem o ApplicationToken correto. O ScreenTimeManager só é chamado
+    // após o usuário digitar a senha no PPPIX (após a notificação).
     func unlockSingleApp(seconds: Int = 60) {
-        unlockedUntil = Date().addingTimeInterval(Double(seconds))
-        reblockWorkItem?.cancel()
-        reblockWorkItem = nil
+        // Lê o token salvo pelo ShieldActionExtension
+        let unlockUntil = (sharedDefaults?.double(forKey: "pppix_unlocked_until") ?? 0)
+        let alreadyUnlocked = unlockUntil > Date().timeIntervalSince1970
 
-        // Tentar desbloquear apenas o app específico
-        if let tokenData = sharedDefaults?.data(forKey: "pppix_single_app_token_data"),
-           let singleToken = try? JSONDecoder().decode(ApplicationToken.self, from: tokenData) {
-
-            // Remove APENAS o token do app tocado do store principal
-            var remaining = currentSelection.applicationTokens
-            remaining.remove(singleToken)
-            store.shield.applications = remaining.isEmpty ? nil : remaining
-            // Categorias e webDomains permanecem bloqueados
-
-        } else if let singleData = sharedDefaults?.data(forKey: "pppix_single_unlock_selection"),
-                  let singleSelection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: singleData),
-                  let tokenToUnlock = singleSelection.applicationTokens.first {
-
-            // Fallback: usa FamilyActivitySelection salva
-            var remaining = currentSelection.applicationTokens
-            remaining.remove(tokenToUnlock)
-            store.shield.applications = remaining.isEmpty ? nil : remaining
-
-        } else {
-            // Último fallback: remove todos os shields de aplicativos
-            // (mantém categorias bloqueadas)
-            store.shield.applications = nil
+        if alreadyUnlocked {
+            // ShieldActionExtension já removeu o token — só confirma o timestamp
+            return
         }
 
-        scheduleReblockWithBackgroundTask(after: seconds)
-    }
-
-    private func scheduleReblockWithBackgroundTask(after seconds: Int) {
-        if bgTask != .invalid {
-            UIApplication.shared.endBackgroundTask(bgTask)
-            bgTask = .invalid
-        }
-
-        bgTask = UIApplication.shared.beginBackgroundTask(withName: "pppix.reblock") { [weak self] in
-            self?.applyShieldAndEndBgTask()
-        }
-
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.applyShieldAndEndBgTask()
-        }
-        reblockWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + Double(seconds), execute: workItem)
-    }
-
-    private func applyShieldAndEndBgTask() {
-        unlockedUntil = .distantPast
-        applyShield()
-        if bgTask != .invalid {
-            UIApplication.shared.endBackgroundTask(bgTask)
-            bgTask = .invalid
-        }
+        // Fallback: se chamado sem unlock prévio do ShieldAction (caminho inesperado)
+        // remove todos os apps por segurança
+        store.shield.applications = nil
+        let newUntil = Date().timeIntervalSince1970 + Double(seconds)
+        sharedDefaults?.set(newUntil, forKey: "pppix_unlocked_until")
+        sharedDefaults?.synchronize()
     }
 
     func reblockOnBackground() {
         if !isCurrentlyUnlocked() {
             applyShield()
         }
+        // Se ainda está desbloqueado, o timer da notificação (ShieldActionExtension)
+        // vai rebloquear quando expirar
+    }
+
+    // MARK: - Reblock após senha correta
+    // Chamado pelo UnlockPasswordView após senha 1 ou 3 ser aceita
+    func reblockAfterPasswordVerified() {
+        // Não rebloqueia imediatamente — o ShieldAction já agendou o reblock em 60s
+        // O usuário precisa desse tempo para usar o app
     }
 
     // Compatibilidade
@@ -202,6 +163,7 @@ final class ScreenTimeManager: ObservableObject {
     func syncCheckAndReblock() {}
     func loadSavedSelection() {}
     func isCurrentlyUnlocked() -> Bool { false }
+    func reblockAfterPasswordVerified() {}
     var hasBlockedApps: Bool { false }
 }
 
