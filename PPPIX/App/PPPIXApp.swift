@@ -96,9 +96,8 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         if let action = userInfo["action"] as? String, action == "unlock" {
             // App em foreground — abrir tela de senha diretamente
             DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+                NotificationCenter.default.post(name: Notification.Name("pppix.forceOpenUnlockScreen"), object: nil)
             }
-            // Mostrar banner TAMBÉM para o usuário saber que precisa interagir
             completionHandler([.banner, .sound])
             return
         }
@@ -117,9 +116,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
         // Toque no banner ou no botão "Digitar Senha"
         if let action = userInfo["action"] as? String, action == "unlock" {
-            // Delay maior para garantir que RootView já está pronto (cold start)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            // forceOpenUnlockScreen — bypassa todos os guards, sempre abre a tela de senha
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NotificationCenter.default.post(name: Notification.Name("pppix.forceOpenUnlockScreen"), object: nil)
             }
             completionHandler()
             return
@@ -127,8 +126,8 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
         // Botão de ação "UNLOCK_ACTION"
         if response.actionIdentifier == "UNLOCK_ACTION" {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NotificationCenter.default.post(name: Notification.Name("pppix.forceOpenUnlockScreen"), object: nil)
             }
             completionHandler()
             return
