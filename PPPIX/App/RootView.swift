@@ -192,11 +192,12 @@ struct PPPIXLoginView: View {
                     body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
                 await MainActor.run {
                     isLoading = false
-                    let validActions = ["open_pppix", "open_bank", "open_bank_alert"]
-                    if validActions.contains(response.action) {
+                    if response.action == "open_pppix" {
                         onAuthenticated()
                     } else {
-                        errorMsg = "Senha incorreta"; password = ""
+                        // DEBUG: mostrar qual ação retornou para diagnóstico
+                        errorMsg = "Senha incorreta (cod: \(response.action))"
+                        password = ""
                     }
                 }
             } catch {
