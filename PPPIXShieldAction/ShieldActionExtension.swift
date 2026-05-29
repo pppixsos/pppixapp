@@ -6,33 +6,11 @@ class ShieldActionExtension: ShieldActionDelegate {
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
-    // REGRA FUNDAMENTAL: NÃO desbloqueia aqui.
-    // O shield só é removido DEPOIS que o usuário digita a senha correta no PPPIX.
-    // Aqui só: salva o token, sinaliza que precisa de senha, envia notificação.
-
     override func handle(action: ShieldAction,
                          for application: ApplicationToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
         guard case .primaryButtonPressed = action else { completionHandler(.close); return }
-
-        let last = sharedDefaults?.double(forKey: "pppix_password_request_time") ?? 0
-        guard Date().timeIntervalSince1970 - last > 3 else { completionHandler(.close); return }
-
-        // Salva o token do app que foi tocado — usado pelo ScreenTimeManager para unlock individual
-        if let tokenData = try? JSONEncoder().encode(application) {
-            sharedDefaults?.set(tokenData, forKey: "pppix_single_app_token_data")
-        }
-
-        // Sinaliza que precisa de senha
-        sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
-        sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
-        sharedDefaults?.synchronize()
-
-        // Envia notificação para abrir PPPIX
-        sendUnlockNotification()
-
-        // .close fecha o shield e mostra o app bloqueado por baixo (ainda bloqueado)
-        // O usuário vai ver a notificação e tocar nela para abrir o PPPIX e digitar senha
+        handleUnlock(token: application)
         completionHandler(.close)
     }
 
@@ -40,12 +18,7 @@ class ShieldActionExtension: ShieldActionDelegate {
                          for webDomain: WebDomainToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
         guard case .primaryButtonPressed = action else { completionHandler(.close); return }
-        let last = sharedDefaults?.double(forKey: "pppix_password_request_time") ?? 0
-        guard Date().timeIntervalSince1970 - last > 3 else { completionHandler(.close); return }
-        sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
-        sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
-        sharedDefaults?.synchronize()
-        sendUnlockNotification()
+        handleUnlock(token: nil)
         completionHandler(.close)
     }
 
@@ -53,13 +26,29 @@ class ShieldActionExtension: ShieldActionDelegate {
                          for category: ActivityCategoryToken,
                          completionHandler: @escaping (ShieldActionResponse) -> Void) {
         guard case .primaryButtonPressed = action else { completionHandler(.close); return }
+        handleUnlock(token: nil)
+        completionHandler(.close)
+    }
+
+    private func handleUnlock(token: ApplicationToken?) {
+        // NÃO remove o shield aqui — shield só é removido após senha correta no PPPIX
+
+        // Salva o token para unlock individual posterior
+        if let t = token, let data = try? JSONEncoder().encode(t) {
+            sharedDefaults?.set(data, forKey: "pppix_single_app_token_data")
+        }
+
+        // FIX DEBOUNCE: limpa o timestamp para permitir nova solicitação imediata
+        // O debounce só bloqueia se a MESMA solicitação chegou em menos de 2s
         let last = sharedDefaults?.double(forKey: "pppix_password_request_time") ?? 0
-        guard Date().timeIntervalSince1970 - last > 3 else { completionHandler(.close); return }
+        let sinceLastRequest = Date().timeIntervalSince1970 - last
+        guard sinceLastRequest > 2 else { return }
+
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
+
         sendUnlockNotification()
-        completionHandler(.close)
     }
 
     private func sendUnlockNotification() {
@@ -75,7 +64,11 @@ class ShieldActionExtension: ShieldActionDelegate {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
 
-        let request = UNNotificationRequest(identifier: "pppix_unlock", content: content, trigger: nil)
+        let request = UNNotificationRequest(
+            identifier: "pppix_unlock",
+            content: content,
+            trigger: nil  // imediato
+        )
         UNUserNotificationCenter.current().add(request)
     }
 }
