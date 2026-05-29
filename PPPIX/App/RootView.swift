@@ -566,8 +566,6 @@ struct ArrowUnlockView: View {
     }
 
     private func openUnlockedApp() {
-        // Sinaliza que o background/active seguinte não deve resetar auth
-        AppDelegate.skipNextAuthReset = true
         let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?.string(forKey: "pppix_target_bundle_id") ?? ""
         let schemes: [String: String] = [
             "com.santander.app":             "santander://",
@@ -586,13 +584,22 @@ struct ArrowUnlockView: View {
             "com.facebook.Facebook":         "fb://",
             "com.zhiliaoapp.musically":      "tiktok://",
         ]
-        // Minimiza o PPPIX primeiro
+
+        guard let scheme = schemes[bundleId], let url = URL(string: scheme) else {
+            // App sem URL scheme — só fecha a tela
+            isPresented = false
+            return
+        }
+
+        // FIX: sinaliza para NÃO pedir senha quando o PPPIX voltar ao foreground
+        AppDelegate.skipNextAuthReset = true
+
+        // Fecha TODOS os covers de uma vez antes de abrir o outro app
         isPresented = false
-        // Abre o app após um frame para o dismiss completar
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            if let scheme = schemes[bundleId], let url = URL(string: scheme) {
-                UIApplication.shared.open(url, options: [:], completionHandler: nil)
-            }
+
+        // Abre o app com delay mínimo para o dismiss animar
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
 }
