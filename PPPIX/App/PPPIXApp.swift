@@ -26,10 +26,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         setupNotificationCategories()
+        // Firebase PRIMEIRO — antes de qualquer coisa para APNS funcionar
+        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+            FirebaseApp.configure()
+            Messaging.messaging().delegate = self
+        }
+
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound, .badge, .timeSensitive]) { granted, _ in
             if granted {
                 DispatchQueue.main.async {
+                    // Necessário para Firebase receber o APNS token via swizzling
                     UIApplication.shared.registerForRemoteNotifications()
                 }
             }
@@ -39,14 +46,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.checkAuthorization()
             #endif
-        }
-
-        // Firebase — configurar ANTES de registerForRemoteNotifications
-        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
-            FirebaseApp.configure()
-            Messaging.messaging().delegate = self
-            // Desativa o swizzling manual — usamos delegate próprio
-            Messaging.messaging().isAutoInitEnabled = true
         }
 
         BackgroundTaskManager.shared.registerTasks()
