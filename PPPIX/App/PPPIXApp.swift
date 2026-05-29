@@ -18,6 +18,9 @@ struct PPPIXApp: App {
 
 class AppDelegate: NSObject, UIApplicationDelegate {
 
+    // Flag para abertura instantânea ao cold start via notificação
+    static var pendingUnlockScreen = false
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -120,18 +123,15 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         let userInfo = response.notification.request.content.userInfo
 
         if let action = userInfo["action"] as? String, action == "unlock" {
-            // Setar flag no UserDefaults como backup (para cold start)
+            // Setar flag ESTÁTICO — lido imediatamente pelo RootView mesmo em cold start
+            AppDelegate.pendingUnlockScreen = true
+            // Setar UserDefaults como backup
             let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
             defaults?.set(true, forKey: "pppix_show_password_screen")
             defaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
             defaults?.synchronize()
-            // Postar notificação imediatamente — sem delay
-            NotificationCenter.default.post(
-                name: Notification.Name("pppix.forceOpenUnlockScreen"),
-                object: nil
-            )
-            // Backup com delay curto para cold start
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            // Postar notificação para caso app esteja em background (já ativo)
+            DispatchQueue.main.async {
                 NotificationCenter.default.post(
                     name: Notification.Name("pppix.forceOpenUnlockScreen"),
                     object: nil
@@ -142,15 +142,12 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         }
 
         if response.actionIdentifier == "UNLOCK_ACTION" {
+            AppDelegate.pendingUnlockScreen = true
             let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
             defaults?.set(true, forKey: "pppix_show_password_screen")
             defaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
             defaults?.synchronize()
-            NotificationCenter.default.post(
-                name: Notification.Name("pppix.forceOpenUnlockScreen"),
-                object: nil
-            )
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            DispatchQueue.main.async {
                 NotificationCenter.default.post(
                     name: Notification.Name("pppix.forceOpenUnlockScreen"),
                     object: nil
