@@ -37,7 +37,7 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
         // Salva token via FamilyActivitySelection (mais confiável que encode direto)
         var singleSelection = FamilyActivitySelection()
-        singleSelection.applicationTokens = [application.token]
+        if let token = application.token { singleSelection.applicationTokens = [token] }
         if let data = try? JSONEncoder().encode(singleSelection) {
             sharedDefaults?.set(data, forKey: "pppix_single_unlock_selection")
         }
