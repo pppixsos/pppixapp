@@ -87,7 +87,6 @@ final class ScreenTimeManager: ObservableObject {
     // MARK: - Unlock apenas para o app específico
 
     func unlockSingleApp(seconds: Int = 60) {
-        guard isAuthorized else { return }
 
         // Marcar como desbloqueado na memória
         unlockedUntil = Date().addingTimeInterval(Double(seconds))
