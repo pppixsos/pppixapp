@@ -246,9 +246,10 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         var result = [String: Any]()
         for (k, v) in userInfo { if let key = k as? String { result[key] = v } }
         // Android FCM envia dados em "data"
-        for src in [userInfo["data"] as? [AnyHashable: Any],
-                    userInfo["data"] as? [String: Any] as? [AnyHashable: Any]] {
-            if let d = src { for (k, v) in d { if let key = k as? String { result[key] = v } } }
+        if let data = userInfo["data"] as? [AnyHashable: Any] {
+            for (k, v) in data { if let key = k as? String { result[key] = v } }
+        } else if let data = userInfo["data"] as? [String: Any] {
+            for (k, v) in data { result[k] = v }
         }
         return result
     }
