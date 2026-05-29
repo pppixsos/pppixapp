@@ -70,9 +70,6 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>O PPPIX usa sua localização para enviar alertas de emergência.</string>
 	<!-- Time Sensitive notifications: bypassa Apple Intelligence classifier (10s delay fix) -->
-	<!-- FCM: necessário para receber mensagens data-only em background -->
-	<key>FirebaseAppDelegateProxyEnabled</key>
-	<false/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
