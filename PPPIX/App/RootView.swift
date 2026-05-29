@@ -77,7 +77,13 @@ struct RootView: View {
         .onChange(of: scenePhase) { phase in
             switch phase {
             case .background:
-                auth.isAuthenticated = false
+                // FIX "ABRIR APP": se o usuário abriu o app desbloqueado a partir daqui,
+                // não reseta a autenticação no próximo ciclo
+                if AppDelegate.skipNextAuthReset {
+                    AppDelegate.skipNextAuthReset = false
+                } else {
+                    auth.isAuthenticated = false
+                }
                 #if !targetEnvironment(simulator)
                 ScreenTimeManager.shared.reblockOnBackground()
                 #endif
@@ -429,7 +435,7 @@ struct UnlockPasswordView: View {
 
         case "open_bank":
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 10)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 20)
             #endif
             unlockedApp = appName
             showArrow = true
@@ -438,7 +444,7 @@ struct UnlockPasswordView: View {
             // FIX SENHA 3: mesmo unlock individual que senha 1
             // O alerta é disparado separadamente em verify() após buscar localização
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 10)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 20)
             #endif
             unlockedApp = appName
             showArrow = true
@@ -560,6 +566,8 @@ struct ArrowUnlockView: View {
     }
 
     private func openUnlockedApp() {
+        // Sinaliza que o background/active seguinte não deve resetar auth
+        AppDelegate.skipNextAuthReset = true
         let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?.string(forKey: "pppix_target_bundle_id") ?? ""
         let schemes: [String: String] = [
             "com.santander.app":             "santander://",
