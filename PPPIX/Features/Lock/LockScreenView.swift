@@ -117,7 +117,7 @@ struct LockScreenView: View {
                 onUnlocked?()
                 dismiss()
 
-            case "open_ppix":
+            case "open_pppix", "open_ppix":
                 onUnlocked?()
                 dismiss()
                 NotificationCenter.default.post(name: .openPPPIXSettings, object: nil)
