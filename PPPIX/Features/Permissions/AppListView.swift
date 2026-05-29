@@ -43,8 +43,8 @@ struct AppListView: View {
         }
         .confirmationDialog("Remover proteção?", isPresented: $showRemoveConfirm, titleVisibility: .visible) {
             Button("Remover Tudo", role: .destructive) {
-                manager.removeShield()
-                manager.currentSelection = FamilyActivitySelection()
+                ScreenTimeManager.shared.removeShield()
+                ScreenTimeManager.shared.currentSelection = FamilyActivitySelection()
                 UserDefaults(suiteName: "group.tech.pppix.app")?
                     .removeObject(forKey: ScreenTimeManager.selectionKey)
             }
