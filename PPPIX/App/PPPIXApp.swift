@@ -18,7 +18,6 @@ struct PPPIXApp: App {
 
 class AppDelegate: NSObject, UIApplicationDelegate {
 
-    // Flag para abertura instantânea ao cold start via notificação
     static var pendingUnlockScreen = false
 
     func application(
@@ -26,22 +25,35 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
 
-        // Inicializar Screen Time ao abrir o app (fix para rebloquear automaticamente)
-        Task { @MainActor in
-            ScreenTimeManager.shared.checkAuthorization()
-        }
-
+        // FIX COLD START: configurar notificações ANTES de qualquer outra coisa
+        // para que didReceive seja chamado imediatamente
+        UNUserNotificationCenter.current().delegate = self
         setupNotificationCategories()
 
-        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
-           let _ = NSDictionary(contentsOfFile: path) {
-            FirebaseApp.configure()
-            Messaging.messaging().delegate = self
-            application.registerForRemoteNotifications()
+        // Screen Time — só inicializa se NÃO é cold start via notificação de reblock
+        // Evita bloquear o launch thread com operações pesadas
+        let isReblockLaunch = launchOptions?[.remoteNotification] != nil
+        if !isReblockLaunch {
+            Task { @MainActor in
+                #if !targetEnvironment(simulator)
+                ScreenTimeManager.shared.checkAuthorization()
+                #endif
+            }
         }
 
-        UNUserNotificationCenter.current().delegate = self
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        // Firebase — inicializa de forma lazy para não atrasar o cold start
+        Task.detached(priority: .background) {
+            if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+               let _ = NSDictionary(contentsOfFile: path) {
+                await MainActor.run {
+                    FirebaseApp.configure()
+                    Messaging.messaging().delegate = self
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+            }
+        }
+
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge, .timeSensitive]) { _, _ in }
         BackgroundTaskManager.shared.registerTasks()
         return true
     }
@@ -73,19 +85,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         if url.scheme == "pppix" && url.host == "unlock" {
-            postUnlockNotification()
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .pppixForceOpenUnlockScreen, object: nil)
+            }
         }
         return true
-    }
-
-    private func postUnlockNotification() {
-        // Sem delay — abre instantaneamente
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: Notification.Name("pppix.forceOpenUnlockScreen"),
-                object: nil
-            )
-        }
     }
 }
 
@@ -98,60 +102,57 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let userInfo = notification.request.content.userInfo
+        let action = userInfo["action"] as? String ?? ""
 
-        if let action = userInfo["action"] as? String, action == "unlock" {
+        switch action {
+        case "unlock":
             DispatchQueue.main.async {
-                NotificationCenter.default.post(
-                    name: Notification.Name("pppix.forceOpenUnlockScreen"),
-                    object: nil
-                )
+                NotificationCenter.default.post(name: .pppixForceOpenUnlockScreen, object: nil)
             }
             completionHandler([.banner, .sound])
-            return
+        case "reblock":
+            // Notificação silenciosa de reblock — reaplica shield
+            Task { @MainActor in
+                #if !targetEnvironment(simulator)
+                ScreenTimeManager.shared.syncCheckAndReblock()
+                #endif
+            }
+            completionHandler([])  // silenciosa
+        default:
+            handleIncomingAlert(userInfo: userInfo)
+            completionHandler([.banner, .sound, .badge])
         }
-
-        handleIncomingAlert(userInfo: userInfo)
-        completionHandler([.banner, .sound, .badge])
     }
 
-    // Usuário TOCA na notificação
+    // Usuário TOCA na notificação (background ou killed)
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+        let action = userInfo["action"] as? String ?? ""
 
-        if let action = userInfo["action"] as? String, action == "unlock" {
-            // Setar flag ESTÁTICO — lido imediatamente pelo RootView mesmo em cold start
-            AppDelegate.pendingUnlockScreen = true
-            // Setar UserDefaults como backup
-            let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
-            defaults?.set(true, forKey: "pppix_show_password_screen")
-            defaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
-            defaults?.synchronize()
-            // Postar notificação para caso app esteja em background (já ativo)
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(
-                    name: Notification.Name("pppix.forceOpenUnlockScreen"),
-                    object: nil
-                )
+        if action == "reblock" {
+            // Reblock silencioso — não abre UI
+            Task { @MainActor in
+                #if !targetEnvironment(simulator)
+                ScreenTimeManager.shared.syncCheckAndReblock()
+                #endif
             }
             completionHandler()
             return
         }
 
-        if response.actionIdentifier == "UNLOCK_ACTION" {
+        if action == "unlock" || response.actionIdentifier == "UNLOCK_ACTION" {
+            // FIX COLD START: setar flag ANTES do SwiftUI montar qualquer view
             AppDelegate.pendingUnlockScreen = true
             let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
             defaults?.set(true, forKey: "pppix_show_password_screen")
             defaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
             defaults?.synchronize()
             DispatchQueue.main.async {
-                NotificationCenter.default.post(
-                    name: Notification.Name("pppix.forceOpenUnlockScreen"),
-                    object: nil
-                )
+                NotificationCenter.default.post(name: .pppixForceOpenUnlockScreen, object: nil)
             }
             completionHandler()
             return
@@ -197,4 +198,5 @@ extension Notification.Name {
     static let incomingEmergencyAlert = Notification.Name("pppix.incomingEmergencyAlert")
     static let sessionExpired         = Notification.Name("pppix.sessionExpired")
     static let openUnlockScreen       = Notification.Name("pppix.openUnlockScreen")
+    static let pppixForceOpenUnlockScreen = Notification.Name("pppix.forceOpenUnlockScreen")
 }
