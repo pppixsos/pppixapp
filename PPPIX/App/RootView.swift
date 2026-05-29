@@ -474,12 +474,18 @@ struct UnlockPasswordView: View {
             onPPPIXAccess()
 
         case "open_bank":
-            // App já foi desbloqueado pelo ShieldActionExtension — só mostra seta
+            // Senha correta — desbloqueia o app agora e agenda reblock em 10s
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 10)
+            #endif
             unlockedAppName = appName
             showArrow = true
 
         case "open_bank_alert":
-            // Senha de emergência — app desbloqueado + envia alerta com localização
+            // Senha de emergência — desbloqueia + envia alerta silencioso
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 10)
+            #endif
             unlockedAppName = appName
             showArrow = true
             sendEmergencyAlert(coord: coord)
