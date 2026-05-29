@@ -117,7 +117,8 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
         // Toque no banner ou no botão "Digitar Senha"
         if let action = userInfo["action"] as? String, action == "unlock" {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            // Delay maior para garantir que RootView já está pronto (cold start)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
             }
             completionHandler()
@@ -126,7 +127,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
         // Botão de ação "UNLOCK_ACTION"
         if response.actionIdentifier == "UNLOCK_ACTION" {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 NotificationCenter.default.post(name: .openUnlockScreen, object: nil)
             }
             completionHandler()
