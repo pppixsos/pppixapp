@@ -19,7 +19,10 @@ final class EmergencyAudioService {
 
         configureAudioSession()
 
-        guard let url = Bundle.main.url(forResource: "sirene", withExtension: "mp3") else {
+        // Tenta .caf primeiro (formato iOS nativo), depois .mp3 como fallback
+        let url = Bundle.main.url(forResource: "sirene", withExtension: "caf")
+               ?? Bundle.main.url(forResource: "sirene", withExtension: "mp3")
+        guard let url = url else {
             // Fallback: vibração
             playVibrationFallback()
             return
