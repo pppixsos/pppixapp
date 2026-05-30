@@ -138,13 +138,23 @@ struct RootView: View {
     }
 
     private func processAlerts(_ alerts: [Alert], source: String) {
-        let myEmail = SessionManager.shared.userEmail
-        let shown   = AlertDeduplicator.shared.shownIds
+        let myEmail   = SessionManager.shared.userEmail
+        let shown     = AlertDeduplicator.shared.shownIds
+        // Só mostrar alertas dos últimos 10 minutos para evitar alertas antigos
+        let cutoff    = Date().addingTimeInterval(-10 * 60)
+        let iso       = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         AlertDiagnosticLog.shared.log("RECEBER(\(source)): \(alerts.count) alertas, \(shown.count) já vistos")
         let candidate = alerts.first(where: {
             let s = $0.status.lowercased()
             let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
-            return !isMine && s != "cancelled" && s != "cancel" && !shown.contains($0.id)
+            // Verificar se o alerta é recente (últimos 10 minutos)
+            let alertDate = iso.date(from: $0.created_at) ?? Date.distantPast
+            let isRecent  = alertDate > cutoff
+            if !isRecent && !shown.contains($0.id) {
+                AlertDeduplicator.shared.markShown($0.id) // marcar antigos como vistos
+            }
+            return !isMine && s != "cancelled" && s != "cancel" && !shown.contains($0.id) && isRecent
         })
         guard let a = candidate else {
             AlertDiagnosticLog.shared.log("RECEBER(\(source)): nenhum alerta novo")
