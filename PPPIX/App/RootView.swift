@@ -669,8 +669,7 @@ struct UnlockPasswordView: View {
     }
 }
 
-// MARK: - Tela de seta
-// MARK: - Tela pós-desbloqueio (substitui ArrowUnlockView)
+// MARK: - Tela pós-desbloqueio
 struct ArrowUnlockView: View {
     let appName: String
     @Binding var isPresented: Bool
@@ -681,7 +680,6 @@ struct ArrowUnlockView: View {
             VStack(spacing: 0) {
                 Spacer()
                 VStack(spacing: 24) {
-                    // Ícone de sucesso
                     ZStack {
                         Circle()
                             .fill(Color(hex: "#44FF88").opacity(0.12))
@@ -692,104 +690,37 @@ struct ArrowUnlockView: View {
                     }
 
                     VStack(spacing: 10) {
-                        Text("\(appName) Desbloqueado")
+                        Text("\(appName) Desbloqueado!")
                             .font(.title2.bold())
                             .foregroundColor(.white)
-                        Text("Você pode usar o \(appName) normalmente.\nEle ficará disponível por 10 segundos após você minimizar este app.")
+                        Text("Toque no ícone do \(appName) na tela inicial para abri-lo.")
                             .font(.subheadline)
                             .foregroundColor(Color(white: 0.45))
                             .multilineTextAlignment(.center)
                             .lineSpacing(4)
                             .padding(.horizontal, 32)
                     }
-
-                    // Botão principal — minimiza o PPPIX e abre o app
-                    Button {
-                        openUnlockedApp()
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "arrow.up.forward.app.fill")
-                                .font(.system(size: 18, weight: .bold))
-                            Text("Abrir \(appName)")
-                                .font(.system(size: 16, weight: .bold))
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(LinearGradient(
-                            colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                            startPoint: .leading, endPoint: .trailing))
-                        .cornerRadius(14)
-                    }
-                    .padding(.horizontal, 28)
-
-                    Button {
-                        EmergencyAudioService.shared.stopSiren()
-                        isPresented = false
-                    } label: {
-                        Text("Fechar")
-                            .font(.subheadline)
-                            .foregroundColor(Color(white: 0.35))
-                    }
                 }
                 Spacer()
             }
         }
-    }
-
-    private func openUnlockedApp() {
-        EmergencyAudioService.shared.stopSiren()
-
-        // Sinaliza para NÃO pedir senha quando PPPIX voltar ao foreground
-        AppDelegate.skipNextAuthReset = true
-
-        // Sinaliza que abrimos o banco propositalmente
-        #if !targetEnvironment(simulator)
-        ScreenTimeManager.shared.isOpeningBankApp = true
-        #endif
-
-        let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?
-            .string(forKey: "pppix_target_bundle_id") ?? ""
-
-        let schemes: [String: String] = [
-            "com.santander.app":             "santander://",
-            "com.santander.SantanderBrasil": "santander://",
-            "com.nubank.app":                "nubank://",
-            "com.itau.iphone":               "itauaplicativo://",
-            "com.bradesco.app":              "bradesco://",
-            "com.bb.bolsodigital":           "bbdigi://",
-            "com.caixa.app":                 "caixatemapp://",
-            "com.inter.Inter":               "interapp://",
-            "com.c6bank.ios":                "c6bank://",
-            "com.picpay.ios":                "picpay://",
-            "com.mercadopago.ios":           "mercadopago://",
-            "net.whatsapp.WhatsApp":         "whatsapp://",
-            "com.burbn.instagram":           "instagram://",
-            "com.facebook.Facebook":         "fb://",
-            "com.zhiliaoapp.musically":      "tiktok://",
-        ]
-
-        // 1. Fechar a tela PRIMEIRO
-        isPresented = false
-
-        // 2. Aguardar o fullScreenCover terminar a animação de dismiss (~0.5s)
-        // e então abrir o app — a janela do PPPIX precisa estar completamente
-        // descartada para o open() funcionar corretamente
-        guard let scheme = schemes[bundleId], let url = URL(string: scheme) else {
-            return
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            UIApplication.shared.open(url, options: [:]) { success in
-                if !success {
-                    // Fallback: tentar sem trailing slash
-                    if let url2 = URL(string: scheme.replacingOccurrences(of: "://", with: ":")) {
-                        UIApplication.shared.open(url2, options: [:], completionHandler: nil)
-                    }
+        .onAppear {
+            // Minimiza o PPPIX automaticamente após 1.5s mostrando a tela de desbloqueado
+            AppDelegate.skipNextAuthReset = true
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.isOpeningBankApp = true
+            #endif
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                isPresented = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    UIControl().sendAction(#selector(URLSessionTask.suspend),
+                                          to: UIApplication.shared, for: nil)
                 }
             }
         }
     }
+
+
 }
 
 extension Notification.Name {
