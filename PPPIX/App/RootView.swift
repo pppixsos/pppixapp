@@ -459,7 +459,7 @@ struct UnlockPasswordView: View {
     private func sendEmergencyAlert(coord: CLLocationCoordinate2D?) {
         let myEmail  = SessionManager.shared.userEmail
         let userName = SessionManager.shared.userName
-        Task {
+        Task { @MainActor in
             do {
                 let connections  = (try? await APIClient.shared.getAcceptedConnections()) ?? []
                 let recipientIds = connections.map { $0.userId(myEmail: myEmail) }.filter { $0 > 0 }
