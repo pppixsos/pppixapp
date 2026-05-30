@@ -19,6 +19,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     static var pendingUnlockScreen = false
     static var skipNextAuthReset = false
+    // Evita processar o mesmo alerta mais de uma vez (duplicata por polling + push)
+    private static var processedAlertIds = Set<Int>()
 
     func application(
         _ application: UIApplication,
@@ -161,14 +163,31 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let rawSenderName = str(payload["sender_name"])
         let senderName = rawSenderName.isEmpty ? (senderEmail.components(separatedBy: "@").first ?? "Contato") : rawSenderName
 
+        // Deduplicar: não processar o mesmo alerta duas vezes
+        if alertId > 0 {
+            guard !AppDelegate.processedAlertIds.contains(alertId) else {
+                print("[PPPIX] handleEmergencyPayload — ignorado: alerta \(alertId) já processado")
+                return false
+            }
+            AppDelegate.processedAlertIds.insert(alertId)
+            // Limita o set a 50 entradas para não crescer indefinidamente
+            if AppDelegate.processedAlertIds.count > 50 {
+                AppDelegate.processedAlertIds.removeFirst()
+            }
+        }
+
         print("[PPPIX] handleEmergencyPayload PROCESSANDO — id=\(alertId) sender=\(senderEmail)")
 
-        // Mostrar notificação local visível para garantir que o usuário veja
-        // (caso este método seja chamado do didReceiveRemoteNotification em background)
+        // Notificação local visível com som de sirene personalizado
         let content = UNMutableNotificationContent()
         content.title = "🚨 Alerta de Emergência"
         content.body  = "\(senderName) pode estar em perigo! Toque para ver detalhes."
-        content.sound = .defaultCritical
+        // Som personalizado (sirene.mp3) — toca mesmo em background
+        if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("sirene.mp3"))
+        } else {
+            content.sound = .defaultCritical
+        }
         content.interruptionLevel = .critical
         content.userInfo = [
             "alert_id":     alertId > 0 ? String(alertId) : "0",
@@ -181,8 +200,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         )
 
-        // Notificar a UI imediatamente (se app estiver em foreground)
-        EmergencyAudioService.shared.playSiren()
+        // Notificar a UI imediatamente se app estiver em foreground
+        // (em background a sirene toca via UNNotificationSound acima)
+        if UIApplication.shared.applicationState == .active {
+            EmergencyAudioService.shared.playSiren()
+        }
         DispatchQueue.main.async {
             NotificationCenter.default.post(
                 name: .incomingEmergencyAlert,
