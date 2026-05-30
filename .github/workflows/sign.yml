@@ -84,6 +84,17 @@ jobs:
           python3 /tmp/gen_profile.py
           echo "PROFILE_UUID=$(cat /tmp/profile_uuid.txt)" >> $GITHUB_ENV
 
+      - name: Convert sirene.mp3 to sirene.caf for iOS notifications
+        run: |
+          # iOS requer .caf/.aiff/.wav para sons de notificação (não .mp3)
+          # Converter para CAF com formato IMA4 (menor tamanho, compatível iOS)
+          if [ -f "PPPIX/Resources/sirene.mp3" ]; then
+            afconvert PPPIX/Resources/sirene.mp3 PPPIX/Resources/sirene.caf -d ima4 -f caff
+            echo "Convertido: $(ls -lh PPPIX/Resources/sirene.caf)"
+          else
+            echo "AVISO: sirene.mp3 não encontrado em PPPIX/Resources/"
+          fi
+
       - name: Generate xcodeproj with signing
         run: |
           echo "aW1wb3J0IG9zLCByZSwgc3VicHJvY2VzcwoKaWRlbnRpdHkgPSBvcy5lbnZpcm9uWydDRVJUX0lERU5USVRZJ10KdXVpZHMgPSB7fQp3aXRoIG9wZW4oJy90bXAvcHJvZmlsZV91dWlkcy50eHQnKSBhcyBmOgogICAgZm9yIGxpbmUgaW4gZjoKICAgICAgICBsaW5lID0gbGluZS5zdHJpcCgpCiAgICAgICAgaWYgJz0nIGluIGxpbmU6CiAgICAgICAgICAgIGssIHYgPSBsaW5lLnNwbGl0KCc9JywgMSkKICAgICAgICAgICAgdXVpZHNba10gPSB2Cgpjb250ZW50ID0gb3BlbigncHJvamVjdC55bWwnKS5yZWFkKCkKY29udGVudCA9IHJlLnN1YihyJ0NPREVfU0lHTl9JREVOVElUWTogIlteIl0qIicsICdDT0RFX1NJR05fSURFTlRJVFk6ICInICsgaWRlbnRpdHkgKyAnIicsIGNvbnRlbnQpCmNvbnRlbnQgPSBjb250ZW50LnJlcGxhY2UoJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIlBQUElYLU1haW4iJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkcy5nZXQoJ3RlY2gucHBwaXguYXBwJywgJ1BQUElYLU1haW4nKSArICciJykKY29udGVudCA9IGNvbnRlbnQucmVwbGFjZSgnUFJPVklTSU9OSU5HX1BST0ZJTEVfU1BFQ0lGSUVSOiAiUFBQSVgtQmxvY2siJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkcy5nZXQoJ3RlY2gucHBwaXguYXBwLmJsb2NrJywgJ1BQUElYLUJsb2NrJykgKyAnIicpCmNvbnRlbnQgPSBjb250ZW50LnJlcGxhY2UoJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIlBQUElYLU1vbml0b3IiJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkcy5nZXQoJ3RlY2gucHBwaXguYXBwLm1vbml0b3InLCAnUFBQSVgtTW9uaXRvcicpICsgJyInKQpjb250ZW50ID0gY29udGVudC5yZXBsYWNlKCdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICJQUFBJWC1TaGllbGQiJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkcy5nZXQoJ3RlY2gucHBwaXguYXBwLnNoaWVsZCcsICdQUFBJWC1TaGllbGQnKSArICciJykKb3BlbigncHJvamVjdC55bWwnLCAndycpLndyaXRlKGNvbnRlbnQpCnByaW50KCdVVUlEcyBhcGxpY2Fkb3M6JykKZm9yIGwgaW4gY29udGVudC5zcGxpdCgnXG4nKToKICAgIGlmICdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVInIGluIGw6CiAgICAgICAgcHJpbnQoJyAnICsgbC5zdHJpcCgpKQpzdWJwcm9jZXNzLnJ1bihbJ3hjb2RlZ2VuJywgJ2dlbmVyYXRlJywgJy0tc3BlYycsICdwcm9qZWN0LnltbCddLCBjaGVjaz1UcnVlKQpwcmludCgneGNvZGVwcm9qIE9LJykK" | base64 --decode > /tmp/update_signing.py
