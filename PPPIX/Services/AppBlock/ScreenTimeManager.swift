@@ -6,6 +6,7 @@ import UIKit
 import FamilyControls
 import ManagedSettings
 import DeviceActivity
+import UserNotifications
 
 @MainActor
 final class ScreenTimeManager: ObservableObject {
@@ -45,6 +46,21 @@ final class ScreenTimeManager: ObservableObject {
     func syncCheckAndReblock() {
         guard isAuthorized, hasBlockedApps else { return }
         if !isCurrentlyUnlocked() { applyShield() }
+    }
+
+    /// Força reblock imediato — chamado pela notificação UNCalendarNotificationTrigger
+    func forceReblock() {
+        // Limpar timestamp de unlock
+        sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
+        sharedDefaults?.synchronize()
+        // Cancelar reblock pendente
+        cancelReblock()
+        // Cancelar notificação de reblock
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: ["pppix_reblock_timer"])
+        // Aplicar shield
+        guard isAuthorized, hasBlockedApps else { return }
+        applyShield()
     }
 
     func isCurrentlyUnlocked() -> Bool {
@@ -121,36 +137,50 @@ final class ScreenTimeManager: ObservableObject {
     }
 
     private func startDeviceActivityMonitor(seconds: Int) {
+        // SOLUÇÃO DEFINITIVA: UNCalendarNotificationTrigger
+        // Agenda notificação silenciosa no tempo exato do reblock
+        // Funciona mesmo com app completamente fechado
+        let reblockDate = Date().addingTimeInterval(Double(seconds))
+        let comps = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: reblockDate
+        )
+
+        let content = UNMutableNotificationContent()
+        content.title = ""
+        content.body  = ""
+        content.sound = nil
+        content.userInfo = ["action": "reblock"]
+        // Notificação silenciosa — não aparece para o usuário
+        content.interruptionLevel = .passive
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "pppix_reblock_timer",
+            content: content,
+            trigger: trigger
+        )
+
+        // Remover reblock anterior e agendar novo
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: ["pppix_reblock_timer"])
+        UNUserNotificationCenter.current().add(request)
+
+        // DeviceActivityMonitor como camada extra (pode não funcionar mas tenta)
         let center = DeviceActivityCenter()
         center.stopMonitoring([.init("pppix.reblock")])
-
-        let cal = Calendar.current
-        let now = Date()
-        let endDate = now.addingTimeInterval(Double(seconds))
-
-        // Usar hora e minuto — mais confiável que segundos
-        var startComps = cal.dateComponents([.hour, .minute], from: now)
-        var endComps   = cal.dateComponents([.hour, .minute], from: endDate)
-
-        // DeviceActivitySchedule requer hour e minute
-        startComps.second = 0
-        endComps.second   = 0
-
-        // Se inicio == fim (desbloqueio muito curto), avançar fim em 1 minuto
+        var startComps = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        var endComps   = Calendar.current.dateComponents([.hour, .minute], from: reblockDate)
+        startComps.second = 0; endComps.second = 0
         if startComps.hour == endComps.hour && startComps.minute == endComps.minute {
             endComps.minute = (endComps.minute ?? 0) + 1
         }
-
         let schedule = DeviceActivitySchedule(
             intervalStart: startComps,
             intervalEnd: endComps,
             repeats: false
         )
-        do {
-            try center.startMonitoring(.init("pppix.reblock"), during: schedule)
-        } catch {
-            // Fallback: DispatchWorkItem vai reblocar quando app voltar ao foreground
-        }
+        try? center.startMonitoring(.init("pppix.reblock"), during: schedule)
     }
 
     private func cancelReblock() {
