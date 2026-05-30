@@ -1,8 +1,11 @@
 import CoreLocation
 
+/// Serviço de GPS — equivalent ao FusedLocationProviderClient do Android.
+/// Mantém um CLLocationManager ativo para ter localização "quente" disponível.
 final class LocationService: NSObject, @unchecked Sendable {
 
     nonisolated(unsafe) static let shared = LocationService()
+
     private override init() {
         super.init()
         manager.delegate = self
@@ -11,8 +14,12 @@ final class LocationService: NSObject, @unchecked Sendable {
     }
 
     private let manager = CLLocationManager()
+    private var pendingContinuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+    private var timeoutWork: DispatchWorkItem?
 
     var authorizationStatus: CLAuthorizationStatus { manager.authorizationStatus }
+
+    // MARK: - Permissões
 
     func requestPermission() {
         switch manager.authorizationStatus {
@@ -20,75 +27,80 @@ final class LocationService: NSObject, @unchecked Sendable {
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse:
             manager.requestAlwaysAuthorization()
-        default:
-            break
+        default: break
         }
     }
 
-    func getCurrentLocation() async -> CLLocationCoordinate2D? {
-        guard CLLocationManager.locationServicesEnabled() else { return nil }
-        let status = manager.authorizationStatus
-        guard status == .authorizedWhenInUse || status == .authorizedAlways else { return nil }
+    /// Inicia monitoramento de localização em background para ter cache quente.
+    /// Chamar quando o app abre (equivale ao FusedLocationClient do Android que já está ativo).
+    func warmUp() {
+        guard manager.authorizationStatus == .authorizedWhenInUse
+           || manager.authorizationStatus == .authorizedAlways else { return }
+        // Pede localização para popular o cache
+        manager.requestLocation()
+    }
 
-        // Cache recente (< 120s) — retorna imediatamente sem delay
-        if let cached = manager.location, cached.timestamp.timeIntervalSinceNow > -120 {
-            print("[PPPIX] GPS: usando cache — \(cached.coordinate.latitude), \(cached.coordinate.longitude)")
+    // MARK: - Obter localização
+
+    func getCurrentLocation() async -> CLLocationCoordinate2D? {
+        guard CLLocationManager.locationServicesEnabled() else {
+            print("[PPPIX] GPS: serviços desativados")
+            return nil
+        }
+        let status = manager.authorizationStatus
+        guard status == .authorizedWhenInUse || status == .authorizedAlways else {
+            print("[PPPIX] GPS: sem permissão (\(status.rawValue))")
+            return nil
+        }
+
+        // Cache recente (< 120s) com boa precisão — retorna imediatamente
+        if let cached = manager.location,
+           cached.timestamp.timeIntervalSinceNow > -120,
+           cached.horizontalAccuracy > 0,
+           cached.horizontalAccuracy < 1000 {
+            print("[PPPIX] GPS cache: \(cached.coordinate.latitude),\(cached.coordinate.longitude) acc=\(Int(cached.horizontalAccuracy))m")
             return cached.coordinate
         }
 
-        // Solicita leitura com timeout de 8s (emergência — mais tempo para GPS frio)
-        print("[PPPIX] GPS: solicitando localização nova...")
-        return await withCheckedContinuation { (cont: CheckedContinuation<CLLocationCoordinate2D?, Never>) in
-            let helper = LocationRequestHelper(continuation: cont, fallback: self.manager.location?.coordinate)
-            helper.start()
-        }
-    }
-}
-
-// Helper isolado para uma única leitura de localização com timeout
-private final class LocationRequestHelper: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
-    private let manager = CLLocationManager()
-    private let cont: CheckedContinuation<CLLocationCoordinate2D?, Never>
-    private let fallback: CLLocationCoordinate2D?
-    private var finished = false
-
-    init(continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>, fallback: CLLocationCoordinate2D?) {
-        self.cont = continuation
-        self.fallback = fallback
-        super.init()
-    }
-
-    func start() {
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        manager.requestLocation()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
-            print("[PPPIX] GPS timeout — usando fallback: \(String(describing: self?.fallback))")
-            self?.finish(with: self?.fallback)
+        print("[PPPIX] GPS: solicitando nova leitura...")
+        return await withCheckedContinuation { continuation in
+            self.pendingContinuation = continuation
+            let fallback = self.manager.location?.coordinate
+            let work = DispatchWorkItem { [weak self] in
+                print("[PPPIX] GPS timeout — fallback: \(String(describing: fallback))")
+                self?.resolve(fallback)
+            }
+            self.timeoutWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
+            self.manager.requestLocation()
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        finish(with: locations.last?.coordinate)
-    }
-
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        finish(with: fallback)
-    }
-
-    private func finish(with coord: CLLocationCoordinate2D?) {
-        guard !finished else { return }
-        finished = true
-        cont.resume(returning: coord)
+    private func resolve(_ coord: CLLocationCoordinate2D?) {
+        timeoutWork?.cancel()
+        timeoutWork = nil
+        if let cont = pendingContinuation {
+            pendingContinuation = nil
+            cont.resume(returning: coord)
+        }
     }
 }
 
 extension LocationService: CLLocationManagerDelegate {
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {}
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let loc = locations.last, loc.horizontalAccuracy >= 0 else { return }
+        print("[PPPIX] GPS obtido: \(loc.coordinate.latitude),\(loc.coordinate.longitude) acc=\(Int(loc.horizontalAccuracy))m")
+        resolve(loc.coordinate)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("[PPPIX] GPS erro: \(error.localizedDescription)")
+        resolve(manager.location?.coordinate)
+    }
+
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let s = manager.authorizationStatus
+        print("[PPPIX] GPS auth: \(s.rawValue)")
         if s == .authorizedWhenInUse || s == .authorizedAlways {
             manager.requestLocation()
         }
