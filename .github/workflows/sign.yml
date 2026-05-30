@@ -121,6 +121,14 @@ jobs:
           grep -E "error:|\.swift:[0-9]" /tmp/xcodebuild.log | grep -v "^$" | head -30
           exit $BUILD_EXIT
 
+      - name: Verificar entitlements no archive
+        run: |
+          APP_PATH=$(find $RUNNER_TEMP/PPPIX.xcarchive -name "PPPIX.app" | head -1)
+          echo "=== Entitlements assinados no app ==="
+          codesign -d --entitlements :- "$APP_PATH" 2>/dev/null || echo "codesign falhou"
+          echo "=== Verificando aps-environment ==="
+          codesign -d --entitlements :- "$APP_PATH" 2>/dev/null | grep -A1 "aps-environment" || echo "AVISO: aps-environment NAO encontrado no binario!"
+
       - name: Export IPA
         run: |
           MAIN_UUID=$(grep "tech.pppix.app=" /tmp/profile_uuids.txt | cut -d= -f2)
