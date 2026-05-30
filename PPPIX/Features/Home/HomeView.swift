@@ -274,55 +274,49 @@ private struct TestNotificationButton: View {
         isTesting = true
         result = ""
 
-        // Verificar permissão
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                let status = settings.authorizationStatus
-                AlertDiagnosticLog.shared.log("TEST: permissão=\(status.rawValue) sound=\(settings.soundSetting.rawValue)")
+        Task { @MainActor in
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            let status = settings.authorizationStatus
+            AlertDiagnosticLog.shared.log("TEST: permissão=\(status.rawValue) sound=\(settings.soundSetting.rawValue)")
 
-                guard status == .authorized else {
-                    result = "Permissão negada (\(status.rawValue)). Vá em Ajustes > PPPIX > Notificações."
-                    isTesting = false
-                    return
-                }
-
-                // Criar notificação de teste com 2 segundos de delay
-                let content = UNMutableNotificationContent()
-                content.title = "🚨 TESTE — Alerta de Emergência"
-                content.body = "Notificação de teste. Se você ver isso, está funcionando!"
-                content.interruptionLevel = .timeSensitive
-
-                // Tentar sirene.caf primeiro
-                if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
-                    content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
-                    result = "Usando sirene.caf — aguarde 3s..."
-                    AlertDiagnosticLog.shared.log("TEST: som=sirene.caf")
-                } else if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
-                    content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
-                    result = "Usando sirene.mp3 — aguarde 3s..."
-                    AlertDiagnosticLog.shared.log("TEST: som=sirene.mp3")
-                } else {
-                    content.sound = .default
-                    result = "Sirene não encontrada, usando som padrão — aguarde 3s..."
-                    AlertDiagnosticLog.shared.log("TEST: som=padrão (sirene não encontrada no bundle)")
-                }
-
-                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false)
-                let request = UNNotificationRequest(identifier: "pppix_test_\(Int(Date().timeIntervalSince1970))", content: content, trigger: trigger)
-
-                UNUserNotificationCenter.current().add(request) { error in
-                    DispatchQueue.main.async {
-                        isTesting = false
-                        if let error = error {
-                            result = "ERRO: \(error.localizedDescription)"
-                            AlertDiagnosticLog.shared.log("TEST: ERRO ao agendar: \(error)")
-                        } else {
-                            result = "✅ Agendado! Minimize o app agora para ver o banner."
-                            AlertDiagnosticLog.shared.log("TEST: notificação agendada com sucesso")
-                        }
-                    }
-                }
+            guard status == .authorized else {
+                result = "Permissão negada (\(status.rawValue)). Vá em Ajustes > PPPIX > Notificações."
+                isTesting = false
+                return
             }
+
+            let content = UNMutableNotificationContent()
+            content.title = "🚨 TESTE — Alerta de Emergência"
+            content.body = "Notificação de teste. Se você ver isso, está funcionando!"
+            content.interruptionLevel = .timeSensitive
+
+            if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
+                result = "Usando sirene.caf — minimize o app agora!"
+                AlertDiagnosticLog.shared.log("TEST: som=sirene.caf")
+            } else if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
+                result = "Usando sirene.mp3 — minimize o app agora!"
+                AlertDiagnosticLog.shared.log("TEST: som=sirene.mp3")
+            } else {
+                content.sound = .default
+                result = "Sem sirene no bundle — usando som padrão. Minimize o app!"
+                AlertDiagnosticLog.shared.log("TEST: som=padrão (sirene não encontrada)")
+            }
+
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "pppix_test_\(Int(Date().timeIntervalSince1970))",
+                content: content, trigger: trigger
+            )
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+                AlertDiagnosticLog.shared.log("TEST: notificação agendada com sucesso ✅")
+            } catch {
+                result = "ERRO: \(error.localizedDescription)"
+                AlertDiagnosticLog.shared.log("TEST: ERRO ao agendar: \(error)")
+            }
+            isTesting = false
         }
     }
 }
