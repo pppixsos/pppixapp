@@ -159,9 +159,10 @@ struct RootView: View {
                     let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
                     return !isMine && s != "cancelled" && s != "read" && s != "cancel"
                 })
-                if let a = unread, self.emergencyAlert?.id != a.id {
-                    self.emergencyAlert = a
-                }
+                guard let a = unread, self.emergencyAlert?.id != a.id else { return }
+                // Marcar como lido para não aparecer em polls futuros
+                try? await APIClient.shared.markAlertRead(id: a.id)
+                self.emergencyAlert = a
             }
         }
     }
@@ -448,30 +449,26 @@ struct UnlockPasswordView: View {
     private func verify() {
         guard !password.isEmpty, !isLoading else { return }
         isLoading = true; errorMsg = ""
-        Task {
+        Task { @MainActor in
             do {
-                // FIX VELOCIDADE: verifica senha SEM localização primeiro (rápido)
+                // Verifica senha SEM localização primeiro (rápido)
                 // Localização só é buscada se a ação for open_bank_alert (senha 3)
                 let r = try await APIClient.shared.verifyPassword(
                     body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
 
                 if r.action == "open_bank_alert" {
                     // Senha 3: unlock imediato, localização em background
-                    await MainActor.run {
-                        isLoading = false
-                        handleResponse(r, coord: nil)
-                    }
+                    isLoading = false
+                    handleResponse(r, coord: nil)
                     // Busca localização após unlock (não bloqueia UI)
                     let location = await LocationService.shared.getCurrentLocation()
                     sendEmergencyAlert(coord: location)
                 } else {
-                    await MainActor.run {
-                        isLoading = false
-                        handleResponse(r, coord: nil)
-                    }
+                    isLoading = false
+                    handleResponse(r, coord: nil)
                 }
             } catch {
-                await MainActor.run { isLoading = false; errorMsg = "Senha incorreta"; password = "" }
+                isLoading = false; errorMsg = "Senha incorreta"; password = ""
             }
         }
     }
