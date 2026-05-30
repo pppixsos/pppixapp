@@ -171,6 +171,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
+@MainActor
 extension AppDelegate: UNUserNotificationCenterDelegate {
 
     // App em FOREGROUND — notificação chegou
@@ -254,11 +255,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         return result
     }
 
-    private func intVal(_ val: Any?) -> Int {
-        (val as? Int) ?? (val as? String).flatMap(Int.init) ?? (val as? NSString).flatMap { Int($0 as String) } ?? 0
-    }
 }
 
+@MainActor
 extension AppDelegate: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
