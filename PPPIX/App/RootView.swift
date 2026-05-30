@@ -759,32 +759,22 @@ struct ArrowUnlockView: View {
             "com.zhiliaoapp.musically":      "tiktok://",
         ]
 
-        // FIX: sinaliza para NÃO pedir senha quando o PPPIX voltar ao foreground
+        // Sinaliza para NÃO pedir senha quando PPPIX voltar ao foreground
         AppDelegate.skipNextAuthReset = true
 
-        // Sinaliza que estamos indo para background PROPOSITALMENTE
+        // Sinaliza que abrimos o banco propositalmente (evita reblock prematuro)
         #if !targetEnvironment(simulator)
         ScreenTimeManager.shared.isOpeningBankApp = true
         #endif
 
-        // Fecha a tela
-        isPresented = false
+        // Abre o app ANTES de fechar a tela
+        if let scheme = schemes[bundleId], let url = URL(string: scheme) {
+            UIApplication.shared.open(url, options: [:]) { _ in }
+        }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // Abrir direto pelo URL scheme sem canOpenURL
-            // (canOpenURL retorna false quando Screen Time está ativo)
-            if let scheme = schemes[bundleId], let url = URL(string: scheme) {
-                UIApplication.shared.open(url, options: [:]) { success in
-                    if !success {
-                        // Se falhou, tentar ir para home e o usuário abre manualmente
-                        // (o app já está desbloqueado pelo Screen Time)
-                        if let homeURL = URL(string: "itms-apps://") {
-                            // não faz nada — app já desbloqueado
-                        }
-                    }
-                }
-            }
-            // Sem scheme mapeado: app já desbloqueado, usuário vai manualmente
+        // Fecha a tela após abrir o app
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            isPresented = false
         }
     }
 }
