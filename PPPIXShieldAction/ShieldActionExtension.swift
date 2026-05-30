@@ -84,9 +84,11 @@ class ShieldActionExtension: ShieldActionDelegate {
         content.interruptionLevel = .timeSensitive
         content.relevanceScore = 1.0
 
+        // Delay de 2s para garantir que o banco minimizou antes da notificação aparecer
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
-        let request = UNNotificationRequest(identifier: "pppix_unlock", content: content, trigger: nil)
+        let request = UNNotificationRequest(identifier: "pppix_unlock", content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
     }
 }
