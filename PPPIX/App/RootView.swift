@@ -30,6 +30,7 @@ struct RootView: View {
 
     @State private var showAlertDetail: Int?  = nil
     @State private var emergencyAlert: Alert? = nil
+    @State private var skipAuthForAlert = false  // pula senha 2 quando alerta chega via notificação
     @State private var alertPollTimer: Timer? = nil
 
     // Inicializa com true se há notificação pendente (cold start instantâneo)
@@ -56,7 +57,7 @@ struct RootView: View {
         Group {
             if !session.isLoggedIn {
                 LoginView()
-            } else if !auth.isAuthenticated && PPPIXAuthState.hasAppPassword {
+            } else if !auth.isAuthenticated && PPPIXAuthState.hasAppPassword && !skipAuthForAlert {
                 PPPIXLoginView(onAuthenticated: { auth.isAuthenticated = true })
             } else {
                 HomeView()
@@ -70,7 +71,12 @@ struct RootView: View {
             })
         }
         .fullScreenCover(item: $emergencyAlert) { alert in
-            EmergencyAlertView(alert: alert, onDismiss: { emergencyAlert = nil })
+            EmergencyAlertView(alert: alert, onDismiss: {
+                emergencyAlert = nil
+                skipAuthForAlert = false
+                // Se não estava autenticado antes do alerta, volta a pedir senha 2
+                // (não faz nada — a PPPIXLoginView já estava esperando)
+            })
         }
         .onAppear {
             #if !targetEnvironment(simulator)
@@ -109,9 +115,12 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .incomingEmergencyAlert)) { notif in
             let id = notif.userInfo?["alert_id"] as? Int ?? 0
             AlertDiagnosticLog.shared.log("RECEBER(push): notificação chegou id=\(id)")
+            // Pular senha 2 para mostrar o alerta diretamente
+            skipAuthForAlert = true
             // Se já foi mostrado localmente, ignorar
             if id > 0 && AlertDeduplicator.shared.shownIds.contains(id) {
                 AlertDiagnosticLog.shared.log("RECEBER(push): id=\(id) já exibido — ignorado")
+                skipAuthForAlert = false
                 return
             }
             Task { @MainActor in
@@ -318,17 +327,38 @@ struct EmergencyAlertView: View {
                         .background(Color(hex: "#CC0000")).cornerRadius(14)
                     }
 
+                    // Botão parar sirene (sempre visível)
+                    Button {
+                        EmergencyAudioService.shared.stopSiren()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "speaker.slash.fill")
+                            Text("Parar Sirene")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .foregroundColor(Color(white: 0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(white: 0.1))
+                        .cornerRadius(12)
+                    }
+
                     if isSender && !cancelled {
                         PPPIXButton(title: "Estou Bem — Cancelar Alerta", isLoading: isCancelling) {
                             Task {
                                 isCancelling = true
                                 try? await APIClient.shared.patchAlertStatus(id: alert.id, status: "cancelled")
-                                isCancelling = false; cancelled = true; onDismiss()
+                                isCancelling = false; cancelled = true
+                                EmergencyAudioService.shared.stopSiren()
+                                onDismiss()
                             }
                         }
                     } else {
-                        Button("Fechar") { onDismiss() }
-                            .font(.subheadline).foregroundColor(Color(white: 0.4)).padding(.bottom, 8)
+                        Button("Fechar") {
+                            EmergencyAudioService.shared.stopSiren()
+                            onDismiss()
+                        }
+                        .font(.subheadline).foregroundColor(Color(white: 0.4)).padding(.bottom, 8)
                     }
                     Spacer(minLength: 40)
                 }
@@ -534,6 +564,7 @@ struct UnlockPasswordView: View {
     private func handleResponse(_ r: VerifyPasswordResponse, coord: CLLocationCoordinate2D?) {
         let bundleId = sharedDefaults?.string(forKey: "pppix_target_bundle_id") ?? ""
         let appName  = appDisplayName(for: bundleId)
+        let openedDirectly = bundleId.isEmpty // Abriu o PPPIX direto, não via app bloqueado
 
         // Limpa o debounce para permitir próxima solicitação do mesmo app
         sharedDefaults?.removeObject(forKey: "pppix_password_request_time")
@@ -545,20 +576,31 @@ struct UnlockPasswordView: View {
             onPPPIXAccess()
 
         case "open_bank":
-            #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
-            #endif
-            unlockedApp = appName
-            showArrow = true
+            if openedDirectly {
+                // Usuário abriu o PPPIX diretamente e digitou senha do banco
+                errorMsg = "Ops! Use essa senha nos apps bloqueados para desbloqueá-los."
+                password = ""
+            } else {
+                #if !targetEnvironment(simulator)
+                ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
+                #endif
+                unlockedApp = appName
+                showArrow = true
+            }
 
         case "open_bank_alert":
-            // FIX SENHA 3: mesmo unlock individual que senha 1
-            // O alerta é disparado separadamente em verify() após buscar localização
-            #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
-            #endif
-            unlockedApp = appName
-            showArrow = true
+            if openedDirectly {
+                // Usuário abriu o PPPIX diretamente e digitou senha de emergência
+                // O alerta JÁ foi enviado em verify() — só mostrar aviso
+                errorMsg = "Ops! Use essa senha nos apps bloqueados para desbloqueá-los."
+                password = ""
+            } else {
+                #if !targetEnvironment(simulator)
+                ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
+                #endif
+                unlockedApp = appName
+                showArrow = true
+            }
 
         default:
             errorMsg = "Senha incorreta"
@@ -705,7 +747,10 @@ struct ArrowUnlockView: View {
                     }
                     .padding(.horizontal, 28)
 
-                    Button { isPresented = false } label: {
+                    Button {
+                        EmergencyAudioService.shared.stopSiren()
+                        isPresented = false
+                    } label: {
                         Text("Fechar")
                             .font(.subheadline)
                             .foregroundColor(Color(white: 0.35))
@@ -717,6 +762,7 @@ struct ArrowUnlockView: View {
     }
 
     private func openUnlockedApp() {
+        EmergencyAudioService.shared.stopSiren()
         let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?.string(forKey: "pppix_target_bundle_id") ?? ""
         let schemes: [String: String] = [
             "com.santander.app":             "santander://",
@@ -736,27 +782,36 @@ struct ArrowUnlockView: View {
             "com.zhiliaoapp.musically":      "tiktok://",
         ]
 
-        guard let scheme = schemes[bundleId], let url = URL(string: scheme) else {
-            // App sem URL scheme — só fecha a tela
-            isPresented = false
-            return
-        }
-
         // FIX: sinaliza para NÃO pedir senha quando o PPPIX voltar ao foreground
         AppDelegate.skipNextAuthReset = true
 
-        // Sinaliza que estamos indo para background PROPOSITALMENTE (abrindo o banco)
-        // Isso evita que reblockOnBackground() aplique shield prematuramente
+        // Sinaliza que estamos indo para background PROPOSITALMENTE
         #if !targetEnvironment(simulator)
         ScreenTimeManager.shared.isOpeningBankApp = true
         #endif
 
-        // Fecha TODOS os covers de uma vez antes de abrir o outro app
+        // Fecha a tela
         isPresented = false
 
-        // Abre o app com delay mínimo para o dismiss animar
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            // Tentar URL scheme específico do app
+            if let scheme = schemes[bundleId],
+               let url = URL(string: scheme),
+               UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                return
+            }
+
+            // Fallback: tentar abrir pelo bundle ID usando prefs: URL
+            // (funciona em alguns apps)
+            if let url = URL(string: "prefs:root=\(bundleId)"),
+               UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                return
+            }
+
+            // Último fallback: home screen (usuário vai ao app manualmente)
+            // O app já está desbloqueado pelo Screen Time
         }
     }
 }
