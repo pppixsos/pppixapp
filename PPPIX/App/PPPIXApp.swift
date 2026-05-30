@@ -72,6 +72,38 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         LocationService.shared.warmUp()
 
         BackgroundTaskManager.shared.registerTasks()
+
+        // Quando usuário fizer login, tentar registrar FCM token se disponível
+        NotificationCenter.default.addObserver(
+            forName: .pppixUserDidLogin, object: nil, queue: .main) { _ in
+            if let token = SessionManager.shared.fcmToken {
+                Task { @MainActor in
+                    do {
+                        try await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+                        AlertDiagnosticLog.shared.log("FCM re-registrado após login")
+                    } catch {
+                        AlertDiagnosticLog.shared.log("FCM re-registro ERRO: \(error)")
+                    }
+                }
+            } else {
+                // Forçar refresh do token FCM
+                Messaging.messaging().deleteToken { error in
+                    if let error = error {
+                        AlertDiagnosticLog.shared.log("FCM deleteToken erro: \(error.localizedDescription)")
+                    } else {
+                        Messaging.messaging().token { token, error in
+                            if let token = token {
+                                Task { @MainActor in
+                                    AlertDiagnosticLog.shared.log("FCM token forçado: \(token.prefix(20))...")
+                                    try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         return true
     }
 
@@ -93,11 +125,14 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
+        let tokenStr = deviceToken.map { String(format: "%02x", $0) }.joined()
+        Task { @MainActor in AlertDiagnosticLog.shared.log("APNS token OK: \(tokenStr.prefix(20))...") }
     }
 
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("[PPPIX] APNS register failed: \(error)")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("APNS FALHOU: \(error.localizedDescription)") }
         Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] APNS register failed: \(error)") }
     }
 
@@ -389,8 +424,15 @@ extension AppDelegate: @preconcurrency MessagingDelegate {
         SessionManager.shared.fcmToken = token
         if SessionManager.shared.isLoggedIn {
             Task { @MainActor in
-                try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+                do {
+                    try await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+                    AlertDiagnosticLog.shared.log("FCM iOS registrado com sucesso")
+                } catch {
+                    AlertDiagnosticLog.shared.log("FCM iOS registro ERRO: \(error)")
+                }
             }
+        } else {
+            Task { @MainActor in AlertDiagnosticLog.shared.log("FCM token recebido mas não logado — guardado para depois") }
         }
     }
 }
