@@ -38,11 +38,13 @@ final class LocationService: NSObject, @unchecked Sendable {
     func getCurrentLocation() async -> CLLocationCoordinate2D? {
         guard CLLocationManager.locationServicesEnabled() else {
             print("[PPPIX] GPS: serviços desativados")
+            Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS: serviços desativados") }
             return nil
         }
         let status = manager.authorizationStatus
         guard status == .authorizedWhenInUse || status == .authorizedAlways else {
             print("[PPPIX] GPS: sem permissão (\(status.rawValue))")
+            Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS: sem permissão (\(status.rawValue))") }
             return nil
         }
 
@@ -52,12 +54,14 @@ final class LocationService: NSObject, @unchecked Sendable {
            cached.horizontalAccuracy > 0,
            cached.horizontalAccuracy < 200 {
             print("[PPPIX] GPS cache recente (\(Int(-cached.timestamp.timeIntervalSinceNow))s): \(cached.coordinate.latitude),\(cached.coordinate.longitude) acc=\(Int(cached.horizontalAccuracy))m")
+            Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS cache recente (\(Int(-cached.timestamp.timeIntervalSinceNow))s): \(cached.coordinate.latitude),\(cached.coordinate.longitude) acc=\(Int(cached.horizontalAccuracy))m") }
             return cached.coordinate
         }
 
         // Solicitar com melhor precisão para emergência
         manager.desiredAccuracy = kCLLocationAccuracyBest
         print("[PPPIX] GPS: solicitando localização de alta precisão...")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS: solicitando localização de alta precisão...") }
 
         return await withCheckedContinuation { continuation in
             self.pendingContinuation = continuation
@@ -67,8 +71,10 @@ final class LocationService: NSObject, @unchecked Sendable {
             let work = DispatchWorkItem { [weak self] in
                 if let fb = fallback {
                     print("[PPPIX] GPS timeout — usando fallback: \(fb.latitude),\(fb.longitude)")
+                    Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS timeout — usando fallback: \(fb.latitude),\(fb.longitude)") }
                 } else {
                     print("[PPPIX] GPS timeout — sem localização disponível")
+                    Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS timeout — sem localização disponível") }
                 }
                 self?.resolve(fallback)
             }
@@ -94,17 +100,20 @@ extension LocationService: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last, loc.horizontalAccuracy >= 0 else { return }
         print("[PPPIX] GPS obtido: \(loc.coordinate.latitude),\(loc.coordinate.longitude) acc=\(Int(loc.horizontalAccuracy))m")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS obtido: \(loc.coordinate.latitude),\(loc.coordinate.longitude) acc=\(Int(loc.horizontalAccuracy))m") }
         resolve(loc.coordinate)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("[PPPIX] GPS erro: \(error.localizedDescription)")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS erro: \(error.localizedDescription)") }
         resolve(manager.location?.coordinate)
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let s = manager.authorizationStatus
         print("[PPPIX] GPS auth mudou: \(s.rawValue)")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS auth mudou: \(s.rawValue)") }
         if s == .authorizedWhenInUse || s == .authorizedAlways {
             manager.requestLocation()
         }
