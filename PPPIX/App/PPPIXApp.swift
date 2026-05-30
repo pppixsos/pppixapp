@@ -192,8 +192,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             AlertDiagnosticLog.shared.log("NOTIF: criando com som padrão id=\(alertId)")
         }
         let identifier = "pppix_alert_\(alertId)"
+        // Trigger de 1s garante que iOS processa corretamente em qualquer estado do app
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
         UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+            UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         ) { error in
             if let error = error {
                 Task { @MainActor in AlertDiagnosticLog.shared.log("NOTIF: erro ao adicionar: \(error)") }
