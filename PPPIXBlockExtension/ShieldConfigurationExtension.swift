@@ -33,11 +33,15 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     // Verifica se o período de unlock expirou e reaplica o shield se necessário
     private func checkAndReblockIfExpired(application: Application) {
         let unlockUntil = sharedDefaults?.double(forKey: "pppix_unlocked_until") ?? 0
-        if unlockUntil > 0 && Date().timeIntervalSince1970 > unlockUntil {
-            // Unlock expirou — reaplica todos os shields
+        let now = Date().timeIntervalSince1970
+
+        // Se nunca foi desbloqueado OU se o unlock expirou → garantir shield aplicado
+        if unlockUntil == 0 || now > unlockUntil {
             reapplyFullShield()
-            sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
-            sharedDefaults?.synchronize()
+            if unlockUntil > 0 {
+                sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
+                sharedDefaults?.synchronize()
+            }
         }
     }
 
