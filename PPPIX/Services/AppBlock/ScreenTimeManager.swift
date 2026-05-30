@@ -135,8 +135,18 @@ final class ScreenTimeManager: ObservableObject {
     private func performReblock() {
         sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
         sharedDefaults?.synchronize()
-        applyShield()
-        cancelReblock()
+        // Só reblocar se o app PPPIX não estiver em foreground ativo
+        // Se o usuário ainda está usando o app, aguarda ele minimizar
+        let state = UIApplication.shared.applicationState
+        if state == .background || state == .inactive {
+            applyShield()
+            cancelReblock()
+        } else {
+            // App em foreground — reagendar para daqui 5s e verificar novamente
+            let workItem = DispatchWorkItem { [weak self] in self?.performReblock() }
+            reblockWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: workItem)
+        }
     }
 
     func reblockOnBackground() {
