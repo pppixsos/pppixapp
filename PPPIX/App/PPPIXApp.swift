@@ -171,8 +171,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-@MainActor
-extension AppDelegate: UNUserNotificationCenterDelegate {
+extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
 
     // App em FOREGROUND — notificação chegou
     func userNotificationCenter(
@@ -257,8 +256,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
 }
 
-@MainActor
-extension AppDelegate: MessagingDelegate {
+extension AppDelegate: @preconcurrency MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
         SessionManager.shared.fcmToken = token
