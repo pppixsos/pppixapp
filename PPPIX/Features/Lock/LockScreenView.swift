@@ -146,35 +146,73 @@ struct LockScreenView: View {
     }
 
     private func sendSilentAlert(coord: CLLocationCoordinate2D?) {
-        let myEmail = SessionManager.shared.userEmail
+        let myEmail  = SessionManager.shared.userEmail
         let userName = SessionManager.shared.userName
+        let latStr   = coord.map { String(format: "%.6f", $0.latitude) }
+        let lonStr   = coord.map { String(format: "%.6f", $0.longitude) }
 
-        Task {
+        print("[PPPIX] sendSilentAlert início — user=\(myEmail) lat=\(latStr ?? "nil")")
+
+        guard !myEmail.isEmpty else {
+            print("[PPPIX] sendSilentAlert ABORTADO — userEmail vazio")
+            return
+        }
+
+        // @MainActor obrigatório pois APIClient é @MainActor
+        Task { @MainActor in
             do {
+                // 1. Buscar conexões aceitas para obter recipient_ids
                 let connections = (try? await APIClient.shared.getAcceptedConnections()) ?? []
                 let recipientIds = connections.map { $0.userId(myEmail: myEmail) }.filter { $0 > 0 }
+                print("[PPPIX] sendSilentAlert — \(connections.count) conexões, ids: \(recipientIds)")
 
+                // 2. Veículo ativo
                 let vehicles = (try? await APIClient.shared.getVehicles()) ?? []
                 let vehicle = vehicles.first(where: { $0.is_active }) ?? vehicles.first
                 let vehiclePayload = vehicle.map {
-                    VehicleInfoPayload(model: $0.model, license_plate: $0.license_plate, color: $0.color, year: $0.year)
+                    VehicleInfoPayload(model: $0.model, license_plate: $0.license_plate,
+                                       color: $0.color, year: $0.year)
                 }
 
+                // 3. Enviar alerta
                 let body = SendAlertRequest(
                     alert_type: "emergency_password",
                     priority: "critical",
                     title: "🚨 Senha de Emergência",
                     message: "\(userName) utilizou a senha de emergência e pode estar em perigo!",
-                    latitude: coord.map { String(format: "%.6f", $0.latitude) },
-                    longitude: coord.map { String(format: "%.6f", $0.longitude) },
+                    latitude: latStr,
+                    longitude: lonStr,
                     metadata: AlertMetadata(
                         timestamp: String(Int(Date().timeIntervalSince1970 * 1000)),
                         vehicle_info: vehiclePayload
                     ),
                     recipient_ids: recipientIds
                 )
-                _ = try await APIClient.shared.sendAlert(body: body)
-            } catch {}
+                let result = try await APIClient.shared.sendAlert(body: body)
+                print("[PPPIX] sendSilentAlert ENVIADO — id=\(result.id)")
+            } catch {
+                // Retry sem recipient_ids — backend usa conexões do usuário logado
+                print("[PPPIX] sendSilentAlert ERRO: \(error) — tentando retry sem ids")
+                do {
+                    let body = SendAlertRequest(
+                        alert_type: "emergency_password",
+                        priority: "critical",
+                        title: "🚨 Senha de Emergência",
+                        message: "\(userName) utilizou a senha de emergência e pode estar em perigo!",
+                        latitude: latStr,
+                        longitude: lonStr,
+                        metadata: AlertMetadata(
+                            timestamp: String(Int(Date().timeIntervalSince1970 * 1000)),
+                            vehicle_info: nil
+                        ),
+                        recipient_ids: []
+                    )
+                    let result = try await APIClient.shared.sendAlert(body: body)
+                    print("[PPPIX] sendSilentAlert RETRY OK — id=\(result.id)")
+                } catch {
+                    print("[PPPIX] sendSilentAlert RETRY FALHOU: \(error)")
+                }
+            }
         }
     }
 }
