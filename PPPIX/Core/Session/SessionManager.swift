@@ -225,7 +225,3 @@ final class SessionManager: ObservableObject {
         SecItemDelete(query as CFDictionary)
     }
 }
-
-extension Notification.Name {
-    static let pppixUserDidLogin = Notification.Name("pppix.userDidLogin")
-}
