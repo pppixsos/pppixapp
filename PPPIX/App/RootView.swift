@@ -169,6 +169,8 @@ struct RootView: View {
             "sender_email": a.sender_email,
             "sender_name":  a.sender_name
         ]
+        // handleEmergencyPayload vai marcar como shown E criar notificação local
+        // emergencyAlert é setado aqui diretamente para abrir a tela
         Task { @MainActor in
             (UIApplication.shared.delegate as? AppDelegate)?.handleEmergencyPayload(notifPayload)
         }
@@ -176,8 +178,6 @@ struct RootView: View {
             try? await APIClient.shared.markAlertRead(id: a.id)
             AlertDiagnosticLog.shared.log("RECEBER: markAlertRead id=\(a.id)")
         }
-        // Setar emergencyAlert diretamente — mais simples e sem risco de loop
-        markShown(a.id)
         emergencyAlert = a
     }
 
