@@ -122,18 +122,25 @@ final class ScreenTimeManager: ObservableObject {
 
     private func startDeviceActivityMonitor(seconds: Int) {
         let center = DeviceActivityCenter()
-        let now = Calendar.current.dateComponents([.hour, .minute, .second], from: Date())
-        let end = Calendar.current.dateComponents([.hour, .minute, .second],
-                                                   from: Date().addingTimeInterval(Double(seconds)))
+        // Parar monitoramento anterior se houver
+        center.stopMonitoring([.init("pppix.reblock")])
+
+        let cal = Calendar.current
+        let startComponents = cal.dateComponents([.hour, .minute, .second], from: Date())
+        let endDate = Date().addingTimeInterval(Double(seconds))
+        let endComponents = cal.dateComponents([.hour, .minute, .second], from: endDate)
+
         let schedule = DeviceActivitySchedule(
-            intervalStart: now,
-            intervalEnd: end,
-            repeats: false
+            intervalStart: startComponents,
+            intervalEnd: endComponents,
+            repeats: false,
+            warningTime: nil
         )
-        try? center.startMonitoring(
-            .init("pppix.reblock"),
-            during: schedule
-        )
+        do {
+            try center.startMonitoring(.init("pppix.reblock"), during: schedule)
+        } catch {
+            // Se falhar, o DispatchWorkItem ainda vai reblocar quando o app estiver ativo
+        }
     }
 
     private func cancelReblock() {
