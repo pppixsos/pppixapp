@@ -121,14 +121,20 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     private func processEmergencyAlert(payload: [String: Any]) -> Bool {
         let alertType   = str(payload["alert_type"])
         let senderEmail = str(payload["sender_email"])
+        print("[PPPIX] processEmergencyAlert — type: \(alertType), sender: \(senderEmail), payload keys: \(payload.keys.joined(separator: ","))")
 
         // Aceita qualquer alerta de emergência — o backend já filtra destinatários
-        // Não filtra por senderEmail aqui pois o SessionManager pode estar vazio em background
-        guard !alertType.isEmpty else { return false }
+        guard !alertType.isEmpty else {
+            print("[PPPIX] processEmergencyAlert — ignorado: alertType vazio")
+            return false
+        }
 
         let isEmergency = alertType.contains("emergency") || alertType.contains("alert")
                        || alertType == "wrong_password"
-        guard isEmergency else { return false }
+        guard isEmergency else {
+            print("[PPPIX] processEmergencyAlert — ignorado: não é emergência")
+            return false
+        }
 
         let alertId = intVal(payload["alert_id"])
 
@@ -224,8 +230,10 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
                 triggerUnlockScreen()
             } else {
                 // Toque em notificação de alerta de emergência
-                let alertId = intVal(payload["alert_id"])
-                if alertId > 0 {
+                // Aceita alert_id ou id, como Int ou String
+                let alertId = intVal(payload["alert_id"] ?? payload["id"])
+                let alertType = str(payload["alert_type"])
+                if alertId > 0 || alertType.contains("emergency") {
                     EmergencyAudioService.shared.playSiren()
                     DispatchQueue.main.async {
                         NotificationCenter.default.post(
