@@ -244,7 +244,8 @@ struct EmergencyAlertView: View {
                     .background(Color(hex: "#330000")).cornerRadius(16)
 
                     infoCard(icon: "person.fill", color: Color(hex: "#3366FF"),
-                             label: "Pessoa", value: alert.sender_name)
+                             label: "Pessoa",
+                             value: alert.sender_name.isEmpty ? alert.sender_email : alert.sender_name)
 
                     if alert.has_location, let url = alert.googleMapsURL {
                         Link(destination: url) {
