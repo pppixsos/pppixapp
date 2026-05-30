@@ -161,21 +161,11 @@ struct RootView: View {
             return
         }
         AlertDiagnosticLog.shared.log("RECEBER(\(source)): NOVO id=\(a.id) de=\(a.sender_email) status=\(a.status)")
-        // Marcar DEPOIS de setar emergencyAlert para evitar que onReceive ignore o alerta
-        // Criar notificação local com som
-        let notifPayload: [String: Any] = [
-            "alert_id":     String(a.id),
-            "alert_type":   a.alert_type,
-            "sender_email": a.sender_email,
-            "sender_name":  a.sender_name
-        ]
         // Marcar IMEDIATAMENTE antes de qualquer Task para garantir deduplicação
         AlertDeduplicator.shared.markShown(a.id)
-        // Criar notificação local com som via handleEmergencyPayload
+        // Criar notificação local com som
         Task { @MainActor in
-            // Passar skipDedup: true para não bloquear por já estar no Deduplicator
             if let delegate = UIApplication.shared.delegate as? AppDelegate {
-                // Criar notificação diretamente sem passar pelo guard do Deduplicator
                 delegate.createEmergencyNotification(
                     alertId: a.id,
                     alertType: a.alert_type,
