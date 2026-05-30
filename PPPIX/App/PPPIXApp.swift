@@ -160,12 +160,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             }
             completionHandler(.newData)
         } else {
-            // Pode ser alerta de emergência — processar
-            if handleEmergencyPayload(payload) {
-                completionHandler(.newData)
-            } else {
-                completionHandler(.noData)
+            // Pode ser alerta de emergência — processar no MainActor
+            Task { @MainActor in
+                _ = self.handleEmergencyPayload(payload)
             }
+            completionHandler(.newData)
         }
     }
 
@@ -191,7 +190,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     /// Processa payload de alerta de emergência.
     /// Retorna true se o payload continha um alerta de emergência.
     @discardableResult
-    @MainActor func handleEmergencyPayload(_ payload: [String: Any]) -> Bool {
+    @MainActor func handleEmergencyPayload(_ payload: [String: Any], createLocalNotification: Bool = true) -> Bool {
         let alertType   = str(payload["alert_type"])
         let senderEmail = str(payload["sender_email"])
         let myEmail     = SessionManager.shared.userEmail
@@ -243,13 +242,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         let appState = UIApplication.shared.applicationState
 
-        // Sempre criar notificação local com som (toca em QUALQUER estado)
-        // A notificação local garante: banner + sirene mesmo se o push FCM não tiver notification
+        // Criar notificação local com som apenas quando necessário
+        // (quando não há push FCM para mostrar o banner automaticamente)
         let notifContent = UNMutableNotificationContent()
         let displayName = senderName.isEmpty ? senderEmail : senderName
         notifContent.title = "🚨 Alerta de Emergência"
         notifContent.body  = "\(displayName) pode estar em perigo! Toque para ver detalhes."
-        notifContent.interruptionLevel = .critical
+        notifContent.interruptionLevel = .timeSensitive
         notifContent.userInfo = [
             "alert_id":     alertId > 0 ? String(alertId) : "0",
             "alert_type":   alertType,
@@ -266,24 +265,28 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             notifContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
             Task { @MainActor in AlertDiagnosticLog.shared.log("Notif: usando sirene.mp3 (sem caf)") }
         } else {
-            notifContent.sound = UNNotificationSound.defaultCriticalSound(withAudioVolume: 1.0)
+            notifContent.sound = UNNotificationSound.default
             Task { @MainActor in AlertDiagnosticLog.shared.log("Notif: usando som padrão (sem sirene)") }
         }
         let identifier = alertId > 0 ? "pppix_alert_\(alertId)" : "pppix_alert_\(Int(Date().timeIntervalSince1970))"
 
-        // Em FOREGROUND: mostrar notificação E tocar sirene via AVAudioPlayer (mais longa)
-        // Em BACKGROUND/MORTO: a notificação com UNNotificationSound toca automaticamente
-        if appState == .active {
-            // App aberto: notificação + sirene AVAudioPlayer ao mesmo tempo
-            UNUserNotificationCenter.current().add(
-                UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
-            )
-            EmergencyAudioService.shared.playSiren()
+        if createLocalNotification {
+            // Criar notificação local (quando veio via polling ou foreground sem push)
+            if appState == .active {
+                UNUserNotificationCenter.current().add(
+                    UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
+                )
+                EmergencyAudioService.shared.playSiren()
+            } else {
+                UNUserNotificationCenter.current().add(
+                    UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
+                )
+            }
         } else {
-            // App em background/morto: só notificação (UNNotificationSound cuida do som)
-            UNUserNotificationCenter.current().add(
-                UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
-            )
+            // Veio via push FCM — só tocar sirene se app estiver ativo
+            if appState == .active {
+                EmergencyAudioService.shared.playSiren()
+            }
         }
 
         // Notificar a UI para abrir a tela de alerta
@@ -325,6 +328,8 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         print("[PPPIX] willPresent — action='\(action)' identifier=\(notification.request.identifier)")
         Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] willPresent — action='\(action)' identifier=\(notification.request.identifier)") }
 
+        let identifier = notification.request.identifier
+
         switch action {
         case "unlock":
             triggerUnlockScreen()
@@ -337,14 +342,16 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
             }
             completionHandler([])
         default:
-            // Notificação de emergência chegou com app em FOREGROUND
-            let wasProcessed = handleEmergencyPayload(payload)
-            if wasProcessed {
-                // Mostrar banner + som (a notificação local já foi criada com sirene)
+            // Se é notificação local que já criamos (pppix_alert_X), apenas mostrar
+            if identifier.hasPrefix("pppix_alert_") {
                 completionHandler([.banner, .sound, .badge])
-            } else {
-                completionHandler([.banner, .sound, .badge])
+                return
             }
+            // É notificação FCM original — processar
+            // Mostrar o banner FCM com som (não criar notificação local duplicada)
+            handleEmergencyPayload(payload, createLocalNotification: false)
+            // Mostrar o banner FCM com som diretamente
+            completionHandler([.banner, .sound, .badge])
         }
     }
 
