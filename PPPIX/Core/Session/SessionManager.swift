@@ -106,6 +106,12 @@ final class SessionManager: ObservableObject {
         set { defaults.set(newValue, forKey: Key.fcmToken) }
     }
 
+    // APNS token bruto (hex) para registro direto no backend
+    var pendingApnsToken: String? {
+        get { UserDefaults.standard.string(forKey: "pppix_pending_apns_token") }
+        set { UserDefaults.standard.set(newValue, forKey: "pppix_pending_apns_token") }
+    }
+
     var fcmDeviceId: Int {
         get { defaults.integer(forKey: Key.fcmDeviceId) }
         set { defaults.set(newValue, forKey: Key.fcmDeviceId) }
