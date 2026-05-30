@@ -52,12 +52,14 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     }
 
     private func pppixShield() -> ShieldConfiguration {
-        let houseIcon = UIImage(systemName: "house.fill",
-                                withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .medium))
+        // Ícone azul (mesma cor do botão)
+        let lockIcon = UIImage(systemName: "lock.fill",
+                               withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .medium))?
+            .withTintColor(UIColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 1.0), renderingMode: .alwaysOriginal)
         return ShieldConfiguration(
             backgroundBlurStyle: .systemUltraThinMaterialDark,
             backgroundColor: UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 0.97),
-            icon: houseIcon,
+            icon: lockIcon,
             title: ShieldConfiguration.Label(text: "🔒 Você está fora de casa!", color: .white),
             subtitle: ShieldConfiguration.Label(
                 text: "Clique em Desbloquear e abra a notificação exibida",
