@@ -89,8 +89,8 @@ struct HomeView: View {
                             )
                         }
 
-                        // Card Premium (aparece se não for premium)
-                        PremiumCard()
+                        // Premium card oculto — app gratuito por enquanto
+                        // PremiumCard()
 
                         Spacer(minLength: 20)
                     }
