@@ -34,6 +34,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             Messaging.messaging().delegate = self
         }
 
+        // Registrar para remote notifications IMEDIATAMENTE (sem aguardar permissão)
+        // Firebase precisa do APNS token antes de gerar FCM token
+        UIApplication.shared.registerForRemoteNotifications()
+
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound, .badge, .timeSensitive]) { granted, _ in
             if granted {
@@ -108,15 +112,33 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().apnsToken = deviceToken
         let tokenStr = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task { @MainActor in AlertDiagnosticLog.shared.log("APNS token OK: \(tokenStr.prefix(20))...") }
+        // Registrar APNS token diretamente no backend (para push sem Firebase)
+        Task { @MainActor in
+            if SessionManager.shared.isLoggedIn {
+                do {
+                    try await APIClient.shared.registerFcmDevice(token: tokenStr, platform: "ios_apns")
+                    AlertDiagnosticLog.shared.log("APNS token registrado no backend ✅")
+                } catch {
+                    AlertDiagnosticLog.shared.log("APNS token registro erro: \(error)")
+                }
+            } else {
+                SessionManager.shared.pendingApnsToken = tokenStr
+                AlertDiagnosticLog.shared.log("APNS token guardado para após login")
+            }
+        }
 
-        // Forçar geração do FCM token após APNS registrar (com delay para Firebase processar)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        // Tentar gerar FCM token com retry (Firebase precisa processar o APNS token)
+        Self.fetchFCMTokenWithRetry(attempt: 1)
+    }
+
+    static func fetchFCMTokenWithRetry(attempt: Int) {
+        let delays = [1.0, 3.0, 5.0, 10.0, 20.0]
+        let delay = attempt <= delays.count ? delays[attempt - 1] : 30.0
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             Messaging.messaging().token { token, error in
-                if let error = error {
-                    Task { @MainActor in AlertDiagnosticLog.shared.log("FCM token erro: \(error.localizedDescription)") }
-                } else if let token = token {
+                if let token = token, !token.isEmpty {
                     Task { @MainActor in
-                        AlertDiagnosticLog.shared.log("FCM token gerado: \(token.prefix(20))...")
+                        AlertDiagnosticLog.shared.log("FCM token gerado (tentativa \(attempt)): \(token.prefix(20))...")
                         SessionManager.shared.fcmToken = token
                         if SessionManager.shared.isLoggedIn {
                             do {
@@ -126,6 +148,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                                 AlertDiagnosticLog.shared.log("FCM registro erro: \(error)")
                             }
                         }
+                    }
+                } else {
+                    Task { @MainActor in AlertDiagnosticLog.shared.log("FCM tentativa \(attempt) falhou: \(error?.localizedDescription ?? "sem token"). Tentando novamente...") }
+                    if attempt < 6 {
+                        fetchFCMTokenWithRetry(attempt: attempt + 1)
                     }
                 }
             }
