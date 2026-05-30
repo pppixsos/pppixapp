@@ -3,6 +3,7 @@ import UIKit
 
 /// Equivalente ao AppMonitorService.kt do Android.
 /// Mantém o app vivo via BGTaskScheduler + Silent Push + Background App Refresh.
+@MainActor
 final class BackgroundTaskManager {
 
     static let shared = BackgroundTaskManager()
