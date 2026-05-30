@@ -1,12 +1,12 @@
 import CoreLocation
 
-final class LocationService: NSObject {
+final class LocationService: NSObject, @unchecked Sendable {
 
-    static let shared = LocationService()
+    nonisolated(unsafe) static let shared = LocationService()
     private override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters // mais rápido que Best
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         manager.distanceFilter = 50
     }
 
@@ -19,68 +19,65 @@ final class LocationService: NSObject {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse:
-            // Pode tentar upgradar para Always (iOS mostra prompt de forma lazy)
             manager.requestAlwaysAuthorization()
         default:
             break
         }
     }
 
-    // NOVA ABORDAGEM: usa manager.location (cache do sistema) IMEDIATAMENTE
-    // É preenchido pelo iOS automaticamente se o usuário tem localização ativa
-    // Não tem delay — retorna o que o sistema já tem
     func getCurrentLocation() async -> CLLocationCoordinate2D? {
         guard CLLocationManager.locationServicesEnabled() else { return nil }
         let status = manager.authorizationStatus
         guard status == .authorizedWhenInUse || status == .authorizedAlways else { return nil }
 
-        // Tenta a localização em cache do sistema primeiro (sem delay)
+        // Cache recente (< 60s) — retorna imediatamente sem delay
         if let cached = manager.location, cached.timestamp.timeIntervalSinceNow > -60 {
             return cached.coordinate
         }
 
-        // Se não tem cache recente, pede uma leitura com timeout de 4s
-        return await withCheckedContinuation { cont in
-            var resumed = false
-
-            let delegate = OneShotLocationDelegate {  coord in
-                guard !resumed else { return }
-                resumed = true
-                cont.resume(returning: coord)
-            }
-            delegate.start()
-
-            // Timeout — retorna o que o sistema tem (mesmo que antigo)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                guard !resumed else { return }
-                resumed = true
-                cont.resume(returning: self.manager.location?.coordinate)
-            }
+        // Solicita leitura com timeout de 4s
+        return await withCheckedContinuation { (cont: CheckedContinuation<CLLocationCoordinate2D?, Never>) in
+            let helper = LocationRequestHelper(continuation: cont, fallback: self.manager.location?.coordinate)
+            helper.start()
         }
     }
 }
 
-// Delegate temporário para uma única leitura
-private class OneShotLocationDelegate: NSObject, CLLocationManagerDelegate {
+// Helper isolado para uma única leitura de localização com timeout
+private final class LocationRequestHelper: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
     private let manager = CLLocationManager()
-    private let callback: (CLLocationCoordinate2D?) -> Void
+    private let cont: CheckedContinuation<CLLocationCoordinate2D?, Never>
+    private let fallback: CLLocationCoordinate2D?
+    private var finished = false
 
-    init(callback: @escaping (CLLocationCoordinate2D?) -> Void) {
-        self.callback = callback
+    init(continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>, fallback: CLLocationCoordinate2D?) {
+        self.cont = continuation
+        self.fallback = fallback
+        super.init()
     }
 
     func start() {
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         manager.requestLocation()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            self?.finish(with: self?.fallback)
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        callback(locations.last?.coordinate)
+        finish(with: locations.last?.coordinate)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        callback(nil)
+        finish(with: fallback)
+    }
+
+    private func finish(with coord: CLLocationCoordinate2D?) {
+        guard !finished else { return }
+        finished = true
+        cont.resume(returning: coord)
     }
 }
 
@@ -90,7 +87,7 @@ extension LocationService: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let s = manager.authorizationStatus
         if s == .authorizedWhenInUse || s == .authorizedAlways {
-            manager.requestLocation() // popula o cache imediatamente
+            manager.requestLocation()
         }
     }
 }
