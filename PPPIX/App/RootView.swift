@@ -81,8 +81,7 @@ struct RootView: View {
             switch phase {
             case .background:
                 stopAlertPolling()
-                // FIX "ABRIR APP": se o usuário abriu o app desbloqueado a partir daqui,
-                // não reseta a autenticação no próximo ciclo
+                BackgroundTaskManager.shared.appDidEnterBackground()
                 if AppDelegate.skipNextAuthReset {
                     AppDelegate.skipNextAuthReset = false
                 } else {
@@ -740,7 +739,18 @@ struct ArrowUnlockView: View {
 
     private func openUnlockedApp() {
         EmergencyAudioService.shared.stopSiren()
-        let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?.string(forKey: "pppix_target_bundle_id") ?? ""
+
+        // Sinaliza para NÃO pedir senha quando PPPIX voltar ao foreground
+        AppDelegate.skipNextAuthReset = true
+
+        // Sinaliza que abrimos o banco propositalmente
+        #if !targetEnvironment(simulator)
+        ScreenTimeManager.shared.isOpeningBankApp = true
+        #endif
+
+        let bundleId = UserDefaults(suiteName: "group.tech.pppix.app")?
+            .string(forKey: "pppix_target_bundle_id") ?? ""
+
         let schemes: [String: String] = [
             "com.santander.app":             "santander://",
             "com.santander.SantanderBrasil": "santander://",
@@ -759,22 +769,25 @@ struct ArrowUnlockView: View {
             "com.zhiliaoapp.musically":      "tiktok://",
         ]
 
-        // Sinaliza para NÃO pedir senha quando PPPIX voltar ao foreground
-        AppDelegate.skipNextAuthReset = true
+        // 1. Fechar a tela PRIMEIRO
+        isPresented = false
 
-        // Sinaliza que abrimos o banco propositalmente (evita reblock prematuro)
-        #if !targetEnvironment(simulator)
-        ScreenTimeManager.shared.isOpeningBankApp = true
-        #endif
-
-        // Abre o app ANTES de fechar a tela
-        if let scheme = schemes[bundleId], let url = URL(string: scheme) {
-            UIApplication.shared.open(url, options: [:]) { _ in }
+        // 2. Aguardar o fullScreenCover terminar a animação de dismiss (~0.5s)
+        // e então abrir o app — a janela do PPPIX precisa estar completamente
+        // descartada para o open() funcionar corretamente
+        guard let scheme = schemes[bundleId], let url = URL(string: scheme) else {
+            return
         }
 
-        // Fecha a tela após abrir o app
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            isPresented = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            UIApplication.shared.open(url, options: [:]) { success in
+                if !success {
+                    // Fallback: tentar sem trailing slash
+                    if let url2 = URL(string: scheme.replacingOccurrences(of: "://", with: ":")) {
+                        UIApplication.shared.open(url2, options: [:], completionHandler: nil)
+                    }
+                }
+            }
         }
     }
 }
