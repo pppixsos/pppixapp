@@ -39,6 +39,21 @@ final class SessionManager: ObservableObject {
     // MARK: - Load on init
 
     private func loadFromStorage() {
+        // Migrar dados do UserDefaults.standard para o App Group (mudança do build 137)
+        let standard = UserDefaults.standard
+        if defaults !== standard {
+            for key in [Key.userName, Key.userEmail] {
+                if defaults.string(forKey: key) == nil,
+                   let val = standard.string(forKey: key), !val.isEmpty {
+                    defaults.set(val, forKey: key)
+                }
+            }
+            if defaults.integer(forKey: Key.userId) == 0 {
+                let id = standard.integer(forKey: Key.userId)
+                if id > 0 { defaults.set(id, forKey: Key.userId) }
+            }
+            defaults.synchronize()
+        }
         userId    = defaults.integer(forKey: Key.userId)
         userName  = defaults.string(forKey: Key.userName) ?? ""
         userEmail = defaults.string(forKey: Key.userEmail) ?? ""
@@ -163,18 +178,13 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Keychain helpers
 
-    // AccessGroup compartilhado entre app principal e todas as extensions
-    private let keychainGroup = "K5SWZ92Z64.group.tech.pppix.app"
-
     private func keychainSet(key: String, value: String) {
         let data = value.data(using: .utf8)!
         let query: [String: Any] = [
-            kSecClass as String:            kSecClassGenericPassword,
-            kSecAttrService as String:      "tech.pppix.app",
-            kSecAttrAccount as String:      key,
-            kSecValueData as String:        data,
-            kSecAttrAccessible as String:   kSecAttrAccessibleAfterFirstUnlock,
-            kSecAttrAccessGroup as String:  keychainGroup
+            kSecClass as String:           kSecClassGenericPassword,
+            kSecAttrAccount as String:     key,
+            kSecValueData as String:       data,
+            kSecAttrAccessible as String:  kSecAttrAccessibleAfterFirstUnlock
         ]
         SecItemDelete(query as CFDictionary)
         SecItemAdd(query as CFDictionary, nil)
@@ -182,50 +192,23 @@ final class SessionManager: ObservableObject {
 
     private func keychainGet(key: String) -> String? {
         let query: [String: Any] = [
-            kSecClass as String:            kSecClassGenericPassword,
-            kSecAttrService as String:      "tech.pppix.app",
-            kSecAttrAccount as String:      key,
-            kSecReturnData as String:       true,
-            kSecMatchLimit as String:       kSecMatchLimitOne,
-            kSecAttrAccessGroup as String:  keychainGroup
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String:  true,
+            kSecMatchLimit as String:  kSecMatchLimitOne
         ]
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status != errSecSuccess {
-            // Fallback: tentar sem AccessGroup (tokens salvos antes desta versão)
-            let fallbackQuery: [String: Any] = [
-                kSecClass as String:       kSecClassGenericPassword,
-                kSecAttrAccount as String: key,
-                kSecReturnData as String:  true,
-                kSecMatchLimit as String:  kSecMatchLimitOne
-            ]
-            var fallbackResult: AnyObject?
-            SecItemCopyMatching(fallbackQuery as CFDictionary, &fallbackResult)
-            if let data = fallbackResult as? Data, let value = String(data: data, encoding: .utf8) {
-                // Migrar para o novo formato com AccessGroup
-                keychainSet(key: key, value: value)
-                return value
-            }
-            return nil
-        }
+        SecItemCopyMatching(query as CFDictionary, &result)
         guard let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
     private func keychainDelete(key: String) {
         let query: [String: Any] = [
-            kSecClass as String:           kSecClassGenericPassword,
-            kSecAttrService as String:     "tech.pppix.app",
-            kSecAttrAccount as String:     key,
-            kSecAttrAccessGroup as String: keychainGroup
-        ]
-        SecItemDelete(query as CFDictionary)
-        // Também deletar versão sem AccessGroup
-        let legacyQuery: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrAccount as String: key
         ]
-        SecItemDelete(legacyQuery as CFDictionary)
+        SecItemDelete(query as CFDictionary)
     }
 }
 
