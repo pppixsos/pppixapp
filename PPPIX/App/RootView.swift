@@ -107,16 +107,19 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .incomingEmergencyAlert)) { notif in
             let id = notif.userInfo?["alert_id"] as? Int ?? 0
-            Task {
+            Task { @MainActor in
                 if id > 0, let a = try? await APIClient.shared.getAlert(id: id) {
-                    await MainActor.run { emergencyAlert = a }
+                    // Marcar como lido para não aparecer novamente no polling
+                    try? await APIClient.shared.markAlertRead(id: a.id)
+                    emergencyAlert = a
                 } else {
                     // id=0 ou getAlert falhou — buscar alerta mais recente recebido
                     if let alerts = try? await APIClient.shared.getReceivedAlerts(),
                        let latest = alerts.first {
-                        await MainActor.run { emergencyAlert = latest }
+                        try? await APIClient.shared.markAlertRead(id: latest.id)
+                        emergencyAlert = latest
                     } else if id > 0 {
-                        await MainActor.run { showAlertDetail = id }
+                        showAlertDetail = id
                     }
                 }
             }
@@ -130,15 +133,16 @@ struct RootView: View {
         Task { @MainActor in
             guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
             let myEmail = SessionManager.shared.userEmail
-            // Alinhar com Android: ignora próprios alertas e cancelados/lidos
+            // Ignora próprios alertas e já lidos/cancelados
             let unread = alerts.first(where: {
                 let s = $0.status.lowercased()
                 let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
                 return !isMine && s != "cancelled" && s != "read" && s != "cancel"
             })
-            if let a = unread, emergencyAlert?.id != a.id {
-                emergencyAlert = a
-            }
+            guard let a = unread, emergencyAlert?.id != a.id else { return }
+            // Marcar como lido imediatamente para não aparecer em polls futuros
+            try? await APIClient.shared.markAlertRead(id: a.id)
+            emergencyAlert = a
         }
     }
 
@@ -524,7 +528,11 @@ struct UnlockPasswordView: View {
             do {
                 let connections  = try await APIClient.shared.getAcceptedConnections()
                 let recipientIds = connections.map { $0.userId(myEmail: myEmail) }.filter { $0 > 0 }
-                print("[PPPIX] sendEmergencyAlert — \(connections.count) conexões, destinatários: \(recipientIds)")
+                print("[PPPIX] sendEmergencyAlert — \(connections.count) conexões")
+                for c in connections {
+                    print("[PPPIX]   conexão: from=\(c.from_user_email) to=\(c.to_user_email) userId=\(c.userId(myEmail: myEmail))")
+                }
+                print("[PPPIX] recipient_ids: \(recipientIds)")
 
                 let vehicles = (try? await APIClient.shared.getVehicles()) ?? []
                 let vehicle  = vehicles.first(where: { $0.is_active }) ?? vehicles.first
