@@ -162,11 +162,22 @@ struct RootView: View {
         }
         AlertDiagnosticLog.shared.log("RECEBER(\(source)): NOVO id=\(a.id) de=\(a.sender_email) status=\(a.status)")
         markShown(a.id)
+        // Criar notificação local com som — garante som mesmo quando alerta chega via polling
+        let notifPayload: [String: Any] = [
+            "alert_id":     String(a.id),
+            "alert_type":   a.alert_type,
+            "sender_email": a.sender_email,
+            "sender_name":  a.sender_name
+        ]
+        Task { @MainActor in
+            (UIApplication.shared.delegate as? AppDelegate)?.handleEmergencyPayload(notifPayload)
+        }
         Task { @MainActor in
             try? await APIClient.shared.markAlertRead(id: a.id)
             AlertDiagnosticLog.shared.log("RECEBER: markAlertRead id=\(a.id)")
         }
-        emergencyAlert = a
+        // Não setar emergencyAlert aqui — o handleEmergencyPayload já posta incomingEmergencyAlert
+        // que o onReceive captura e seta emergencyAlert (evita duplicação)
     }
 
     private func pollAlertsOnce() {
