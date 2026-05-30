@@ -13,7 +13,9 @@ struct ForgotPasswordView: View {
     @State private var newPassword   = ""
     @State private var confirmPassword = ""
     // MARK: - State
-    @State private var isLoading     = false
+    @State private var isLoading          = false
+    @State private var showNewPassword    = false
+    @State private var showConfirmPassword = false
     @State private var errorMessage  = ""
 
     var body: some View {
@@ -80,12 +82,14 @@ struct ForgotPasswordView: View {
                                 PPPIXSecureField(
                                     title: "Nova Senha",
                                     placeholder: "Mínimo 8 caracteres",
-                                    text: $newPassword
+                                    text: $newPassword,
+                                    showPassword: $showNewPassword
                                 )
                                 PPPIXSecureField(
                                     title: "Confirmar Nova Senha",
                                     placeholder: "Repita a nova senha",
-                                    text: $confirmPassword
+                                    text: $confirmPassword,
+                                    showPassword: $showConfirmPassword
                                 )
 
                             }
