@@ -98,6 +98,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("[PPPIX] APNS register failed: \(error)")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] APNS register failed: \(error)") }
     }
 
     // Chamado para push data-only (silent) — throttled pelo iOS, usar apenas como fallback
@@ -111,6 +112,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let action = str(payload["action"])
 
         print("[PPPIX] didReceiveRemoteNotification — action='\(action)' keys=\(Array(payload.keys).sorted())")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] didReceiveRemoteNotification — action='\(action)' keys=\(Array(payload.keys).sorted())") }
 
         if action == "unlock" {
             triggerUnlockScreen()
@@ -160,12 +162,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let myEmail     = SessionManager.shared.userEmail
 
         print("[PPPIX] handleEmergencyPayload — type='\(alertType)' sender='\(senderEmail)' me='\(myEmail)'")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("RECEBER(FCM): tipo=\(alertType) de=\(senderEmail)") }
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload — type='\(alertType)' sender='\(senderEmail)' me='\(myEmail)'") }
 
         // Filtra alertas enviados por mim mesmo (igual Android)
         // Só filtra se myEmail está disponível (pode estar vazio em background)
         if !myEmail.isEmpty && !senderEmail.isEmpty &&
            senderEmail.lowercased() == myEmail.lowercased() {
             print("[PPPIX] handleEmergencyPayload — ignorado: é meu próprio alerta")
+            Task { @MainActor in AlertDiagnosticLog.shared.log("RECEBER(FCM): IGNORADO - meu próprio alerta") }
+            Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload — ignorado: é meu próprio alerta") }
             return false
         }
 
@@ -186,6 +192,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         if alertId > 0 {
             guard !AppDelegate.processedAlertIds.contains(alertId) else {
                 print("[PPPIX] handleEmergencyPayload — ignorado: alerta \(alertId) já processado")
+                Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload — ignorado: alerta \(alertId) já processado") }
                 return false
             }
             AppDelegate.processedAlertIds.insert(alertId)
@@ -196,6 +203,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
 
         print("[PPPIX] handleEmergencyPayload PROCESSANDO — id=\(alertId) sender=\(senderEmail)")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("RECEBER(FCM): PROCESSANDO id=\(alertId) de=\(senderEmail)") }
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload PROCESSANDO — id=\(alertId) sender=\(senderEmail)") }
 
         let appState = UIApplication.shared.applicationState
 
@@ -270,6 +279,7 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         let action  = str(payload["action"])
 
         print("[PPPIX] willPresent — action='\(action)' identifier=\(notification.request.identifier)")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] willPresent — action='\(action)' identifier=\(notification.request.identifier)") }
 
         switch action {
         case "unlock":
@@ -307,6 +317,7 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         let action  = str(payload["action"])
 
         print("[PPPIX] didReceive (tap) — action='\(action)' identifier=\(response.notification.request.identifier)")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] didReceive (tap) — action='\(action)' identifier=\(response.notification.request.identifier)") }
 
         switch action {
         case "reblock":
@@ -326,6 +337,7 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
                 let alertType = str(payload["alert_type"])
 
                 print("[PPPIX] didReceive tap emergência — id=\(alertId) type=\(alertType)")
+                Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] didReceive tap emergência — id=\(alertId) type=\(alertType)") }
 
                 if alertId > 0 || alertType.lowercased().contains("emergency") {
                     EmergencyAudioService.shared.playSiren()
@@ -363,6 +375,7 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         }
 
         print("[PPPIX] extractPayload — chaves: \(result.keys.sorted().joined(separator: ", "))")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] extractPayload — chaves: \(result.keys.sorted().joined(separator: ", "))") }
         return result
     }
 
@@ -372,6 +385,7 @@ extension AppDelegate: @preconcurrency MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
         print("[PPPIX] FCM token atualizado: \(token.prefix(20))...")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] FCM token atualizado: \(token.prefix(20))...") }
         SessionManager.shared.fcmToken = token
         if SessionManager.shared.isLoggedIn {
             Task { @MainActor in
