@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseMessaging
 
 struct LoginView: View {
 
@@ -121,7 +122,7 @@ struct LoginView: View {
                 SessionManager.shared.saveUserInfo(id: 0, email: trimmedEmail, name: trimmedEmail)
             }
 
-            // Registra FCM
+            // Registra FCM — tenta token salvo ou busca novo do Firebase
             if let fcmToken = SessionManager.shared.fcmToken {
                 do {
                     try await APIClient.shared.registerFcmDevice(token: fcmToken, platform: "ios")
@@ -130,7 +131,25 @@ struct LoginView: View {
                     await AlertDiagnosticLog.shared.log("FCM registro ERRO no login: \(error)")
                 }
             } else {
-                await AlertDiagnosticLog.shared.log("FCM: sem token disponível no login")
+                // Buscar token diretamente do Firebase
+                await AlertDiagnosticLog.shared.log("FCM: buscando token do Firebase...")
+                await withCheckedContinuation { continuation in
+                    Messaging.messaging().token { token, error in
+                        if let token = token {
+                            Task { @MainActor in
+                                AlertDiagnosticLog.shared.log("FCM token obtido no login: \(token.prefix(20))...")
+                                SessionManager.shared.fcmToken = token
+                                try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+                                AlertDiagnosticLog.shared.log("FCM registrado após busca ✅")
+                            }
+                        } else {
+                            Task { @MainActor in
+                                AlertDiagnosticLog.shared.log("FCM: Firebase sem token — \(error?.localizedDescription ?? "desconhecido")")
+                            }
+                        }
+                        continuation.resume()
+                    }
+                }
             }
 
         } catch APIError.unauthorized {
