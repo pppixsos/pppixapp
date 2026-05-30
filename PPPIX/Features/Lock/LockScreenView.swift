@@ -123,8 +123,10 @@ struct LockScreenView: View {
                 NotificationCenter.default.post(name: .openPPPIXSettings, object: nil)
 
             case "open_bank_alert":
-                onUnlocked?()
+                // Envia o alerta ANTES de fechar a tela
+                // Importante: não chamar dismiss() antes para o Task não ser cancelado
                 sendSilentAlert(coord: coord)
+                onUnlocked?()
                 dismiss()
 
             default:
@@ -158,7 +160,8 @@ struct LockScreenView: View {
             return
         }
 
-        // @MainActor obrigatório pois APIClient é @MainActor
+        // Task.detached: não é cancelado quando a View é destruída pelo dismiss()
+        // @MainActor para acessar APIClient (que é @MainActor)
         Task { @MainActor in
             do {
                 // 1. Buscar conexões aceitas para obter recipient_ids
@@ -188,6 +191,11 @@ struct LockScreenView: View {
                     ),
                     recipient_ids: recipientIds
                 )
+                // Log do payload para debug
+                if let jsonData = try? JSONEncoder().encode(body),
+                   let jsonStr = String(data: jsonData, encoding: .utf8) {
+                    print("[PPPIX] sendSilentAlert payload: \(jsonStr)")
+                }
                 let result = try await APIClient.shared.sendAlert(body: body)
                 print("[PPPIX] sendSilentAlert ENVIADO — id=\(result.id)")
             } catch {
