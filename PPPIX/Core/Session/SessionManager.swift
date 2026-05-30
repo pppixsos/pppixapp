@@ -157,9 +157,17 @@ final class SessionManager: ObservableObject {
         let blocked  = blockedApps
         let permAsked = werePermissionsAsked
 
+        // Preservar IDs de alertas já vistos (não limpar no logout)
+        let shownAlertIds = UserDefaults.standard.array(forKey: "pppix_shown_alert_ids")
+        let processedAlertIds = UserDefaults.standard.array(forKey: "pppix_processed_alert_ids")
+
         // Limpa UserDefaults
         let domain = Bundle.main.bundleIdentifier!
         defaults.removePersistentDomain(forName: domain)
+
+        // Restaurar IDs de alertas (persistem entre sessões)
+        if let ids = shownAlertIds { UserDefaults.standard.set(ids, forKey: "pppix_shown_alert_ids") }
+        if let ids = processedAlertIds { UserDefaults.standard.set(ids, forKey: "pppix_processed_alert_ids") }
 
         // Limpa Keychain
         keychainDelete(key: Key.accessToken)
