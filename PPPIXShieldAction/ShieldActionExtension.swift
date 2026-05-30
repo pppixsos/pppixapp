@@ -44,8 +44,11 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        sendUnlockNotification()
+        // Fechar IMEDIATAMENTE para minimizar o app bancário o mais rápido possível
         completionHandler(.close)
+
+        // Enviar notificação após o close para garantir que o app já minimizou
+        sendUnlockNotification()
     }
 
     override func handle(action: ShieldAction,
@@ -57,8 +60,8 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        sendUnlockNotification()
         completionHandler(.close)
+        sendUnlockNotification()
     }
 
     override func handle(action: ShieldAction,
@@ -70,8 +73,8 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        sendUnlockNotification()
         completionHandler(.close)
+        sendUnlockNotification()
     }
 
     private func sendUnlockNotification() {
