@@ -26,7 +26,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         setupNotificationCategories()
-        // Firebase PRIMEIRO — antes de qualquer coisa para APNS funcionar
+
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
             FirebaseApp.configure()
             Messaging.messaging().delegate = self
@@ -36,7 +36,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             options: [.alert, .sound, .badge, .timeSensitive]) { granted, _ in
             if granted {
                 DispatchQueue.main.async {
-                    // Necessário para Firebase receber o APNS token via swizzling
                     UIApplication.shared.registerForRemoteNotifications()
                 }
             }
@@ -47,6 +46,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             ScreenTimeManager.shared.checkAuthorization()
             #endif
         }
+
+        // Esquenta o GPS logo que o app abre (igual FusedLocationClient do Android)
+        LocationService.shared.warmUp()
 
         BackgroundTaskManager.shared.registerTasks()
         return true
@@ -69,34 +71,44 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        // Passa o token APNS para o Firebase — crítico para FCM funcionar no iOS
         Messaging.messaging().apnsToken = deviceToken
     }
 
     func application(_ application: UIApplication,
-                     didFailToRegisterForRemoteNotificationsWithError error: Error) {}
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("[PPPIX] APNS register failed: \(error)")
+    }
 
-    // Handler de mensagens FCM em background/killed (data-only messages)
-    // Chamado pelo iOS quando chega push com content-available:1
+    // Chamado para push data-only (silent) — throttled pelo iOS, usar apenas como fallback
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
 
-        // Passa para o Firebase processar primeiro
         Messaging.messaging().appDidReceiveMessage(userInfo)
 
         let payload = Self.extractPayload(userInfo)
-        let action = payload["action"] as? String ?? ""
+        let action = str(payload["action"])
 
-        // Notificação de alerta de emergência vinda do backend
-        if action != "unlock" && action != "reblock" {
-            if processEmergencyAlert(payload: payload) {
+        print("[PPPIX] didReceiveRemoteNotification — action='\(action)' keys=\(Array(payload.keys).sorted())")
+
+        if action == "unlock" {
+            triggerUnlockScreen()
+            completionHandler(.newData)
+        } else if action == "reblock" {
+            Task { @MainActor in
+                #if !targetEnvironment(simulator)
+                ScreenTimeManager.shared.syncCheckAndReblock()
+                #endif
+            }
+            completionHandler(.newData)
+        } else {
+            // Pode ser alerta de emergência — processar
+            if handleEmergencyPayload(payload) {
                 completionHandler(.newData)
-                return
+            } else {
+                completionHandler(.noData)
             }
         }
-
-        completionHandler(.noData)
     }
 
     func application(_ app: UIApplication, open url: URL,
@@ -116,46 +128,60 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
     }
 
-    // Processa alerta de emergência — retorna true se era um alerta
+    // MARK: - Emergency alert handling
+
+    /// Processa payload de alerta de emergência.
+    /// Retorna true se o payload continha um alerta de emergência.
     @discardableResult
-    private func processEmergencyAlert(payload: [String: Any]) -> Bool {
+    func handleEmergencyPayload(_ payload: [String: Any]) -> Bool {
         let alertType   = str(payload["alert_type"])
         let senderEmail = str(payload["sender_email"])
-        print("[PPPIX] processEmergencyAlert — type: \(alertType), sender: \(senderEmail), payload keys: \(payload.keys.joined(separator: ","))")
+        let myEmail     = SessionManager.shared.userEmail
 
-        // Aceita qualquer alerta de emergência — o backend já filtra destinatários
-        guard !alertType.isEmpty else {
-            print("[PPPIX] processEmergencyAlert — ignorado: alertType vazio")
+        print("[PPPIX] handleEmergencyPayload — type='\(alertType)' sender='\(senderEmail)' me='\(myEmail)'")
+
+        // Filtra alertas enviados por mim mesmo (igual Android)
+        // Só filtra se myEmail está disponível (pode estar vazio em background)
+        if !myEmail.isEmpty && !senderEmail.isEmpty &&
+           senderEmail.lowercased() == myEmail.lowercased() {
+            print("[PPPIX] handleEmergencyPayload — ignorado: é meu próprio alerta")
             return false
         }
 
-        let isEmergency = alertType.contains("emergency") || alertType.contains("alert")
+        // Deve ter alert_type com conteúdo de emergência (igual Android)
+        guard !alertType.isEmpty else { return false }
+
+        let isEmergency = alertType == "emergency_password"
                        || alertType == "wrong_password"
-        guard isEmergency else {
-            print("[PPPIX] processEmergencyAlert — ignorado: não é emergência")
-            return false
-        }
+                       || alertType.lowercased().contains("emergency")
+                       || alertType.lowercased().contains("alert")
+        guard isEmergency else { return false }
 
-        let alertId = intVal(payload["alert_id"])
+        let alertId    = intVal(payload["alert_id"] ?? payload["id"])
+        let rawSenderName = str(payload["sender_name"])
+        let senderName = rawSenderName.isEmpty ? (senderEmail.components(separatedBy: "@").first ?? "Contato") : rawSenderName
 
-        // Mostra notificação local visível (garante entrega mesmo se app está morto)
-        let senderName = senderEmail.components(separatedBy: "@").first ?? senderEmail
+        print("[PPPIX] handleEmergencyPayload PROCESSANDO — id=\(alertId) sender=\(senderEmail)")
+
+        // Mostrar notificação local visível para garantir que o usuário veja
+        // (caso este método seja chamado do didReceiveRemoteNotification em background)
         let content = UNMutableNotificationContent()
         content.title = "🚨 Alerta de Emergência"
         content.body  = "\(senderName) pode estar em perigo! Toque para ver detalhes."
         content.sound = .defaultCritical
+        content.interruptionLevel = .critical
         content.userInfo = [
-            "alert_id":    String(alertId),
-            "alert_type":  alertType,
+            "alert_id":     alertId > 0 ? String(alertId) : "0",
+            "alert_type":   alertType,
             "sender_email": senderEmail
         ]
-        content.interruptionLevel = .critical
 
+        let identifier = alertId > 0 ? "pppix_alert_\(alertId)" : "pppix_alert_\(Int(Date().timeIntervalSince1970))"
         UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: "pppix_alert_\(alertId)", content: content, trigger: nil)
+            UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         )
 
-        // Notifica o RootView se o app estiver ativo
+        // Notificar a UI imediatamente (se app estiver em foreground)
         EmergencyAudioService.shared.playSiren()
         DispatchQueue.main.async {
             NotificationCenter.default.post(
@@ -172,13 +198,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     private func intVal(_ val: Any?) -> Int {
-        (val as? Int) ?? (val as? String).flatMap(Int.init) ?? (val as? NSString).flatMap { Int($0 as String) } ?? 0
+        (val as? Int) ?? (val as? String).flatMap(Int.init) ?? (val as? NSNumber).map { $0.intValue } ?? 0
     }
+}
+
+extension String {
+    func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
 }
 
 extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
 
-    // App em FOREGROUND — notificação chegou
+    // App em FOREGROUND — notificação chegou antes do usuário ver
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -186,11 +216,12 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
     ) {
         Messaging.messaging().appDidReceiveMessage(notification.request.content.userInfo)
         let payload = Self.extractPayload(notification.request.content.userInfo)
-        let action  = payload["action"] as? String ?? ""
+        let action  = str(payload["action"])
+
+        print("[PPPIX] willPresent — action='\(action)' identifier=\(notification.request.identifier)")
 
         switch action {
         case "unlock":
-            // Abre a tela imediatamente sem esperar o usuário tocar
             triggerUnlockScreen()
             completionHandler([.banner, .sound])
         case "reblock":
@@ -201,7 +232,9 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
             }
             completionHandler([])
         default:
-            processEmergencyAlert(payload: payload)
+            // Tenta processar como emergência
+            handleEmergencyPayload(payload)
+            // Sempre mostrar a notificação visualmente em foreground
             completionHandler([.banner, .sound, .badge])
         }
     }
@@ -214,7 +247,9 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
     ) {
         Messaging.messaging().appDidReceiveMessage(response.notification.request.content.userInfo)
         let payload = Self.extractPayload(response.notification.request.content.userInfo)
-        let action  = payload["action"] as? String ?? ""
+        let action  = str(payload["action"])
+
+        print("[PPPIX] didReceive (tap) — action='\(action)' identifier=\(response.notification.request.identifier)")
 
         switch action {
         case "reblock":
@@ -230,10 +265,12 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
                 triggerUnlockScreen()
             } else {
                 // Toque em notificação de alerta de emergência
-                // Aceita alert_id ou id, como Int ou String
                 let alertId = intVal(payload["alert_id"] ?? payload["id"])
                 let alertType = str(payload["alert_type"])
-                if alertId > 0 || alertType.contains("emergency") {
+
+                print("[PPPIX] didReceive tap emergência — id=\(alertId) type=\(alertType)")
+
+                if alertId > 0 || alertType.lowercased().contains("emergency") {
                     EmergencyAudioService.shared.playSiren()
                     DispatchQueue.main.async {
                         NotificationCenter.default.post(
@@ -248,27 +285,48 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         completionHandler()
     }
 
-    // Extrai payload FCM independente do formato
+    // Extrai payload FCM independente do formato (notification+data ou data puro)
     static func extractPayload(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
         var result = [String: Any]()
-        for (k, v) in userInfo { if let key = k as? String { result[key] = v } }
-        // Android FCM envia dados em "data"
+
+        // Copia tudo que tem chave String
+        for (k, v) in userInfo {
+            if let key = k as? String { result[key] = v }
+        }
+
+        // Desembala campo "data" — pode ser Dict, JSON string, ou ausente
         if let data = userInfo["data"] as? [AnyHashable: Any] {
             for (k, v) in data { if let key = k as? String { result[key] = v } }
         } else if let data = userInfo["data"] as? [String: Any] {
             for (k, v) in data { result[k] = v }
+        } else if let dataStr = userInfo["data"] as? String,
+                  let dataBytes = dataStr.data(using: .utf8),
+                  let dataDict = try? JSONSerialization.jsonObject(with: dataBytes) as? [String: Any] {
+            for (k, v) in dataDict { result[k] = v }
         }
+
+        print("[PPPIX] extractPayload — chaves: \(result.keys.sorted().joined(separator: ", "))")
         return result
     }
 
+    private func str(_ val: Any?) -> String {
+        (val as? String) ?? (val as? NSString).map(String.init) ?? ""
+    }
+
+    private func intVal(_ val: Any?) -> Int {
+        (val as? Int) ?? (val as? String).flatMap(Int.init) ?? (val as? NSNumber).map { $0.intValue } ?? 0
+    }
 }
 
 extension AppDelegate: @preconcurrency MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
+        print("[PPPIX] FCM token atualizado: \(token.prefix(20))...")
         SessionManager.shared.fcmToken = token
         if SessionManager.shared.isLoggedIn {
-            Task { try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios") }
+            Task { @MainActor in
+                try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+            }
         }
     }
 }
