@@ -29,6 +29,7 @@ struct RootView: View {
 
     @State private var showAlertDetail: Int?  = nil
     @State private var emergencyAlert: Alert? = nil
+    @State private var alertPollTimer: Timer? = nil
 
     // Inicializa com true se há notificação pendente (cold start instantâneo)
     @State private var showUnlockScreen: Bool = {
@@ -78,6 +79,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { phase in
             switch phase {
             case .background:
+                stopAlertPolling()
                 // FIX "ABRIR APP": se o usuário abriu o app desbloqueado a partir daqui,
                 // não reseta a autenticação no próximo ciclo
                 if AppDelegate.skipNextAuthReset {
@@ -90,9 +92,8 @@ struct RootView: View {
                 #endif
             case .active:
                 checkPasswordFlag()
-                #if !targetEnvironment(simulator)
-                ScreenTimeManager.shared.syncCheckAndReblock()
-                #endif
+                pollAlertsOnce()
+                startAlertPolling()
             default: break
             }
         }
@@ -105,15 +106,65 @@ struct RootView: View {
             showAlertDetail = id
         }
         .onReceive(NotificationCenter.default.publisher(for: .incomingEmergencyAlert)) { notif in
-            guard let id = notif.userInfo?["alert_id"] as? Int, id > 0 else { return }
+            let id = notif.userInfo?["alert_id"] as? Int ?? 0
             Task {
-                if let a = try? await APIClient.shared.getAlert(id: id) {
+                if id > 0, let a = try? await APIClient.shared.getAlert(id: id) {
                     await MainActor.run { emergencyAlert = a }
                 } else {
-                    await MainActor.run { showAlertDetail = id }
+                    // id=0 ou getAlert falhou — buscar alerta mais recente recebido
+                    if let alerts = try? await APIClient.shared.getReceivedAlerts(),
+                       let latest = alerts.first {
+                        await MainActor.run { emergencyAlert = latest }
+                    } else if id > 0 {
+                        await MainActor.run { showAlertDetail = id }
+                    }
                 }
             }
         }
+    }
+
+    /// Busca alertas recebidos e exibe se houver algum não lido.
+    /// Equivalente ao onMessageReceived do Android: processa alertas recentes.
+    private func pollAlertsOnce() {
+        guard SessionManager.shared.isLoggedIn else { return }
+        Task { @MainActor in
+            guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
+            let myEmail = SessionManager.shared.userEmail
+            // Alinhar com Android: ignora próprios alertas e cancelados/lidos
+            let unread = alerts.first(where: {
+                let s = $0.status.lowercased()
+                let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
+                return !isMine && s != "cancelled" && s != "read" && s != "cancel"
+            })
+            if let a = unread, emergencyAlert?.id != a.id {
+                emergencyAlert = a
+            }
+        }
+    }
+
+    private func startAlertPolling() {
+        guard SessionManager.shared.isLoggedIn else { return }
+        stopAlertPolling()
+        alertPollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+            Task { @MainActor in
+                guard SessionManager.shared.isLoggedIn else { return }
+                guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
+                let myEmail = SessionManager.shared.userEmail
+                let unread = alerts.first(where: {
+                    let s = $0.status.lowercased()
+                    let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
+                    return !isMine && s != "cancelled" && s != "read" && s != "cancel"
+                })
+                if let a = unread, self.emergencyAlert?.id != a.id {
+                    self.emergencyAlert = a
+                }
+            }
+        }
+    }
+
+    private func stopAlertPolling() {
+        alertPollTimer?.invalidate()
+        alertPollTimer = nil
     }
 
     private func checkPasswordFlag() {
@@ -457,23 +508,31 @@ struct UnlockPasswordView: View {
     }
 
     private func sendEmergencyAlert(coord: CLLocationCoordinate2D?) {
+        // Captura valores AGORA no MainActor antes de entrar na Task assíncrona
         let myEmail  = SessionManager.shared.userEmail
         let userName = SessionManager.shared.userName
-        // Log para debug
-        print("[PPPIX] sendEmergencyAlert — coord: \(coord?.latitude ?? 0), \(coord?.longitude ?? 0), user: \(myEmail)")
+        let latStr   = coord.map { String(format: "%.6f", $0.latitude) }
+        let lonStr   = coord.map { String(format: "%.6f", $0.longitude) }
+        print("[PPPIX] sendEmergencyAlert inicio — user: \(myEmail), lat: \(latStr ?? "nil")")
+
+        guard !myEmail.isEmpty else {
+            print("[PPPIX] sendEmergencyAlert ABORTADO — userEmail vazio, usuário não logado?")
+            return
+        }
+
         Task { @MainActor in
             do {
-                let connections  = (try? await APIClient.shared.getAcceptedConnections()) ?? []
+                let connections  = try await APIClient.shared.getAcceptedConnections()
                 let recipientIds = connections.map { $0.userId(myEmail: myEmail) }.filter { $0 > 0 }
-                print("[PPPIX] sendEmergencyAlert — \(connections.count) conexões, \(recipientIds.count) destinatários")
-                let vehicles     = (try? await APIClient.shared.getVehicles()) ?? []
-                let vehicle      = vehicles.first(where: { $0.is_active }) ?? vehicles.first
-                let vPayload     = vehicle.map {
+                print("[PPPIX] sendEmergencyAlert — \(connections.count) conexões, destinatários: \(recipientIds)")
+
+                let vehicles = (try? await APIClient.shared.getVehicles()) ?? []
+                let vehicle  = vehicles.first(where: { $0.is_active }) ?? vehicles.first
+                let vPayload = vehicle.map {
                     VehicleInfoPayload(model: $0.model, license_plate: $0.license_plate,
                                        color: $0.color, year: $0.year)
                 }
-                let latStr = coord.map { String(format: "%.6f", $0.latitude) }
-                let lonStr = coord.map { String(format: "%.6f", $0.longitude) }
+
                 let body = SendAlertRequest(
                     alert_type: "emergency_password",
                     priority:   "critical",
@@ -487,10 +546,31 @@ struct UnlockPasswordView: View {
                     ),
                     recipient_ids: recipientIds
                 )
+
                 let result = try await APIClient.shared.sendAlert(body: body)
-                print("[PPPIX] sendEmergencyAlert — ENVIADO OK, id: \(result.id)")
+                print("[PPPIX] sendEmergencyAlert ENVIADO com sucesso — id: \(result.id)")
             } catch {
-                print("[PPPIX] sendEmergencyAlert — ERRO: \(error)")
+                print("[PPPIX] sendEmergencyAlert ERRO na primeira tentativa: \(error)")
+                // Retry sem recipientes específicos — backend filtra por conexões do usuário
+                do {
+                    let body = SendAlertRequest(
+                        alert_type: "emergency_password",
+                        priority:   "critical",
+                        title:      "🚨 Senha de Emergência",
+                        message:    "\(userName) utilizou a senha de emergência e pode estar em perigo!",
+                        latitude:   latStr,
+                        longitude:  lonStr,
+                        metadata:   AlertMetadata(
+                            timestamp: String(Int(Date().timeIntervalSince1970 * 1000)),
+                            vehicle_info: nil
+                        ),
+                        recipient_ids: []
+                    )
+                    let result = try await APIClient.shared.sendAlert(body: body)
+                    print("[PPPIX] sendEmergencyAlert RETRY OK — id: \(result.id)")
+                } catch {
+                    print("[PPPIX] sendEmergencyAlert RETRY TAMBÉM FALHOU: \(error)")
+                }
             }
         }
     }
@@ -602,6 +682,12 @@ struct ArrowUnlockView: View {
 
         // FIX: sinaliza para NÃO pedir senha quando o PPPIX voltar ao foreground
         AppDelegate.skipNextAuthReset = true
+
+        // Sinaliza que estamos indo para background PROPOSITALMENTE (abrindo o banco)
+        // Isso evita que reblockOnBackground() aplique shield prematuramente
+        #if !targetEnvironment(simulator)
+        ScreenTimeManager.shared.isOpeningBankApp = true
+        #endif
 
         // Fecha TODOS os covers de uma vez antes de abrir o outro app
         isPresented = false
