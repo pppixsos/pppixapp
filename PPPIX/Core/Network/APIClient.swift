@@ -258,6 +258,12 @@ final class APIClient {
             print("[PPPIX] API 400: \(msg) | raw=\(raw)")
             Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] API 400: \(msg) | raw=\(raw)") }
             throw APIError.badRequest(msg)
+        case 403:
+            let raw = String(data: data, encoding: .utf8) ?? ""
+            let msg = parseErrorMessage(data) ?? "Sem permissão para esta ação."
+            print("[PPPIX] API 403: \(msg) | raw=\(raw)")
+            Task { @MainActor in AlertDiagnosticLog.shared.log("API 403: \(msg)") }
+            throw APIError.forbidden(msg)
         case 404: throw APIError.notFound
         case 500...:
             let raw = String(data: data, encoding: .utf8) ?? ""
@@ -304,13 +310,14 @@ final class APIClient {
 
 enum APIError: LocalizedError {
     case invalidURL, invalidResponse, unauthorized
-    case badRequest(String), notFound, serverError
+    case badRequest(String), forbidden(String), notFound, serverError
     case decodingError(String), unknown(String)
 
     var errorDescription: String? {
         switch self {
         case .unauthorized:           return "Sessão expirada. Faça login novamente."
         case .badRequest(let msg):    return msg
+        case .forbidden(let msg):     return msg
         case .notFound:               return "Usuário não encontrado. Verifique o email."
         case .serverError:            return "Erro no servidor. Tente novamente."
         case .decodingError(let msg): return "Erro ao processar resposta: \(msg)"
