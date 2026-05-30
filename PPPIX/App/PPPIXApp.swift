@@ -309,13 +309,6 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         return result
     }
 
-    private func str(_ val: Any?) -> String {
-        (val as? String) ?? (val as? NSString).map(String.init) ?? ""
-    }
-
-    private func intVal(_ val: Any?) -> Int {
-        (val as? Int) ?? (val as? String).flatMap(Int.init) ?? (val as? NSNumber).map { $0.intValue } ?? 0
-    }
 }
 
 extension AppDelegate: @preconcurrency MessagingDelegate {
