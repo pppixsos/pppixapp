@@ -183,11 +183,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             triggerUnlockScreen()
             completionHandler(.newData)
         } else if action == "reblock" {
-            Task { @MainActor in
-                #if !targetEnvironment(simulator)
-                ScreenTimeManager.shared.syncCheckAndReblock()
-                #endif
-            }
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.forceReblock()
+            #endif
             completionHandler(.newData)
         } else {
             // Pode ser alerta de emergência — processar no MainActor
@@ -416,11 +414,10 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
             triggerUnlockScreen()
             completionHandler([])
         case "reblock":
-            Task { @MainActor in
-                #if !targetEnvironment(simulator)
-                ScreenTimeManager.shared.syncCheckAndReblock()
-                #endif
-            }
+            // Reblock notificação — aplicar shield imediatamente
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.forceReblock()
+            #endif
             completionHandler([])
         default:
             // Se é notificação local que já criamos (pppix_alert_X), mostrar e tocar sirene
@@ -453,12 +450,17 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
 
         switch action {
         case "reblock":
-            Task { @MainActor in
-                #if !targetEnvironment(simulator)
-                ScreenTimeManager.shared.syncCheckAndReblock()
-                #endif
-            }
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.forceReblock()
+            #endif
         case "unlock":
+            // Remover notificação de unlock imediatamente ao tocar
+            UNUserNotificationCenter.current().removeDeliveredNotifications(
+                withIdentifiers: [response.notification.request.identifier, "pppix_unlock"]
+            )
+            UNUserNotificationCenter.current().removePendingNotificationRequests(
+                withIdentifiers: ["pppix_unlock"]
+            )
             triggerUnlockScreen()
         default:
             if response.actionIdentifier == "UNLOCK_ACTION" {
