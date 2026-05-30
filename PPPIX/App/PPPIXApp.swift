@@ -19,8 +19,18 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     static var pendingUnlockScreen = false
     static var skipNextAuthReset = false
-    // Evita processar o mesmo alerta mais de uma vez (duplicata por polling + push)
-    private static var processedAlertIds = Set<Int>()
+
+    // IDs de alertas já exibidos — persistido em UserDefaults para não repetir após restart
+    private static let processedKey = "pppix_processed_alert_ids"
+    private static var processedAlertIds: Set<Int> {
+        get {
+            let arr = UserDefaults.standard.array(forKey: processedKey) as? [Int] ?? []
+            return Set(arr)
+        }
+        set {
+            UserDefaults.standard.set(Array(newValue), forKey: processedKey)
+        }
+    }
 
     func application(
         _ application: UIApplication,
@@ -178,36 +188,43 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         print("[PPPIX] handleEmergencyPayload PROCESSANDO — id=\(alertId) sender=\(senderEmail)")
 
-        // Notificação local visível com som de sirene personalizado
-        let content = UNMutableNotificationContent()
-        content.title = "🚨 Alerta de Emergência"
-        content.body  = "\(senderName) pode estar em perigo! Toque para ver detalhes."
-        // Som personalizado .caf (formato iOS) — toca SEMPRE: background, foreground, app morto
-        // Requisito Apple: .caf/.aiff/.wav < 30 segundos, no bundle do app
-        if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("sirene.caf"))
-        } else if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("sirene.mp3"))
-        } else {
-            content.sound = .defaultCritical
-        }
-        content.interruptionLevel = .critical
-        content.userInfo = [
+        let appState = UIApplication.shared.applicationState
+
+        // Sempre criar notificação local com som (toca em QUALQUER estado)
+        // A notificação local garante: banner + sirene mesmo se o push FCM não tiver notification
+        let notifContent = UNMutableNotificationContent()
+        notifContent.title = "🚨 Alerta de Emergência"
+        notifContent.body  = "\(senderName) pode estar em perigo! Toque para ver detalhes."
+        notifContent.interruptionLevel = .critical
+        notifContent.userInfo = [
             "alert_id":     alertId > 0 ? String(alertId) : "0",
             "alert_type":   alertType,
             "sender_email": senderEmail
         ]
-
-        let identifier = alertId > 0 ? "pppix_alert_\(alertId)" : "pppix_alert_\(Int(Date().timeIntervalSince1970))"
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-        )
-
-        // Notificar a UI imediatamente se app estiver em foreground
-        // (em background a sirene toca via UNNotificationSound acima)
-        if UIApplication.shared.applicationState == .active {
-            EmergencyAudioService.shared.playSiren()
+        // Som .caf para notificação (único formato aceito pelo iOS para notif sound)
+        if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
+            notifContent.sound = UNNotificationSound(named: UNNotificationSoundName("sirene.caf"))
+        } else {
+            notifContent.sound = .defaultCritical
         }
+        let identifier = alertId > 0 ? "pppix_alert_\(alertId)" : "pppix_alert_\(Int(Date().timeIntervalSince1970))"
+
+        // Em FOREGROUND: mostrar notificação E tocar sirene via AVAudioPlayer (mais longa)
+        // Em BACKGROUND/MORTO: a notificação com UNNotificationSound toca automaticamente
+        if appState == .active {
+            // App aberto: notificação + sirene AVAudioPlayer ao mesmo tempo
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
+            )
+            EmergencyAudioService.shared.playSiren()
+        } else {
+            // App em background/morto: só notificação (UNNotificationSound cuida do som)
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
+            )
+        }
+
+        // Notificar a UI para abrir a tela de alerta
         DispatchQueue.main.async {
             NotificationCenter.default.post(
                 name: .incomingEmergencyAlert,
@@ -257,10 +274,16 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
             }
             completionHandler([])
         default:
-            // Tenta processar como emergência
-            handleEmergencyPayload(payload)
-            // Sempre mostrar a notificação visualmente em foreground
-            completionHandler([.banner, .sound, .badge])
+            // Notificação de emergência chegou com app em FOREGROUND
+            // Processar o payload E mostrar o banner com som
+            let wasProcessed = handleEmergencyPayload(payload)
+            if wasProcessed {
+                // handleEmergencyPayload já criou notificação local — não mostrar a FCM original
+                // para evitar duplicata de banner
+                completionHandler([])
+            } else {
+                completionHandler([.banner, .sound, .badge])
+            }
         }
     }
 
