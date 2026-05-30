@@ -3,6 +3,7 @@ import Security
 
 /// Equivalente ao SessionManager.kt do Android.
 /// Tokens são salvos no Keychain (seguro). Demais dados no UserDefaults.
+@MainActor
 final class SessionManager: ObservableObject {
 
     static let shared = SessionManager()
