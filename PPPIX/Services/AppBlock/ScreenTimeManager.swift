@@ -149,8 +149,18 @@ final class ScreenTimeManager: ObservableObject {
         }
     }
 
+    // Flag: true quando o PPPIX acabou de abrir o app bancário
+    // Evita reblock prematuro quando voltamos pro PPPIX depois do banco
+    var isOpeningBankApp = false
+
     // Chamado quando scenePhase → .background no RootView
     func reblockOnBackground() {
+        // Se estamos indo para background porque acabamos de abrir o banco,
+        // NÃO reblocar — o timer vai controlar isso
+        if isOpeningBankApp {
+            isOpeningBankApp = false
+            return
+        }
         // Ao ir para background, aplica shield se tempo expirou
         if !isCurrentlyUnlocked() {
             sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
@@ -210,6 +220,7 @@ final class ScreenTimeManager: ObservableObject {
     func isCurrentlyUnlocked() -> Bool { false }
     func reblockAfterPasswordVerified() {}
     var hasBlockedApps: Bool { false }
+    var isOpeningBankApp = false
 }
 
 #endif
