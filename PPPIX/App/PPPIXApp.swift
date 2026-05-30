@@ -168,6 +168,49 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     // MARK: - Emergency alert handling
 
+    /// Cria notificação local de emergência diretamente (chamado pelo polling)
+    @MainActor func createEmergencyNotification(alertId: Int, alertType: String, senderEmail: String, senderName: String) {
+        let displayName = senderName.isEmpty ? (senderEmail.components(separatedBy: "@").first ?? "Contato") : senderName
+        let content = UNMutableNotificationContent()
+        content.title = "🚨 Alerta de Emergência"
+        content.body = "\(displayName) pode estar em perigo! Toque para ver detalhes."
+        content.interruptionLevel = .timeSensitive
+        content.userInfo = [
+            "alert_id": String(alertId),
+            "alert_type": alertType,
+            "sender_email": senderEmail,
+            "sender_name": senderName
+        ]
+        if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
+            AlertDiagnosticLog.shared.log("NOTIF: criando com sirene.caf id=\(alertId)")
+        } else if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
+            AlertDiagnosticLog.shared.log("NOTIF: criando com sirene.mp3 id=\(alertId)")
+        } else {
+            content.sound = .default
+            AlertDiagnosticLog.shared.log("NOTIF: criando com som padrão id=\(alertId)")
+        }
+        let identifier = "pppix_alert_\(alertId)"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        ) { error in
+            if let error = error {
+                Task { @MainActor in AlertDiagnosticLog.shared.log("NOTIF: erro ao adicionar: \(error)") }
+            } else {
+                Task { @MainActor in AlertDiagnosticLog.shared.log("NOTIF: adicionada com sucesso id=\(alertId)") }
+            }
+        }
+        // Tocar sirene via AVAudioPlayer se app estiver ativo
+        if UIApplication.shared.applicationState == .active {
+            EmergencyAudioService.shared.playSiren()
+        }
+        // Notificar UI
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .incomingEmergencyAlert, object: nil, userInfo: ["alert_id": alertId])
+        }
+    }
+
     /// Processa payload de alerta de emergência.
     /// Retorna true se o payload continha um alerta de emergência.
     @discardableResult
@@ -191,13 +234,19 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
 
         // Deve ter alert_type com conteúdo de emergência (igual Android)
-        guard !alertType.isEmpty else { return false }
+        guard !alertType.isEmpty else {
+            AlertDiagnosticLog.shared.log("NOTIF: alertType vazio — ignorado")
+            return false
+        }
 
         let isEmergency = alertType == "emergency_password"
                        || alertType == "wrong_password"
                        || alertType.lowercased().contains("emergency")
                        || alertType.lowercased().contains("alert")
-        guard isEmergency else { return false }
+        guard isEmergency else {
+            AlertDiagnosticLog.shared.log("NOTIF: alertType='\(alertType)' não é emergência — ignorado")
+            return false
+        }
 
         let alertId    = intVal(payload["alert_id"] ?? payload["id"])
         let rawSenderName = str(payload["sender_name"])
@@ -206,11 +255,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Deduplicar: não processar o mesmo alerta duas vezes
         if alertId > 0 {
             guard !AlertDeduplicator.shared.contains(alertId) else {
-                print("[PPPIX] handleEmergencyPayload — ignorado: alerta \(alertId) já processado")
-                Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload — ignorado: alerta \(alertId) já processado") }
+                AlertDiagnosticLog.shared.log("NOTIF: id=\(alertId) já no Deduplicator — ignorado")
                 return false
             }
             AlertDeduplicator.shared.markShown(alertId)
+            AlertDiagnosticLog.shared.log("NOTIF: id=\(alertId) marcado no Deduplicator")
             // Limita o set a 50 entradas para não crescer indefinidamente
         }
 
