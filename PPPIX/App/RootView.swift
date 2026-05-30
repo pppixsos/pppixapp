@@ -504,7 +504,7 @@ struct UnlockPasswordView: View {
 
         case "open_bank":
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 20)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
             #endif
             unlockedApp = appName
             showArrow = true
@@ -513,7 +513,7 @@ struct UnlockPasswordView: View {
             // FIX SENHA 3: mesmo unlock individual que senha 1
             // O alerta é disparado separadamente em verify() após buscar localização
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 20)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
             #endif
             unlockedApp = appName
             showArrow = true
@@ -525,15 +525,15 @@ struct UnlockPasswordView: View {
     }
 
     private func sendEmergencyAlert(coord: CLLocationCoordinate2D?) {
-        // Captura valores AGORA no MainActor antes de entrar na Task assíncrona
         let myEmail  = SessionManager.shared.userEmail
         let userName = SessionManager.shared.userName
         let latStr   = coord.map { String(format: "%.6f", $0.latitude) }
         let lonStr   = coord.map { String(format: "%.6f", $0.longitude) }
-        print("[PPPIX] sendEmergencyAlert inicio — user: \(myEmail), lat: \(latStr ?? "nil")")
+
+        AlertDiagnosticLog.shared.log("ENVIAR: início user=\(myEmail) lat=\(latStr ?? "nil")")
 
         guard !myEmail.isEmpty else {
-            print("[PPPIX] sendEmergencyAlert ABORTADO — userEmail vazio, usuário não logado?")
+            AlertDiagnosticLog.shared.log("ENVIAR ABORTADO: userEmail vazio — não logado?")
             return
         }
 
@@ -541,11 +541,7 @@ struct UnlockPasswordView: View {
             do {
                 let connections  = try await APIClient.shared.getAcceptedConnections()
                 let recipientIds = connections.map { $0.userId(myEmail: myEmail) }.filter { $0 > 0 }
-                print("[PPPIX] sendEmergencyAlert — \(connections.count) conexões")
-                for c in connections {
-                    print("[PPPIX]   conexão: from=\(c.from_user_email) to=\(c.to_user_email) userId=\(c.userId(myEmail: myEmail))")
-                }
-                print("[PPPIX] recipient_ids: \(recipientIds)")
+                AlertDiagnosticLog.shared.log("ENVIAR: \(connections.count) conexões, ids=\(recipientIds)")
 
                 let vehicles = (try? await APIClient.shared.getVehicles()) ?? []
                 let vehicle  = vehicles.first(where: { $0.is_active }) ?? vehicles.first
@@ -569,9 +565,12 @@ struct UnlockPasswordView: View {
                 )
 
                 let result = try await APIClient.shared.sendAlert(body: body)
-                print("[PPPIX] sendEmergencyAlert ENVIADO com sucesso — id: \(result.id)")
+                AlertDiagnosticLog.shared.log("ENVIAR SUCESSO: id=\(result.id)")
+            } catch APIError.forbidden(let msg) {
+                AlertDiagnosticLog.shared.log("ENVIAR ERRO 403: \(msg)")
+                return
             } catch {
-                print("[PPPIX] sendEmergencyAlert ERRO na primeira tentativa: \(error)")
+                AlertDiagnosticLog.shared.log("ENVIAR ERRO: \(error)")
                 // Retry sem recipientes específicos — backend filtra por conexões do usuário
                 do {
                     let body = SendAlertRequest(
