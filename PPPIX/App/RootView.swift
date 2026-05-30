@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import CoreLocation
 
 extension Int: @retroactive Identifiable {
@@ -8,7 +9,7 @@ extension Int: @retroactive Identifiable {
 // MARK: - Auth State
 @MainActor
 class PPPIXAuthState: ObservableObject {
-    static let shared = PPPIXAuthState()
+    static let instance = PPPIXAuthState()
     private init() {}
     @Published var isAuthenticated = false
 
@@ -24,7 +25,7 @@ class PPPIXAuthState: ObservableObject {
 // MARK: - RootView
 struct RootView: View {
     @StateObject private var session = SessionManager.shared
-    @StateObject private var auth    = PPPIXAuthState.shared
+    @StateObject private var auth    = PPPIXAuthState.instance
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showAlertDetail: Int?  = nil
@@ -163,17 +164,35 @@ struct RootView: View {
         AlertDiagnosticLog.shared.log("RECEBER(\(source)): NOVO id=\(a.id) de=\(a.sender_email) status=\(a.status)")
         // Marcar IMEDIATAMENTE antes de qualquer Task para garantir deduplicação
         AlertDeduplicator.shared.markShown(a.id)
-        // Criar notificação local com som
-        Task { @MainActor in
-            if let delegate = UIApplication.shared.delegate as? AppDelegate {
-                delegate.createEmergencyNotification(
-                    alertId: a.id,
-                    alertType: a.alert_type,
-                    senderEmail: a.sender_email,
-                    senderName: a.sender_name
-                )
+        // Criar notificação local DIRETAMENTE (sem Task — já estamos no MainActor)
+        let alertId  = a.id
+        let dispName = a.sender_name.isEmpty
+            ? (a.sender_email.components(separatedBy: "@").first ?? "Contato")
+            : a.sender_name
+        AlertDiagnosticLog.shared.log("NOTIF: criando id=\(alertId) nome=\(dispName)")
+        let nc = UNMutableNotificationContent()
+        nc.title = "🚨 Alerta de Emergência"
+        nc.body  = "\(dispName) pode estar em perigo! Toque para ver detalhes."
+        nc.interruptionLevel = .timeSensitive
+        nc.userInfo = ["alert_id": String(alertId), "alert_type": a.alert_type,
+                       "sender_email": a.sender_email, "sender_name": a.sender_name]
+        if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
+            nc.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
+            AlertDiagnosticLog.shared.log("NOTIF: som=sirene.caf")
+        } else {
+            nc.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
+            AlertDiagnosticLog.shared.log("NOTIF: som=sirene.mp3")
+        }
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let req = UNNotificationRequest(identifier: "pppix_alert_\(alertId)", content: nc, trigger: trigger)
+        UNUserNotificationCenter.current().add(req) { error in
+            if let error = error {
+                AlertDiagnosticLog.shared.log("NOTIF: ERRO \(error)")
+            } else {
+                AlertDiagnosticLog.shared.log("NOTIF: agendada ✅ id=\(alertId)")
             }
         }
+        EmergencyAudioService.shared.playSiren()
         Task { @MainActor in
             try? await APIClient.shared.markAlertRead(id: a.id)
             AlertDiagnosticLog.shared.log("RECEBER: markAlertRead id=\(a.id)")
