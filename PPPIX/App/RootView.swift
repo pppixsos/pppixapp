@@ -459,31 +459,39 @@ struct UnlockPasswordView: View {
     private func sendEmergencyAlert(coord: CLLocationCoordinate2D?) {
         let myEmail  = SessionManager.shared.userEmail
         let userName = SessionManager.shared.userName
+        // Log para debug
+        print("[PPPIX] sendEmergencyAlert — coord: \(coord?.latitude ?? 0), \(coord?.longitude ?? 0), user: \(myEmail)")
         Task { @MainActor in
             do {
                 let connections  = (try? await APIClient.shared.getAcceptedConnections()) ?? []
                 let recipientIds = connections.map { $0.userId(myEmail: myEmail) }.filter { $0 > 0 }
+                print("[PPPIX] sendEmergencyAlert — \(connections.count) conexões, \(recipientIds.count) destinatários")
                 let vehicles     = (try? await APIClient.shared.getVehicles()) ?? []
                 let vehicle      = vehicles.first(where: { $0.is_active }) ?? vehicles.first
                 let vPayload     = vehicle.map {
                     VehicleInfoPayload(model: $0.model, license_plate: $0.license_plate,
                                        color: $0.color, year: $0.year)
                 }
+                let latStr = coord.map { String(format: "%.6f", $0.latitude) }
+                let lonStr = coord.map { String(format: "%.6f", $0.longitude) }
                 let body = SendAlertRequest(
                     alert_type: "emergency_password",
                     priority:   "critical",
                     title:      "🚨 Senha de Emergência",
                     message:    "\(userName) utilizou a senha de emergência e pode estar em perigo!",
-                    latitude:   coord.map { String(format: "%.6f", $0.latitude) },
-                    longitude:  coord.map { String(format: "%.6f", $0.longitude) },
+                    latitude:   latStr,
+                    longitude:  lonStr,
                     metadata:   AlertMetadata(
                         timestamp:    String(Int(Date().timeIntervalSince1970 * 1000)),
                         vehicle_info: vPayload
                     ),
                     recipient_ids: recipientIds
                 )
-                _ = try await APIClient.shared.sendAlert(body: body)
-            } catch {}
+                let result = try await APIClient.shared.sendAlert(body: body)
+                print("[PPPIX] sendEmergencyAlert — ENVIADO OK, id: \(result.id)")
+            } catch {
+                print("[PPPIX] sendEmergencyAlert — ERRO: \(error)")
+            }
         }
     }
 
