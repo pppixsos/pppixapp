@@ -218,7 +218,6 @@ private struct BenefitRow: View {
 // MARK: - StoreManager
 
 @MainActor
-@MainActor
 final class StoreManager: ObservableObject {
 
     static let shared = StoreManager()
