@@ -12,8 +12,6 @@ struct ForgotPasswordView: View {
     @State private var code          = ""
     @State private var newPassword   = ""
     @State private var confirmPassword = ""
-    @State private var showPassword  = false
-
     // MARK: - State
     @State private var isLoading     = false
     @State private var errorMessage  = ""
@@ -79,26 +77,17 @@ struct ForgotPasswordView: View {
                             }
 
                             if step == .newPassword {
-                                PPPIXTextField(
+                                PPPIXSecureField(
                                     title: "Nova Senha",
                                     placeholder: "Mínimo 8 caracteres",
-                                    text: $newPassword,
-                                    isSecure: !showPassword
+                                    text: $newPassword
                                 )
-                                PPPIXTextField(
+                                PPPIXSecureField(
                                     title: "Confirmar Nova Senha",
                                     placeholder: "Repita a nova senha",
-                                    text: $confirmPassword,
-                                    isSecure: !showPassword
+                                    text: $confirmPassword
                                 )
-                                Button {
-                                    showPassword.toggle()
-                                } label: {
-                                    Label(showPassword ? "Ocultar senhas" : "Mostrar senhas",
-                                          systemImage: showPassword ? "eye.slash" : "eye")
-                                        .font(.caption)
-                                        .foregroundColor(Color(white: 0.4))
-                                }
+
                             }
 
                             if step == .success {
