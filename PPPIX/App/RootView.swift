@@ -30,7 +30,6 @@ struct RootView: View {
 
     @State private var showAlertDetail: Int?  = nil
     @State private var emergencyAlert: Alert? = nil
-    @State private var skipAuthForAlert = false  // pula senha 2 quando alerta chega via notificação
     @State private var alertPollTimer: Timer? = nil
 
     // Inicializa com true se há notificação pendente (cold start instantâneo)
@@ -57,7 +56,7 @@ struct RootView: View {
         Group {
             if !session.isLoggedIn {
                 LoginView()
-            } else if !auth.isAuthenticated && PPPIXAuthState.hasAppPassword && !skipAuthForAlert {
+            } else if !auth.isAuthenticated && PPPIXAuthState.hasAppPassword {
                 PPPIXLoginView(onAuthenticated: { auth.isAuthenticated = true })
             } else {
                 HomeView()
@@ -71,12 +70,7 @@ struct RootView: View {
             })
         }
         .fullScreenCover(item: $emergencyAlert) { alert in
-            EmergencyAlertView(alert: alert, onDismiss: {
-                emergencyAlert = nil
-                skipAuthForAlert = false
-                // Se não estava autenticado antes do alerta, volta a pedir senha 2
-                // (não faz nada — a PPPIXLoginView já estava esperando)
-            })
+            EmergencyAlertView(alert: alert, onDismiss: { emergencyAlert = nil })
         }
         .onAppear {
             #if !targetEnvironment(simulator)
@@ -115,12 +109,9 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .incomingEmergencyAlert)) { notif in
             let id = notif.userInfo?["alert_id"] as? Int ?? 0
             AlertDiagnosticLog.shared.log("RECEBER(push): notificação chegou id=\(id)")
-            // Pular senha 2 para mostrar o alerta diretamente
-            skipAuthForAlert = true
             // Se já foi mostrado localmente, ignorar
             if id > 0 && AlertDeduplicator.shared.shownIds.contains(id) {
                 AlertDiagnosticLog.shared.log("RECEBER(push): id=\(id) já exibido — ignorado")
-                skipAuthForAlert = false
                 return
             }
             Task { @MainActor in
@@ -223,8 +214,8 @@ struct RootView: View {
 
     private func startAlertPolling() {
         guard SessionManager.shared.isLoggedIn else { return }
-        stopAlertPolling()
-        alertPollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+        guard alertPollTimer == nil else { return } // já está rodando
+        alertPollTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { _ in
             Task { @MainActor in
                 guard SessionManager.shared.isLoggedIn else { return }
                 guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
