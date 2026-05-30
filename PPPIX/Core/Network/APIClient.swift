@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 final class APIClient {
 
     static let shared = APIClient()
