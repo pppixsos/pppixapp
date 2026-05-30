@@ -132,3 +132,26 @@ struct AlertDiagnosticView: View {
         return Color(white: 0.75)
     }
 }
+
+/// Singleton para deduplicar alertas — persiste entre sessões em UserDefaults.
+/// Usa classe (não struct) para poder ser mutado de qualquer contexto.
+@MainActor
+class AlertDeduplicator {
+    static let shared = AlertDeduplicator()
+    private static let key = "pppix_shown_alert_ids"
+    private init() {}
+
+    var shownIds: Set<Int> {
+        Set(UserDefaults.standard.array(forKey: Self.key) as? [Int] ?? [])
+    }
+
+    func markShown(_ id: Int) {
+        var ids = shownIds
+        ids.insert(id)
+        let limited = Array(ids.sorted().suffix(200))
+        UserDefaults.standard.set(limited, forKey: Self.key)
+        AlertDiagnosticLog.shared.log("RECEBER: id=\(id) marcado localmente")
+    }
+
+    func contains(_ id: Int) -> Bool { shownIds.contains(id) }
+}
