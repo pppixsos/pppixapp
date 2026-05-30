@@ -159,13 +159,18 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Keychain helpers
 
+    // AccessGroup compartilhado entre app principal e todas as extensions
+    private let keychainGroup = "K5SWZ92Z64.group.tech.pppix.app"
+
     private func keychainSet(key: String, value: String) {
         let data = value.data(using: .utf8)!
         let query: [String: Any] = [
             kSecClass as String:            kSecClassGenericPassword,
+            kSecAttrService as String:      "tech.pppix.app",
             kSecAttrAccount as String:      key,
             kSecValueData as String:        data,
-            kSecAttrAccessible as String:   kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String:   kSecAttrAccessibleAfterFirstUnlock,
+            kSecAttrAccessGroup as String:  keychainGroup
         ]
         SecItemDelete(query as CFDictionary)
         SecItemAdd(query as CFDictionary, nil)
@@ -173,22 +178,49 @@ final class SessionManager: ObservableObject {
 
     private func keychainGet(key: String) -> String? {
         let query: [String: Any] = [
-            kSecClass as String:       kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-            kSecReturnData as String:  true,
-            kSecMatchLimit as String:  kSecMatchLimitOne
+            kSecClass as String:            kSecClassGenericPassword,
+            kSecAttrService as String:      "tech.pppix.app",
+            kSecAttrAccount as String:      key,
+            kSecReturnData as String:       true,
+            kSecMatchLimit as String:       kSecMatchLimitOne,
+            kSecAttrAccessGroup as String:  keychainGroup
         ]
         var result: AnyObject?
-        SecItemCopyMatching(query as CFDictionary, &result)
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status != errSecSuccess {
+            // Fallback: tentar sem AccessGroup (tokens salvos antes desta versão)
+            let fallbackQuery: [String: Any] = [
+                kSecClass as String:       kSecClassGenericPassword,
+                kSecAttrAccount as String: key,
+                kSecReturnData as String:  true,
+                kSecMatchLimit as String:  kSecMatchLimitOne
+            ]
+            var fallbackResult: AnyObject?
+            SecItemCopyMatching(fallbackQuery as CFDictionary, &fallbackResult)
+            if let data = fallbackResult as? Data, let value = String(data: data, encoding: .utf8) {
+                // Migrar para o novo formato com AccessGroup
+                keychainSet(key: key, value: value)
+                return value
+            }
+            return nil
+        }
         guard let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
     private func keychainDelete(key: String) {
         let query: [String: Any] = [
+            kSecClass as String:           kSecClassGenericPassword,
+            kSecAttrService as String:     "tech.pppix.app",
+            kSecAttrAccount as String:     key,
+            kSecAttrAccessGroup as String: keychainGroup
+        ]
+        SecItemDelete(query as CFDictionary)
+        // Também deletar versão sem AccessGroup
+        let legacyQuery: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrAccount as String: key
         ]
-        SecItemDelete(query as CFDictionary)
+        SecItemDelete(legacyQuery as CFDictionary)
     }
 }
