@@ -55,7 +55,7 @@ struct ProfileView: View {
                             ProfileLinkRow(
                                 icon: "doc.text.fill",
                                 title: "Política de Privacidade",
-                                url: "https://privacidade.pppix.online"
+                                url: "https://privacidade.pppix.online/ios"
                             )
                             Divider().overlay(Color(white: 0.1))
                             ProfileLinkRow(
