@@ -253,12 +253,19 @@ final class APIClient {
         case 200...299: return
         case 401: throw APIError.unauthorized
         case 400:
+            let raw = String(data: data, encoding: .utf8) ?? ""
             let msg = parseErrorMessage(data) ?? "Dados inválidos."
+            print("[PPPIX] API 400: \(msg) | raw=\(raw)")
             throw APIError.badRequest(msg)
         case 404: throw APIError.notFound
-        case 500...: throw APIError.serverError
+        case 500...:
+            let raw = String(data: data, encoding: .utf8) ?? ""
+            print("[PPPIX] API 500: \(raw)")
+            throw APIError.serverError
         default:
+            let raw = String(data: data, encoding: .utf8) ?? ""
             let msg = parseErrorMessage(data) ?? "Erro \(code)"
+            print("[PPPIX] API \(code): \(msg) | raw=\(raw)")
             throw APIError.unknown(msg)
         }
     }
