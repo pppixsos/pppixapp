@@ -122,6 +122,16 @@ struct LoginView: View {
                 SessionManager.shared.saveUserInfo(id: 0, email: trimmedEmail, name: trimmedEmail)
             }
 
+            // Registrar APNS token direto no backend se disponível
+            if let apnsToken = SessionManager.shared.pendingApnsToken, !apnsToken.isEmpty {
+                do {
+                    try await APIClient.shared.registerFcmDevice(token: apnsToken, platform: "ios_apns")
+                    await AlertDiagnosticLog.shared.log("APNS token registrado no login ✅")
+                } catch {
+                    await AlertDiagnosticLog.shared.log("APNS token registro erro no login: \(error)")
+                }
+            }
+
             // Registra FCM — tenta token salvo ou busca novo do Firebase
             if let fcmToken = SessionManager.shared.fcmToken {
                 do {
