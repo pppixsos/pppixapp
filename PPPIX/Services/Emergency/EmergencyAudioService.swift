@@ -3,6 +3,7 @@ import UIKit
 
 /// Equivalente ao EmergencyService.kt do Android.
 /// Toca sirene.mp3 via AVAudioPlayer com categoria de áudio .alarm.
+@MainActor
 final class EmergencyAudioService {
 
     static let shared = EmergencyAudioService()
