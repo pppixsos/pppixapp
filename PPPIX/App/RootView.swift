@@ -91,6 +91,10 @@ struct RootView: View {
                 ScreenTimeManager.shared.reblockOnBackground()
                 #endif
             case .active:
+                // Remover notificação de unlock ao ativar o app
+                UNUserNotificationCenter.current().removeDeliveredNotifications(
+                    withIdentifiers: ["pppix_unlock"]
+                )
                 checkPasswordFlag()
                 pollAlertsOnce()
                 startAlertPolling()
