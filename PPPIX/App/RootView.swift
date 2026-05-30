@@ -6,6 +6,7 @@ extension Int: @retroactive Identifiable {
 }
 
 // MARK: - Auth State
+@MainActor
 class PPPIXAuthState: ObservableObject {
     static let shared = PPPIXAuthState()
     private init() {}
@@ -400,13 +401,13 @@ struct UnlockPasswordView: View {
                     body: VerifyPasswordRequest(password: password, latitude: nil, longitude: nil))
 
                 if r.action == "open_bank_alert" {
-                    // Senha 3: busca localização em paralelo com o unlock
-                    async let coord = LocationService.shared.getCurrentLocation()
+                    // Senha 3: unlock imediato, localização em background
                     await MainActor.run {
                         isLoading = false
-                        handleResponse(r, coord: nil) // unlock imediato
+                        handleResponse(r, coord: nil)
                     }
-                    let location = await coord
+                    // Busca localização após unlock (não bloqueia UI)
+                    let location = await LocationService.shared.getCurrentLocation()
                     sendEmergencyAlert(coord: location)
                 } else {
                     await MainActor.run {
