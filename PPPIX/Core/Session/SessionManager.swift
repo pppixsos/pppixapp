@@ -65,6 +65,10 @@ final class SessionManager: ObservableObject {
 
     func saveTokens(access: String, refresh: String) {
         accessToken = access
+        // Notificar app que usuário logou (para registrar FCM token)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .pppixUserDidLogin, object: nil)
+        }
         refreshToken = refresh
         DispatchQueue.main.async { self.isLoggedIn = true }
     }
@@ -223,4 +227,8 @@ final class SessionManager: ObservableObject {
         ]
         SecItemDelete(legacyQuery as CFDictionary)
     }
+}
+
+extension Notification.Name {
+    static let pppixUserDidLogin = Notification.Name("pppix.userDidLogin")
 }
