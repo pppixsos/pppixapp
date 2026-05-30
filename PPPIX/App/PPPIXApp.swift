@@ -410,8 +410,11 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
 
         switch action {
         case "unlock":
+            // NUNCA mostrar banner de unlock — o PPPIX já abre a tela de senha diretamente
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notification.request.identifier])
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
             triggerUnlockScreen()
-            completionHandler([.banner, .sound])
+            completionHandler([])
         case "reblock":
             Task { @MainActor in
                 #if !targetEnvironment(simulator)
