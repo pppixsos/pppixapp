@@ -109,20 +109,22 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let tokenStr = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task { @MainActor in AlertDiagnosticLog.shared.log("APNS token OK: \(tokenStr.prefix(20))...") }
 
-        // Forçar geração imediata do FCM token após APNS registrar
-        Messaging.messaging().token { token, error in
-            if let error = error {
-                Task { @MainActor in AlertDiagnosticLog.shared.log("FCM token erro: \(error.localizedDescription)") }
-            } else if let token = token {
-                Task { @MainActor in
-                    AlertDiagnosticLog.shared.log("FCM token gerado: \(token.prefix(20))...")
-                    SessionManager.shared.fcmToken = token
-                    if SessionManager.shared.isLoggedIn {
-                        do {
-                            try await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
-                            AlertDiagnosticLog.shared.log("FCM registrado no backend ✅")
-                        } catch {
-                            AlertDiagnosticLog.shared.log("FCM registro erro: \(error)")
+        // Forçar geração do FCM token após APNS registrar (com delay para Firebase processar)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            Messaging.messaging().token { token, error in
+                if let error = error {
+                    Task { @MainActor in AlertDiagnosticLog.shared.log("FCM token erro: \(error.localizedDescription)") }
+                } else if let token = token {
+                    Task { @MainActor in
+                        AlertDiagnosticLog.shared.log("FCM token gerado: \(token.prefix(20))...")
+                        SessionManager.shared.fcmToken = token
+                        if SessionManager.shared.isLoggedIn {
+                            do {
+                                try await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+                                AlertDiagnosticLog.shared.log("FCM registrado no backend ✅")
+                            } catch {
+                                AlertDiagnosticLog.shared.log("FCM registro erro: \(error)")
+                            }
                         }
                     }
                 }
