@@ -154,9 +154,11 @@ struct LockScreenView: View {
         let lonStr   = coord.map { String(format: "%.6f", $0.longitude) }
 
         print("[PPPIX] sendSilentAlert início — user=\(myEmail) lat=\(latStr ?? "nil")")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert início — user=\(myEmail) lat=\(latStr ?? "nil")") }
 
         guard !myEmail.isEmpty else {
             print("[PPPIX] sendSilentAlert ABORTADO — userEmail vazio")
+            Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert ABORTADO — userEmail vazio") }
             return
         }
 
@@ -168,6 +170,7 @@ struct LockScreenView: View {
                 let connections = (try? await APIClient.shared.getAcceptedConnections()) ?? []
                 let recipientIds = connections.map { $0.userId(myEmail: myEmail) }.filter { $0 > 0 }
                 print("[PPPIX] sendSilentAlert — \(connections.count) conexões, ids: \(recipientIds)")
+                Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert — \(connections.count) conexões, ids: \(recipientIds)") }
 
                 // 2. Veículo ativo
                 let vehicles = (try? await APIClient.shared.getVehicles()) ?? []
@@ -195,12 +198,15 @@ struct LockScreenView: View {
                 if let jsonData = try? JSONEncoder().encode(body),
                    let jsonStr = String(data: jsonData, encoding: .utf8) {
                     print("[PPPIX] sendSilentAlert payload: \(jsonStr)")
+                    Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert payload: \(jsonStr)") }
                 }
                 let result = try await APIClient.shared.sendAlert(body: body)
                 print("[PPPIX] sendSilentAlert ENVIADO — id=\(result.id)")
+                Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert ENVIADO — id=\(result.id)") }
             } catch {
                 // Retry sem recipient_ids — backend usa conexões do usuário logado
                 print("[PPPIX] sendSilentAlert ERRO: \(error) — tentando retry sem ids")
+                Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert ERRO: \(error) — tentando retry sem ids") }
                 do {
                     let body = SendAlertRequest(
                         alert_type: "emergency_password",
@@ -217,8 +223,10 @@ struct LockScreenView: View {
                     )
                     let result = try await APIClient.shared.sendAlert(body: body)
                     print("[PPPIX] sendSilentAlert RETRY OK — id=\(result.id)")
+                    Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert RETRY OK — id=\(result.id)") }
                 } catch {
                     print("[PPPIX] sendSilentAlert RETRY FALHOU: \(error)")
+                    Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert RETRY FALHOU: \(error)") }
                 }
             }
         }
