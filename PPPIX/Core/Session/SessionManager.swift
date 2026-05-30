@@ -34,7 +34,7 @@ final class SessionManager: ObservableObject {
         static let refreshToken = "pppix_refresh_token"
     }
 
-    private let defaults = UserDefaults.standard
+    private let defaults = UserDefaults(suiteName: "group.tech.pppix.app") ?? UserDefaults.standard
 
     // MARK: - Load on init
 
