@@ -112,7 +112,11 @@ jobs:
 
       - name: Export IPA
         run: |
-          cat > /tmp/ExportOptions.plist << 'PLIST'
+          MAIN_UUID=$(grep "tech.pppix.app=" /tmp/profile_uuids.txt | cut -d= -f2)
+          BLOCK_UUID=$(grep "tech.pppix.app.block=" /tmp/profile_uuids.txt | cut -d= -f2)
+          MONITOR_UUID=$(grep "tech.pppix.app.monitor=" /tmp/profile_uuids.txt | cut -d= -f2)
+          SHIELD_UUID=$(grep "tech.pppix.app.shield=" /tmp/profile_uuids.txt | cut -d= -f2)
+          cat > /tmp/ExportOptions.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
@@ -120,8 +124,15 @@ jobs:
             <key>teamID</key><string>K5SWZ92Z64</string>
             <key>signingStyle</key><string>manual</string>
             <key>signingCertificate</key><string>iPhone Distribution</string>
+            <key>provisioningProfiles</key><dict>
+              <key>tech.pppix.app</key><string>${MAIN_UUID}</string>
+              <key>tech.pppix.app.block</key><string>${BLOCK_UUID}</string>
+              <key>tech.pppix.app.monitor</key><string>${MONITOR_UUID}</string>
+              <key>tech.pppix.app.shield</key><string>${SHIELD_UUID}</string>
+            </dict>
           </dict></plist>
-          PLIST
+          EOF
+          cat /tmp/ExportOptions.plist
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -exportPath $RUNNER_TEMP/PPPIX_ipa \
