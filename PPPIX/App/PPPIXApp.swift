@@ -20,26 +20,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     static var pendingUnlockScreen = false
     static var skipNextAuthReset = false
 
-    // IDs de alertas já exibidos — persistido em UserDefaults para não repetir após restart
-    private static let processedKey = "pppix_processed_alert_ids"
-    private static var _processedCache: Set<Int>? = nil
-
-    private static var processedAlertIds: Set<Int> {
-        get {
-            if let cached = _processedCache { return cached }
-            let arr = UserDefaults.standard.array(forKey: processedKey) as? [Int] ?? []
-            let s = Set(arr)
-            _processedCache = s
-            return s
-        }
-        set {
-            _processedCache = newValue
-            // Guarda apenas os últimos 100 IDs para não crescer demais
-            let limited = Array(newValue.sorted().suffix(100))
-            UserDefaults.standard.set(limited, forKey: processedKey)
-            UserDefaults.standard.synchronize()
-        }
-    }
+    // Deduplicação unificada via AlertDeduplicator (UserDefaults persistente)
 
     func application(
         _ application: UIApplication,
@@ -224,16 +205,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         // Deduplicar: não processar o mesmo alerta duas vezes
         if alertId > 0 {
-            guard !AppDelegate.processedAlertIds.contains(alertId) else {
+            guard !AlertDeduplicator.shared.contains(alertId) else {
                 print("[PPPIX] handleEmergencyPayload — ignorado: alerta \(alertId) já processado")
                 Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload — ignorado: alerta \(alertId) já processado") }
                 return false
             }
-            AppDelegate.processedAlertIds.insert(alertId)
+            AlertDeduplicator.shared.markShown(alertId)
             // Limita o set a 50 entradas para não crescer indefinidamente
-            if AppDelegate.processedAlertIds.count > 50 {
-                AppDelegate.processedAlertIds.removeFirst()
-            }
         }
 
         print("[PPPIX] handleEmergencyPayload PROCESSANDO — id=\(alertId) sender=\(senderEmail)")
@@ -342,8 +320,10 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
             }
             completionHandler([])
         default:
-            // Se é notificação local que já criamos (pppix_alert_X), apenas mostrar
+            // Se é notificação local que já criamos (pppix_alert_X), mostrar e tocar sirene
             if identifier.hasPrefix("pppix_alert_") {
+                // Tocar sirene via AVAudioPlayer para som mais longo e persistente
+                EmergencyAudioService.shared.playSiren()
                 completionHandler([.banner, .sound, .badge])
                 return
             }
