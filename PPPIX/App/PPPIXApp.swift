@@ -191,7 +191,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     /// Processa payload de alerta de emergência.
     /// Retorna true se o payload continha um alerta de emergência.
     @discardableResult
-    func handleEmergencyPayload(_ payload: [String: Any]) -> Bool {
+    @MainActor func handleEmergencyPayload(_ payload: [String: Any]) -> Bool {
         let alertType   = str(payload["alert_type"])
         let senderEmail = str(payload["sender_email"])
         let myEmail     = SessionManager.shared.userEmail
@@ -256,11 +256,18 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             "sender_email": senderEmail,
             "sender_name":  senderName
         ]
-        // Som .caf para notificação (único formato aceito pelo iOS para notif sound)
-        if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
-            notifContent.sound = UNNotificationSound(named: UNNotificationSoundName("sirene.caf"))
+        // Som da notificação — sirene.caf se disponível, senão som padrão alto
+        // O sirene.caf é gerado pelo sign.yml via afconvert do sirene.mp3
+        if let cafURL = Bundle.main.url(forResource: "sirene", withExtension: "caf") {
+            _ = cafURL // arquivo existe
+            notifContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
+            Task { @MainActor in AlertDiagnosticLog.shared.log("Notif: usando sirene.caf") }
+        } else if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
+            notifContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
+            Task { @MainActor in AlertDiagnosticLog.shared.log("Notif: usando sirene.mp3 (sem caf)") }
         } else {
-            notifContent.sound = .defaultCritical
+            notifContent.sound = UNNotificationSound.defaultCriticalSound(withAudioVolume: 1.0)
+            Task { @MainActor in AlertDiagnosticLog.shared.log("Notif: usando som padrão (sem sirene)") }
         }
         let identifier = alertId > 0 ? "pppix_alert_\(alertId)" : "pppix_alert_\(Int(Date().timeIntervalSince1970))"
 
