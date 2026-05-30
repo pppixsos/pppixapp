@@ -78,46 +78,40 @@ final class ScreenTimeManager: ObservableObject {
     // MARK: - Unlock individual (chamado APÓS senha correta)
 
     func unlockSingleApp(reblockAfterSeconds: Int = 20) {
-        // Limpa debounce para permitir nova solicitação
         sharedDefaults?.removeObject(forKey: "pppix_password_request_time")
 
-        // ESTRATÉGIA DEFINITIVA:
-        // O ShieldActionExtension salvou o set completo ANTES do app tocado ser removido
-        // em "pppix_shield_apps_before_unlock". Aqui reconstruímos o set sem o token tocado.
-        //
-        // Se temos o token individual → remove só ele
-        // Se temos o set completo antes do unlock → usamos ele como referência
-        // Fallback → remove todos (garante que o usuário consiga usar o app)
-
+        // Remove shield do app específico (ou todos como fallback)
         if let tokenData = sharedDefaults?.data(forKey: "pppix_single_app_token_data"),
            let singleToken = try? JSONDecoder().decode(ApplicationToken.self, from: tokenData) {
-            // Remove APENAS esse token do set atual
             var remaining = store.shield.applications ?? currentSelection.applicationTokens
             remaining.remove(singleToken)
             store.shield.applications = remaining.isEmpty ? nil : remaining
         } else {
-            // Fallback: remove todos os shields de aplicativos
             store.shield.applications = nil
         }
 
+        // Grava timestamp de expiração do desbloqueio
         let until = Date().timeIntervalSince1970 + Double(reblockAfterSeconds)
         sharedDefaults?.set(until, forKey: "pppix_unlocked_until")
         sharedDefaults?.synchronize()
 
+        // Agenda reblock SOMENTE para quando o app for para background
+        // O shield só é reapplicado quando o usuário sair do PPPIX
         scheduleReblock(afterSeconds: reblockAfterSeconds)
     }
 
-    // MARK: - Reblock (DispatchQueue + UIBackgroundTask — confiável para 20s)
+    // MARK: - Reblock
+    // O reblock acontece em DUAS situações:
+    // 1. O app PPPIX vai para background (scenePhase → .background no RootView)
+    // 2. O timer de 20s expira E o app PPPIX já está em background
 
     private func scheduleReblock(afterSeconds seconds: Int) {
         cancelReblock()
-
         bgTask = UIApplication.shared.beginBackgroundTask(withName: "pppix.reblock") { [weak self] in
-            self?.performReblock()
+            self?.applyShieldIfExpired()
         }
-
         let workItem = DispatchWorkItem { [weak self] in
-            self?.performReblock()
+            self?.applyShieldIfExpired()
         }
         reblockWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(seconds), execute: workItem)
@@ -132,25 +126,39 @@ final class ScreenTimeManager: ObservableObject {
         }
     }
 
-    private func performReblock() {
-        sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
-        sharedDefaults?.synchronize()
-        // Só reblocar se o app PPPIX não estiver em foreground ativo
-        // Se o usuário ainda está usando o app, aguarda ele minimizar
+    // Chamado quando o timer expira — só bloqueia se o desbloqueio já expirou
+    private func applyShieldIfExpired() {
+        guard !isCurrentlyUnlocked() else {
+            // Ainda dentro do tempo — cancelar
+            cancelReblock()
+            return
+        }
+        // Expirou — verificar se app PPPIX está em foreground
         let state = UIApplication.shared.applicationState
-        if state == .background || state == .inactive {
+        if state == .active {
+            // PPPIX ainda em foreground — NÃO bloquear, retentar em 3s
+            let workItem = DispatchWorkItem { [weak self] in self?.applyShieldIfExpired() }
+            reblockWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: workItem)
+        } else {
+            // App em background — aplicar shield e limpar
+            sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
+            sharedDefaults?.synchronize()
             applyShield()
             cancelReblock()
-        } else {
-            // App em foreground — reagendar para daqui 5s e verificar novamente
-            let workItem = DispatchWorkItem { [weak self] in self?.performReblock() }
-            reblockWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: workItem)
         }
     }
 
+    // Chamado quando scenePhase → .background no RootView
     func reblockOnBackground() {
-        if !isCurrentlyUnlocked() { applyShield() }
+        // Ao ir para background, aplica shield se tempo expirou
+        if !isCurrentlyUnlocked() {
+            sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
+            sharedDefaults?.synchronize()
+            applyShield()
+            cancelReblock()
+        }
+        // Se ainda dentro do tempo, o timer já está agendado e cuidará disso
     }
 
     // Compatibilidade
