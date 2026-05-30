@@ -203,10 +203,14 @@ struct LockScreenView: View {
                 let result = try await APIClient.shared.sendAlert(body: body)
                 print("[PPPIX] sendSilentAlert ENVIADO — id=\(result.id)")
                 Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert ENVIADO — id=\(result.id)") }
+            } catch APIError.forbidden(let msg) {
+                // 403: assinatura necessária — logar claramente
+                print("[PPPIX] sendSilentAlert BLOQUEADO (assinatura): \(msg)")
+                AlertDiagnosticLog.shared.log("ENVIAR ERRO 403: \(msg)")
             } catch {
-                // Retry sem recipient_ids — backend usa conexões do usuário logado
-                print("[PPPIX] sendSilentAlert ERRO: \(error) — tentando retry sem ids")
-                Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert ERRO: \(error) — tentando retry sem ids") }
+                // Outro erro: retry sem recipient_ids
+                print("[PPPIX] sendSilentAlert ERRO: \(error) — tentando retry")
+                AlertDiagnosticLog.shared.log("ENVIAR ERRO: \(error) — retry sem ids")
                 do {
                     let body = SendAlertRequest(
                         alert_type: "emergency_password",
@@ -223,10 +227,12 @@ struct LockScreenView: View {
                     )
                     let result = try await APIClient.shared.sendAlert(body: body)
                     print("[PPPIX] sendSilentAlert RETRY OK — id=\(result.id)")
-                    Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert RETRY OK — id=\(result.id)") }
+                    AlertDiagnosticLog.shared.log("ENVIAR RETRY OK — id=\(result.id)")
+                } catch APIError.forbidden(let msg) {
+                    AlertDiagnosticLog.shared.log("ENVIAR RETRY ERRO 403: \(msg)")
                 } catch {
                     print("[PPPIX] sendSilentAlert RETRY FALHOU: \(error)")
-                    Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert RETRY FALHOU: \(error)") }
+                    AlertDiagnosticLog.shared.log("ENVIAR RETRY FALHOU: \(error)")
                 }
             }
         }
