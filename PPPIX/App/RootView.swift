@@ -169,10 +169,20 @@ struct RootView: View {
             "sender_email": a.sender_email,
             "sender_name":  a.sender_name
         ]
-        // handleEmergencyPayload vai marcar como shown E criar notificação local
-        // emergencyAlert é setado aqui diretamente para abrir a tela
+        // Marcar IMEDIATAMENTE antes de qualquer Task para garantir deduplicação
+        AlertDeduplicator.shared.markShown(a.id)
+        // Criar notificação local com som via handleEmergencyPayload
         Task { @MainActor in
-            (UIApplication.shared.delegate as? AppDelegate)?.handleEmergencyPayload(notifPayload)
+            // Passar skipDedup: true para não bloquear por já estar no Deduplicator
+            if let delegate = UIApplication.shared.delegate as? AppDelegate {
+                // Criar notificação diretamente sem passar pelo guard do Deduplicator
+                delegate.createEmergencyNotification(
+                    alertId: a.id,
+                    alertType: a.alert_type,
+                    senderEmail: a.sender_email,
+                    senderName: a.sender_name
+                )
+            }
         }
         Task { @MainActor in
             try? await APIClient.shared.markAlertRead(id: a.id)
