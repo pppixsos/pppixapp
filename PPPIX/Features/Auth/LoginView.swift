@@ -111,12 +111,26 @@ struct LoginView: View {
             SessionManager.shared.saveTokens(access: response.access, refresh: response.refresh)
 
             // Busca dados do usuário
-            let me = try await APIClient.shared.getMe()
-            SessionManager.shared.saveUserInfo(id: me.id, email: me.email, name: me.fullName)
+            do {
+                let me = try await APIClient.shared.getMe()
+                SessionManager.shared.saveUserInfo(id: me.id, email: me.email, name: me.fullName)
+                await AlertDiagnosticLog.shared.log("Login OK: \(me.email) id=\(me.id)")
+            } catch {
+                await AlertDiagnosticLog.shared.log("getMe ERRO: \(error) — usando email do login")
+                // Fallback: usar email digitado
+                SessionManager.shared.saveUserInfo(id: 0, email: trimmedEmail, name: trimmedEmail)
+            }
 
             // Registra FCM
             if let fcmToken = SessionManager.shared.fcmToken {
-                try? await APIClient.shared.registerFcmDevice(token: fcmToken, platform: "ios")
+                do {
+                    try await APIClient.shared.registerFcmDevice(token: fcmToken, platform: "ios")
+                    await AlertDiagnosticLog.shared.log("FCM registrado no login: \(fcmToken.prefix(20))...")
+                } catch {
+                    await AlertDiagnosticLog.shared.log("FCM registro ERRO no login: \(error)")
+                }
+            } else {
+                await AlertDiagnosticLog.shared.log("FCM: sem token disponível no login")
             }
 
         } catch APIError.unauthorized {
