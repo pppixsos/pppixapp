@@ -56,8 +56,6 @@ struct RootView: View {
         Group {
             if !session.isLoggedIn {
                 LoginView()
-            } else if !auth.isAuthenticated && PPPIXAuthState.hasAppPassword {
-                PPPIXLoginView(onAuthenticated: { auth.isAuthenticated = true })
             } else {
                 HomeView()
             }
