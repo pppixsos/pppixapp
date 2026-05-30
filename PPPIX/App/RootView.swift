@@ -109,7 +109,7 @@ struct RootView: View {
             let id = notif.userInfo?["alert_id"] as? Int ?? 0
             AlertDiagnosticLog.shared.log("RECEBER(push): notificação chegou id=\(id)")
             // Se já foi mostrado localmente, ignorar
-            if id > 0 && shownAlertIds.contains(id) {
+            if id > 0 && AlertDeduplicator.shared.shownIds.contains(id) {
                 AlertDiagnosticLog.shared.log("RECEBER(push): id=\(id) já exibido — ignorado")
                 return
             }
@@ -133,28 +133,14 @@ struct RootView: View {
 
     /// Busca alertas recebidos e exibe se houver algum não lido.
     /// Equivalente ao onMessageReceived do Android: processa alertas recentes.
-    // IDs já exibidos — persiste em UserDefaults para não repetir entre sessões
-    // Fonte primária de deduplicação (não depende do backend marcar como lido)
-    private static let shownKey = "pppix_shown_alert_ids"
-    private var shownAlertIds: Set<Int> {
-        get { Set(UserDefaults.standard.array(forKey: Self.shownKey) as? [Int] ?? []) }
-        set {
-            let limited = Array(newValue.sorted().suffix(200))
-            UserDefaults.standard.set(limited, forKey: Self.shownKey)
-        }
-    }
     private func markShown(_ id: Int) {
-        var ids = shownAlertIds
-        ids.insert(id)
-        shownAlertIds = ids
-        AlertDiagnosticLog.shared.log("RECEBER: id=\(id) adicionado ao cache local")
+        AlertDeduplicator.shared.markShown(id)
     }
 
     private func processAlerts(_ alerts: [Alert], source: String) {
         let myEmail = SessionManager.shared.userEmail
-        let shown   = shownAlertIds
+        let shown   = AlertDeduplicator.shared.shownIds
         AlertDiagnosticLog.shared.log("RECEBER(\(source)): \(alerts.count) alertas, \(shown.count) já vistos")
-        // Filtra: não meu, não cancelado, não já exibido localmente
         let candidate = alerts.first(where: {
             let s = $0.status.lowercased()
             let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
@@ -164,13 +150,11 @@ struct RootView: View {
             AlertDiagnosticLog.shared.log("RECEBER(\(source)): nenhum alerta novo")
             return
         }
-        AlertDiagnosticLog.shared.log("RECEBER(\(source)): NOVO alerta id=\(a.id) de=\(a.sender_email) status=\(a.status)")
-        // Marcar localmente ANTES de exibir — garante que não vai repetir mesmo se markAlertRead falhar
+        AlertDiagnosticLog.shared.log("RECEBER(\(source)): NOVO id=\(a.id) de=\(a.sender_email) status=\(a.status)")
         markShown(a.id)
-        // Tentar marcar no backend (melhor esforço, não bloqueia)
         Task { @MainActor in
             try? await APIClient.shared.markAlertRead(id: a.id)
-            AlertDiagnosticLog.shared.log("RECEBER: markAlertRead enviado para id=\(a.id)")
+            AlertDiagnosticLog.shared.log("RECEBER: markAlertRead id=\(a.id)")
         }
         emergencyAlert = a
     }
