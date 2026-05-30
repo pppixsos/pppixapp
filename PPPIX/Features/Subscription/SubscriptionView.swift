@@ -218,6 +218,7 @@ private struct BenefitRow: View {
 // MARK: - StoreManager
 
 @MainActor
+@MainActor
 final class StoreManager: ObservableObject {
 
     static let shared = StoreManager()
@@ -252,6 +253,7 @@ final class StoreManager: ObservableObject {
 
 // MARK: - AdManager
 
+@MainActor
 final class AdManager {
     static let shared = AdManager()
     private init() {}
