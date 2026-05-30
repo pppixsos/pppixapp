@@ -1,5 +1,4 @@
 import SwiftUI
-import FirebaseMessaging
 
 struct LoginView: View {
 
@@ -144,7 +143,7 @@ struct LoginView: View {
                 // Buscar token diretamente do Firebase
                 await AlertDiagnosticLog.shared.log("FCM: buscando token do Firebase...")
                 await withCheckedContinuation { continuation in
-                    Messaging.messaging().token { token, error in
+                    FirebaseMessaging.Messaging.messaging().token { token, error in
                         if let token = token {
                             Task { @MainActor in
                                 AlertDiagnosticLog.shared.log("FCM token obtido no login: \(token.prefix(20))...")
