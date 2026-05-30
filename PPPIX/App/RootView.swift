@@ -107,19 +107,22 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .incomingEmergencyAlert)) { notif in
             let id = notif.userInfo?["alert_id"] as? Int ?? 0
-            AlertDiagnosticLog.shared.log("RECEBER(push): notificação recebida id=\(id)")
+            AlertDiagnosticLog.shared.log("RECEBER(push): notificação chegou id=\(id)")
+            // Se já foi mostrado localmente, ignorar
+            if id > 0 && shownAlertIds.contains(id) {
+                AlertDiagnosticLog.shared.log("RECEBER(push): id=\(id) já exibido — ignorado")
+                return
+            }
             Task { @MainActor in
                 if id > 0, let a = try? await APIClient.shared.getAlert(id: id) {
-                    AlertDiagnosticLog.shared.log("RECEBER(push): alerta carregado id=\(a.id) de=\(a.sender_email) status=\(a.status)")
+                    AlertDiagnosticLog.shared.log("RECEBER(push): carregado id=\(a.id) de=\(a.sender_email)")
+                    markShown(a.id)
                     try? await APIClient.shared.markAlertRead(id: a.id)
                     emergencyAlert = a
                 } else {
-                    AlertDiagnosticLog.shared.log("RECEBER(push): getAlert falhou para id=\(id), buscando recentes...")
-                    if let alerts = try? await APIClient.shared.getReceivedAlerts(),
-                       let latest = alerts.first {
-                        AlertDiagnosticLog.shared.log("RECEBER(push): usando alerta mais recente id=\(latest.id)")
-                        try? await APIClient.shared.markAlertRead(id: latest.id)
-                        emergencyAlert = latest
+                    AlertDiagnosticLog.shared.log("RECEBER(push): getAlert falhou id=\(id), buscando recentes...")
+                    if let alerts = try? await APIClient.shared.getReceivedAlerts() {
+                        processAlerts(alerts, source: "push-fallback")
                     } else if id > 0 {
                         showAlertDetail = id
                     }
@@ -130,32 +133,57 @@ struct RootView: View {
 
     /// Busca alertas recebidos e exibe se houver algum não lido.
     /// Equivalente ao onMessageReceived do Android: processa alertas recentes.
+    // IDs já exibidos — persiste em UserDefaults para não repetir entre sessões
+    // Fonte primária de deduplicação (não depende do backend marcar como lido)
+    private static let shownKey = "pppix_shown_alert_ids"
+    private var shownAlertIds: Set<Int> {
+        get { Set(UserDefaults.standard.array(forKey: Self.shownKey) as? [Int] ?? []) }
+        set {
+            let limited = Array(newValue.sorted().suffix(200))
+            UserDefaults.standard.set(limited, forKey: Self.shownKey)
+        }
+    }
+    private func markShown(_ id: Int) {
+        var ids = shownAlertIds
+        ids.insert(id)
+        shownAlertIds = ids
+        AlertDiagnosticLog.shared.log("RECEBER: id=\(id) adicionado ao cache local")
+    }
+
+    private func processAlerts(_ alerts: [Alert], source: String) {
+        let myEmail = SessionManager.shared.userEmail
+        let shown   = shownAlertIds
+        AlertDiagnosticLog.shared.log("RECEBER(\(source)): \(alerts.count) alertas, \(shown.count) já vistos")
+        // Filtra: não meu, não cancelado, não já exibido localmente
+        let candidate = alerts.first(where: {
+            let s = $0.status.lowercased()
+            let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
+            return !isMine && s != "cancelled" && s != "cancel" && !shown.contains($0.id)
+        })
+        guard let a = candidate else {
+            AlertDiagnosticLog.shared.log("RECEBER(\(source)): nenhum alerta novo")
+            return
+        }
+        AlertDiagnosticLog.shared.log("RECEBER(\(source)): NOVO alerta id=\(a.id) de=\(a.sender_email) status=\(a.status)")
+        // Marcar localmente ANTES de exibir — garante que não vai repetir mesmo se markAlertRead falhar
+        markShown(a.id)
+        // Tentar marcar no backend (melhor esforço, não bloqueia)
+        Task { @MainActor in
+            try? await APIClient.shared.markAlertRead(id: a.id)
+            AlertDiagnosticLog.shared.log("RECEBER: markAlertRead enviado para id=\(a.id)")
+        }
+        emergencyAlert = a
+    }
+
     private func pollAlertsOnce() {
         guard SessionManager.shared.isLoggedIn else { return }
         Task { @MainActor in
             AlertDiagnosticLog.shared.log("RECEBER: buscando alertas...")
             guard let alerts = try? await APIClient.shared.getReceivedAlerts() else {
-                AlertDiagnosticLog.shared.log("RECEBER ERRO: falhou ao buscar alertas")
+                AlertDiagnosticLog.shared.log("RECEBER ERRO: falhou ao buscar")
                 return
             }
-            AlertDiagnosticLog.shared.log("RECEBER: \(alerts.count) alertas encontrados")
-            let myEmail = SessionManager.shared.userEmail
-            for a in alerts {
-                AlertDiagnosticLog.shared.log("  alerta id=\(a.id) tipo=\(a.alert_type) status=\(a.status) de=\(a.sender_email)")
-            }
-            let unread = alerts.first(where: {
-                let s = $0.status.lowercased()
-                let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
-                return !isMine && s != "cancelled" && s != "read" && s != "cancel"
-            })
-            guard let a = unread, emergencyAlert?.id != a.id else {
-                if unread == nil { AlertDiagnosticLog.shared.log("RECEBER: nenhum alerta não lido") }
-                return
-            }
-            AlertDiagnosticLog.shared.log("RECEBER: exibindo alerta id=\(a.id) de=\(a.sender_email)")
-            try? await APIClient.shared.markAlertRead(id: a.id)
-            AlertDiagnosticLog.shared.log("RECEBER: marcado como lido id=\(a.id)")
-            emergencyAlert = a
+            processAlerts(alerts, source: "poll")
         }
     }
 
@@ -166,16 +194,7 @@ struct RootView: View {
             Task { @MainActor in
                 guard SessionManager.shared.isLoggedIn else { return }
                 guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
-                let myEmail = SessionManager.shared.userEmail
-                let unread = alerts.first(where: {
-                    let s = $0.status.lowercased()
-                    let isMine = !myEmail.isEmpty && $0.sender_email.lowercased() == myEmail.lowercased()
-                    return !isMine && s != "cancelled" && s != "read" && s != "cancel"
-                })
-                guard let a = unread, self.emergencyAlert?.id != a.id else { return }
-                AlertDiagnosticLog.shared.log("RECEBER(timer): novo alerta id=\(a.id) de=\(a.sender_email)")
-                try? await APIClient.shared.markAlertRead(id: a.id)
-                self.emergencyAlert = a
+                self.processAlerts(alerts, source: "timer")
             }
         }
     }
