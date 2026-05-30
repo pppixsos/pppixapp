@@ -8,7 +8,8 @@ struct LoginView: View {
     @State private var showPassword = false
     @State private var isLoading = false
     @State private var errorMessage = ""
-    @State private var showRegister = false
+    @State private var showRegister      = false
+    @State private var showForgotPassword = false
 
     var body: some View {
         NavigationStack {
@@ -70,6 +71,12 @@ struct LoginView: View {
                             Task { await login() }
                         }
 
+                        Button("Esqueci minha senha") {
+                            showForgotPassword = true
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(Color(hex: "#3366FF"))
+
                         // Register link
                         Button {
                             showRegister = true
@@ -91,6 +98,9 @@ struct LoginView: View {
             }
             .navigationDestination(isPresented: $showRegister) {
                 RegisterView()
+            }
+            .sheet(isPresented: $showForgotPassword) {
+                ForgotPasswordView()
             }
         }
     }
