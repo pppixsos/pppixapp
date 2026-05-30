@@ -30,12 +30,14 @@ final class LocationService: NSObject, @unchecked Sendable {
         let status = manager.authorizationStatus
         guard status == .authorizedWhenInUse || status == .authorizedAlways else { return nil }
 
-        // Cache recente (< 60s) — retorna imediatamente sem delay
-        if let cached = manager.location, cached.timestamp.timeIntervalSinceNow > -60 {
+        // Cache recente (< 120s) — retorna imediatamente sem delay
+        if let cached = manager.location, cached.timestamp.timeIntervalSinceNow > -120 {
+            print("[PPPIX] GPS: usando cache — \(cached.coordinate.latitude), \(cached.coordinate.longitude)")
             return cached.coordinate
         }
 
-        // Solicita leitura com timeout de 4s
+        // Solicita leitura com timeout de 8s (emergência — mais tempo para GPS frio)
+        print("[PPPIX] GPS: solicitando localização nova...")
         return await withCheckedContinuation { (cont: CheckedContinuation<CLLocationCoordinate2D?, Never>) in
             let helper = LocationRequestHelper(continuation: cont, fallback: self.manager.location?.coordinate)
             helper.start()
@@ -61,7 +63,8 @@ private final class LocationRequestHelper: NSObject, CLLocationManagerDelegate, 
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         manager.requestLocation()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            print("[PPPIX] GPS timeout — usando fallback: \(String(describing: self?.fallback))")
             self?.finish(with: self?.fallback)
         }
     }
