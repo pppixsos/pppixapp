@@ -555,7 +555,6 @@ struct UnlockPasswordView: View {
     private func handleResponse(_ r: VerifyPasswordResponse, coord: CLLocationCoordinate2D?) {
         let bundleId = sharedDefaults?.string(forKey: "pppix_target_bundle_id") ?? ""
         let appName  = appDisplayName(for: bundleId)
-        let openedDirectly = bundleId.isEmpty // Abriu o PPPIX direto, não via app bloqueado
 
         // Limpa o debounce para permitir próxima solicitação do mesmo app
         sharedDefaults?.removeObject(forKey: "pppix_password_request_time")
@@ -567,31 +566,18 @@ struct UnlockPasswordView: View {
             onPPPIXAccess()
 
         case "open_bank":
-            if openedDirectly {
-                // Usuário abriu o PPPIX diretamente e digitou senha do banco
-                errorMsg = "Ops! Use essa senha nos apps bloqueados para desbloqueá-los."
-                password = ""
-            } else {
-                #if !targetEnvironment(simulator)
-                ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
-                #endif
-                unlockedApp = appName
-                showArrow = true
-            }
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
+            #endif
+            unlockedApp = appName
+            showArrow = true
 
         case "open_bank_alert":
-            if openedDirectly {
-                // Usuário abriu o PPPIX diretamente e digitou senha de emergência
-                // O alerta JÁ foi enviado em verify() — só mostrar aviso
-                errorMsg = "Ops! Use essa senha nos apps bloqueados para desbloqueá-los."
-                password = ""
-            } else {
-                #if !targetEnvironment(simulator)
-                ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
-                #endif
-                unlockedApp = appName
-                showArrow = true
-            }
+            #if !targetEnvironment(simulator)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
+            #endif
+            unlockedApp = appName
+            showArrow = true
 
         default:
             errorMsg = "Senha incorreta"
@@ -784,25 +770,21 @@ struct ArrowUnlockView: View {
         // Fecha a tela
         isPresented = false
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            // Tentar URL scheme específico do app
-            if let scheme = schemes[bundleId],
-               let url = URL(string: scheme),
-               UIApplication.shared.canOpenURL(url) {
-                UIApplication.shared.open(url, options: [:], completionHandler: nil)
-                return
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // Abrir direto pelo URL scheme sem canOpenURL
+            // (canOpenURL retorna false quando Screen Time está ativo)
+            if let scheme = schemes[bundleId], let url = URL(string: scheme) {
+                UIApplication.shared.open(url, options: [:]) { success in
+                    if !success {
+                        // Se falhou, tentar ir para home e o usuário abre manualmente
+                        // (o app já está desbloqueado pelo Screen Time)
+                        if let homeURL = URL(string: "itms-apps://") {
+                            // não faz nada — app já desbloqueado
+                        }
+                    }
+                }
             }
-
-            // Fallback: tentar abrir pelo bundle ID usando prefs: URL
-            // (funciona em alguns apps)
-            if let url = URL(string: "prefs:root=\(bundleId)"),
-               UIApplication.shared.canOpenURL(url) {
-                UIApplication.shared.open(url, options: [:], completionHandler: nil)
-                return
-            }
-
-            // Último fallback: home screen (usuário vai ao app manualmente)
-            // O app já está desbloqueado pelo Screen Time
+            // Sem scheme mapeado: app já desbloqueado, usuário vai manualmente
         }
     }
 }
