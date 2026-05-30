@@ -537,4 +537,5 @@ extension Notification.Name {
     static let sessionExpired             = Notification.Name("pppix.sessionExpired")
     static let openUnlockScreen           = Notification.Name("pppix.openUnlockScreen")
     static let pppixForceOpenUnlockScreen = Notification.Name("pppix.forceOpenUnlockScreen")
+    static let pppixUserDidLogin          = Notification.Name("pppix.userDidLogin")
 }
