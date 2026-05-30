@@ -5,6 +5,7 @@ import UIKit
 #if !targetEnvironment(simulator)
 import FamilyControls
 import ManagedSettings
+import DeviceActivity
 
 @MainActor
 final class ScreenTimeManager: ObservableObject {
@@ -95,9 +96,11 @@ final class ScreenTimeManager: ObservableObject {
         sharedDefaults?.set(until, forKey: "pppix_unlocked_until")
         sharedDefaults?.synchronize()
 
-        // Agenda reblock SOMENTE para quando o app for para background
-        // O shield só é reapplicado quando o usuário sair do PPPIX
+        // Agenda reblock via DispatchQueue (quando app está ativo)
         scheduleReblock(afterSeconds: reblockAfterSeconds)
+
+        // Inicia DeviceActivity monitoring para reblock mesmo com app fechado
+        startDeviceActivityMonitor(seconds: reblockAfterSeconds)
     }
 
     // MARK: - Reblock
@@ -115,6 +118,22 @@ final class ScreenTimeManager: ObservableObject {
         }
         reblockWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(seconds), execute: workItem)
+    }
+
+    private func startDeviceActivityMonitor(seconds: Int) {
+        let center = DeviceActivityCenter()
+        let now = Calendar.current.dateComponents([.hour, .minute, .second], from: Date())
+        let end = Calendar.current.dateComponents([.hour, .minute, .second],
+                                                   from: Date().addingTimeInterval(Double(seconds)))
+        let schedule = DeviceActivitySchedule(
+            intervalStart: now,
+            intervalEnd: end,
+            repeats: false
+        )
+        try? center.startMonitoring(
+            .init("pppix.reblock"),
+            during: schedule
+        )
     }
 
     private func cancelReblock() {
