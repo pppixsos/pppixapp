@@ -246,13 +246,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Sempre criar notificação local com som (toca em QUALQUER estado)
         // A notificação local garante: banner + sirene mesmo se o push FCM não tiver notification
         let notifContent = UNMutableNotificationContent()
+        let displayName = senderName.isEmpty ? senderEmail : senderName
         notifContent.title = "🚨 Alerta de Emergência"
-        notifContent.body  = "\(senderName) pode estar em perigo! Toque para ver detalhes."
+        notifContent.body  = "\(displayName) pode estar em perigo! Toque para ver detalhes."
         notifContent.interruptionLevel = .critical
         notifContent.userInfo = [
             "alert_id":     alertId > 0 ? String(alertId) : "0",
             "alert_type":   alertType,
-            "sender_email": senderEmail
+            "sender_email": senderEmail,
+            "sender_name":  senderName
         ]
         // Som .caf para notificação (único formato aceito pelo iOS para notif sound)
         if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
@@ -329,12 +331,10 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
             completionHandler([])
         default:
             // Notificação de emergência chegou com app em FOREGROUND
-            // Processar o payload E mostrar o banner com som
             let wasProcessed = handleEmergencyPayload(payload)
             if wasProcessed {
-                // handleEmergencyPayload já criou notificação local — não mostrar a FCM original
-                // para evitar duplicata de banner
-                completionHandler([])
+                // Mostrar banner + som (a notificação local já foi criada com sirene)
+                completionHandler([.banner, .sound, .badge])
             } else {
                 completionHandler([.banner, .sound, .badge])
             }
