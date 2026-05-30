@@ -5,6 +5,7 @@ struct ProfileView: View {
     @ObservedObject private var session = SessionManager.shared
     @State private var isLoadingFresh = false
     @State private var showLogoutConfirm = false
+    @State private var showDiagnostic = false
 
     var body: some View {
         ZStack {
@@ -71,6 +72,28 @@ struct ProfileView: View {
                         .font(.caption)
                         .foregroundColor(Color(white: 0.2))
 
+                    // Diagnóstico de alertas
+                    Button {
+                        showDiagnostic = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "stethoscope")
+                                .foregroundColor(Color(hex: "#FF9900"))
+                                .font(.system(size: 14))
+                            Text("Diagnóstico de Alertas")
+                                .font(.subheadline)
+                                .foregroundColor(Color(hex: "#FF9900"))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(Color(white: 0.3))
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(Color(white: 0.05))
+                        .cornerRadius(10)
+                    }
+
                     // Logout
                     PPPIXButton(title: "Sair da Conta", style: .destructive) {
                         showLogoutConfirm = true
@@ -91,6 +114,7 @@ struct ProfileView: View {
             }
         }
         .task { await loadFreshProfile() }
+        .sheet(isPresented: $showDiagnostic) { AlertDiagnosticView() }
         .confirmationDialog("Sair da Conta", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
             Button("Sair", role: .destructive) { logout() }
             Button("Cancelar", role: .cancel) {}
