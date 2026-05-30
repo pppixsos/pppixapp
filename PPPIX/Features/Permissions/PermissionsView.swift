@@ -210,8 +210,9 @@ final class PermissionsViewModel: ObservableObject {
 
     private func checkNotifications() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let isGranted = settings.authorizationStatus == .authorized
             DispatchQueue.main.async {
-                self.notificationsStatus = settings.authorizationStatus == .authorized ? .granted : .pending
+                self.notificationsStatus = isGranted ? .granted : .pending
             }
         }
     }
