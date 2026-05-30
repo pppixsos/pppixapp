@@ -154,6 +154,29 @@ final class APIClient {
 
     // MARK: - FCM Device
 
+    // MARK: - Password Reset
+
+    func requestPasswordReset(email: String) async throws {
+        struct Body: Encodable { let email: String }
+        let _: EmptyResponse = try await post("password-reset/request/", body: Body(email: email))
+    }
+
+    func verifyPasswordResetCode(email: String, code: String) async throws {
+        struct Body: Encodable { let email: String; let code: String }
+        let _: EmptyResponse = try await post("password-reset/verify/", body: Body(email: email, code: code))
+    }
+
+    func confirmPasswordReset(email: String, code: String, newPassword: String) async throws {
+        struct Body: Encodable {
+            let email: String
+            let code: String
+            let new_password: String
+            let confirm_password: String
+        }
+        let _: EmptyResponse = try await post("password-reset/confirm/",
+            body: Body(email: email, code: code, new_password: newPassword, confirm_password: newPassword))
+    }
+
     func registerFcmDevice(token: String, platform: String) async throws {
         let userId = SessionManager.shared.userId
         let body = FcmDeviceRequest(
