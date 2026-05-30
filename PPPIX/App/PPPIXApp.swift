@@ -121,11 +121,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     private func processEmergencyAlert(payload: [String: Any]) -> Bool {
         let alertType   = str(payload["alert_type"])
         let senderEmail = str(payload["sender_email"])
-        let myEmail     = SessionManager.shared.userEmail
 
-        guard !alertType.isEmpty,
-              !senderEmail.isEmpty,
-              senderEmail.lowercased() != myEmail.lowercased() else { return false }
+        // Aceita qualquer alerta de emergência — o backend já filtra destinatários
+        // Não filtra por senderEmail aqui pois o SessionManager pode estar vazio em background
+        guard !alertType.isEmpty else { return false }
 
         let isEmergency = alertType.contains("emergency") || alertType.contains("alert")
                        || alertType == "wrong_password"
