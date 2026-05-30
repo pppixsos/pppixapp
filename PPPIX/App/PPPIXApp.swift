@@ -22,13 +22,22 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     // IDs de alertas já exibidos — persistido em UserDefaults para não repetir após restart
     private static let processedKey = "pppix_processed_alert_ids"
+    private static var _processedCache: Set<Int>? = nil
+
     private static var processedAlertIds: Set<Int> {
         get {
+            if let cached = _processedCache { return cached }
             let arr = UserDefaults.standard.array(forKey: processedKey) as? [Int] ?? []
-            return Set(arr)
+            let s = Set(arr)
+            _processedCache = s
+            return s
         }
         set {
-            UserDefaults.standard.set(Array(newValue), forKey: processedKey)
+            _processedCache = newValue
+            // Guarda apenas os últimos 100 IDs para não crescer demais
+            let limited = Array(newValue.sorted().suffix(100))
+            UserDefaults.standard.set(limited, forKey: processedKey)
+            UserDefaults.standard.synchronize()
         }
     }
 
