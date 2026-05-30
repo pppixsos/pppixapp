@@ -182,8 +182,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let content = UNMutableNotificationContent()
         content.title = "🚨 Alerta de Emergência"
         content.body  = "\(senderName) pode estar em perigo! Toque para ver detalhes."
-        // Som personalizado (sirene.mp3) — toca mesmo em background
-        if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
+        // Som personalizado .caf (formato iOS) — toca SEMPRE: background, foreground, app morto
+        // Requisito Apple: .caf/.aiff/.wav < 30 segundos, no bundle do app
+        if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("sirene.caf"))
+        } else if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
             content.sound = UNNotificationSound(named: UNNotificationSoundName("sirene.mp3"))
         } else {
             content.sound = .defaultCritical
