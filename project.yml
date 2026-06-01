@@ -17,6 +17,9 @@ packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     from: "12.14.0"
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
 targets:
   PPPIX:
     type: application
@@ -98,6 +101,10 @@ targets:
         product: FirebaseCore
       - package: Firebase
         product: FirebaseMessaging
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
       - target: PPPIXBlockExtension
         embed: true
       - target: PPPIXShieldAction
