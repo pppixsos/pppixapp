@@ -276,12 +276,13 @@ struct AddVehicleSheet: View {
         let c = color.trimmingCharacters(in: .whitespaces)
         let y = year.trimmingCharacters(in: .whitespaces)
 
-        if m.isEmpty  { errorMessage = "Informe o modelo do veículo (ex: Honda Civic)"; return }
-        if p.isEmpty  { errorMessage = "Informe a placa (ex: ABC1234)"; return }
-        if p.count < 7 { errorMessage = "Placa inválida. Use o formato ABC1234 ou ABC1D23"; return }
-        if c.isEmpty  { errorMessage = "Informe a cor do veículo (ex: Preto)"; return }
-        guard let yearInt = Int(y), yearInt >= 1950, yearInt <= 2030 else {
-            errorMessage = "Ano inválido. Deve ser entre 1950 e 2030"; return
+        // Validação mínima — aceita qualquer formato de placa, cor, etc.
+        if m.isEmpty { errorMessage = "Informe o modelo do veículo"; return }
+        if p.isEmpty { errorMessage = "Informe a placa"; return }
+        if c.isEmpty { errorMessage = "Informe a cor"; return }
+        if y.isEmpty { errorMessage = "Informe o ano"; return }
+        guard let yearInt = Int(y) else {
+            errorMessage = "Ano inválido (ex: 2022)"; return
         }
 
         isSaving = true
