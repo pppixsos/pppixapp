@@ -15,6 +15,23 @@ final class APIClient {
         try await post("auth/login/", body: LoginRequest(email: email, password: password), auth: false)
     }
 
+    // Social login: provider = "google" | "apple"
+    func socialLogin(provider: String, token: String,
+                     firstName: String? = nil, lastName: String? = nil) async throws -> LoginResponse {
+        struct SocialRequest: Encodable {
+            let provider: String
+            let token: String
+            let first_name: String?
+            let last_name: String?
+        }
+        return try await post(
+            "auth/social/",
+            body: SocialRequest(provider: provider, token: token,
+                                first_name: firstName, last_name: lastName),
+            auth: false
+        )
+    }
+
     func register(body: RegisterRequest) async throws {
         let _: EmptyResponse = try await post("users/", body: body, auth: false)
     }
