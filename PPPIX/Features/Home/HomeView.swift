@@ -3,7 +3,9 @@ import SwiftUI
 struct HomeView: View {
 
     @ObservedObject private var session = SessionManager.shared
+    @ObservedObject private var store = StoreManager.shared
     @State private var showAlertDetail: Int? = nil
+    @State private var showPaywall = false
 
     private var firstName: String {
         session.userName.split(separator: " ").first.map(String.init) ?? "Usuário"
@@ -118,6 +120,17 @@ struct HomeView: View {
         .sheet(item: $showAlertDetail) { alertId in
             AlertDetailView(alertId: alertId)
         }
+        .sheet(isPresented: $showPaywall) {
+            SubscriptionView()
+        }
+        .task {
+            await store.loadProducts()
+            // Mostrar paywall toda vez que abrir, enquanto nao for premium
+            if !store.isPremium {
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                showPaywall = true
+            }
+        }
     }
 }
 
@@ -173,15 +186,15 @@ private struct PremiumCard: View {
                     .font(.headline)
                     .foregroundColor(.white)
             }
-            Text("Remova os anúncios e suporte o desenvolvimento do app")
+            Text("Proteção completa • 3 dias grátis")
                 .font(.subheadline)
                 .foregroundColor(Color(white: 0.6))
 
             HStack(spacing: 12) {
-                SubscriptionButton(title: "Mensal\nR$9,90") {
+                SubscriptionButton(title: "Mensal\nR$13,90") {
                     showSubscription = true
                 }
-                SubscriptionButton(title: "Anual\nR$79,90") {
+                SubscriptionButton(title: "Anual\nR$129,90") {
                     showSubscription = true
                 }
             }
