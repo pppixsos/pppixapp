@@ -34,8 +34,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             FirebaseApp.configure()
             Messaging.messaging().delegate = self
         }
-        // Configurar Google Sign In
-        if let clientID = FirebaseApp.app()?.options.clientID {
+        // Configurar Google Sign In — ler CLIENT_ID direto do plist
+        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let plist = NSDictionary(contentsOfFile: path),
+           let clientID = plist["CLIENT_ID"] as? String {
             GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
         }
 
