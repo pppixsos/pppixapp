@@ -43,10 +43,10 @@ struct SubscriptionView: View {
         .ignoresSafeArea()
         .task { await store.loadProducts() }
         .sheet(isPresented: $showPrivacy) {
-            PolicyWebView(url: "https://pppix.tech/privacidade", title: "Política de Privacidade")
+            PolicyWebView(url: "https://privacidade.pppix.online/ios", title: "Política de Privacidade")
         }
         .sheet(isPresented: $showTerms) {
-            PolicyWebView(url: "https://pppix.tech/termos", title: "Termos de Uso")
+            PolicyWebView(url: "https://privacidade.pppix.online/ios", title: "Termos de Uso")
         }
     }
 
