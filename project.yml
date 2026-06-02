@@ -7,8 +7,8 @@ options:
   xcodeVersion: "26.0"
 settings:
   base:
-    MARKETING_VERSION: "1.2.1"
-    CURRENT_PROJECT_VERSION: "194"
+    MARKETING_VERSION: "1.2.2"
+    CURRENT_PROJECT_VERSION: "196"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
@@ -95,6 +95,8 @@ targets:
         com.apple.developer.usernotifications.time-sensitive: true
         com.apple.security.application-groups:
           - group.tech.pppix.app
+        com.apple.developer.applesignin:
+          - Default
     capabilities:
       com.apple.developer.family-controls: {}
       com.apple.developer.applesignin:
