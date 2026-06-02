@@ -54,9 +54,7 @@ jobs:
           security unlock-keychain -p temppass123 build.keychain
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
           security default-keychain -s build.keychain
-          # Adicionar certs Apple no System e no build.keychain
-          sudo security add-trusted-cert -d -r trustRoot    -k /Library/Keychains/System.keychain /tmp/AppleRoot.cer
-          sudo security add-trusted-cert -d -r trustAsRoot  -k /Library/Keychains/System.keychain /tmp/AppleWWDRCAG3.cer
+          # Importar p12 — WWDR já está incluída via -certfile no openssl pkcs12
           security import /tmp/pppix.p12 -k build.keychain -P pppix123 -A
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
           echo '=== Identidades ==='
