@@ -21,7 +21,7 @@ jobs:
       - name: Install tools
         run: |
           brew install xcodegen
-          pip3 install PyJWT --break-system-packages -q
+          pip3 install PyJWT cryptography --break-system-packages
 
       - name: Setup App Store Connect API Key
         env:
@@ -32,130 +32,91 @@ jobs:
           echo "$API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
 
-      - name: Create distribution certificate
+      - name: Revoke old cert and create new
         env:
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          echo "aW1wb3J0IGp3dCwgdGltZSwganNvbiwgdXJsbGliLnJlcXVlc3QsIHVybGxpYi5lcnJvciwgb3MsIGJhc2U2NCwgc3VicHJvY2VzcwoKa2V5X2lkID0gb3MuZW52aXJvblsnS0VZX0lEJ10KaXNzdWVyX2lkID0gb3MuZW52aXJvblsnSVNTVUVSX0lEJ10KYXBpX2tleV9iNjQgPSBvcy5lbnZpcm9uWydBUElfS0VZJ10KcHJpdmF0ZV9rZXkgPSBiYXNlNjQuYjY0ZGVjb2RlKGFwaV9rZXlfYjY0KS5kZWNvZGUoJ3V0Zi04JykKCmRlZiBtYWtlX3Rva2VuKCk6CiAgICBwYXlsb2FkID0geydpc3MnOiBpc3N1ZXJfaWQsICdpYXQnOiBpbnQodGltZS50aW1lKCkpLCAnZXhwJzogaW50KHRpbWUudGltZSgpKSArIDEyMDAsICdhdWQnOiAnYXBwc3RvcmVjb25uZWN0LXYxJ30KICAgIHJldHVybiBqd3QuZW5jb2RlKHBheWxvYWQsIHByaXZhdGVfa2V5LCBhbGdvcml0aG09J0VTMjU2JywgaGVhZGVycz17J2tpZCc6IGtleV9pZH0pCgpkZWYgaGVhZGVycygpOgogICAgcmV0dXJuIHsnQXV0aG9yaXphdGlvbic6ICdCZWFyZXIgJyArIG1ha2VfdG9rZW4oKSwgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJ30KCiMgUmV2b2dhciBjZXJ0cyBleGlzdGVudGVzCnJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20vdjEvY2VydGlmaWNhdGVzP2ZpbHRlcltjZXJ0aWZpY2F0ZVR5cGVdPUlPU19ESVNUUklCVVRJT04mbGltaXQ9MTAnLCBoZWFkZXJzPWhlYWRlcnMoKSkKd2l0aCB1cmxsaWIucmVxdWVzdC51cmxvcGVuKHJlcSkgYXMgcjoKICAgIGRhdGEgPSBqc29uLmxvYWRzKHIucmVhZCgpKQpmb3IgYyBpbiBkYXRhLmdldCgnZGF0YScsIFtdKToKICAgIHByaW50KCdSZXZvZ2FuZG86ICcgKyBjWydpZCddKQogICAgZGVsX3JlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20vdjEvY2VydGlmaWNhdGVzLycgKyBjWydpZCddLCBoZWFkZXJzPWhlYWRlcnMoKSwgbWV0aG9kPSdERUxFVEUnKQogICAgdHJ5OgogICAgICAgIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4oZGVsX3JlcSkKICAgIGV4Y2VwdCB1cmxsaWIuZXJyb3IuSFRUUEVycm9yIGFzIGU6CiAgICAgICAgcHJpbnQoJ2F2aXNvOiAnICsgc3RyKGUuY29kZSkpCnRpbWUuc2xlZXAoMykKCiMgR2VyYXIgY2hhdmUgZSBDU1IKc3VicHJvY2Vzcy5ydW4oWydvcGVuc3NsJywgJ2dlbnJzYScsICctb3V0JywgJy90bXAvbWFjX2tleS5rZXknLCAnMjA0OCddLCBjaGVjaz1UcnVlLCBjYXB0dXJlX291dHB1dD1UcnVlKQpzdWJwcm9jZXNzLnJ1bihbCiAgICAnb3BlbnNzbCcsICdyZXEnLCAnLW5ldycsICcta2V5JywgJy90bXAvbWFjX2tleS5rZXknLCAnLW91dCcsICcvdG1wL21hY19jc3IuY3NyJywKICAgICctc3ViaicsICcvZW1haWxBZGRyZXNzPWRldkBwcHBpeC5hcHAvQ049aVBob25lIERpc3RyaWJ1dGlvbi9PPUNhcmxvcyBSb2JlcnRvIEp1bnF1ZWlyYS9DPUJSJwpdLCBjaGVjaz1UcnVlLCBjYXB0dXJlX291dHB1dD1UcnVlKQoKIyBjc3JDb250ZW50ID0gY29udGV1ZG8gYmFzZTY0IGVudHJlIG9zIGhlYWRlcnMgUEVNLCBzZW0gbmV3bGluZXMKd2l0aCBvcGVuKCcvdG1wL21hY19jc3IuY3NyJykgYXMgZjoKICAgIGxpbmVzID0gZi5yZWFkbGluZXMoKQpjc3JfY29udGVudCA9ICcnLmpvaW4obC5zdHJpcCgpIGZvciBsIGluIGxpbmVzIGlmIG5vdCBsLnN0YXJ0c3dpdGgoJy0tLS0tJykpCnByaW50KCdDU1IgbGVuOiAnICsgc3RyKGxlbihjc3JfY29udGVudCkpKQoKYm9keSA9IGpzb24uZHVtcHMoeydkYXRhJzogeyd0eXBlJzogJ2NlcnRpZmljYXRlcycsICdhdHRyaWJ1dGVzJzogeydjZXJ0aWZpY2F0ZVR5cGUnOiAnSU9TX0RJU1RSSUJVVElPTicsICdjc3JDb250ZW50JzogY3NyX2NvbnRlbnR9fX0pLmVuY29kZSgpCnJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20vdjEvY2VydGlmaWNhdGVzJywgZGF0YT1ib2R5LCBoZWFkZXJzPWhlYWRlcnMoKSwgbWV0aG9kPSdQT1NUJykKdHJ5OgogICAgd2l0aCB1cmxsaWIucmVxdWVzdC51cmxvcGVuKHJlcSkgYXMgcjoKICAgICAgICByZXNwID0ganNvbi5sb2FkcyhyLnJlYWQoKSkKZXhjZXB0IHVybGxpYi5lcnJvci5IVFRQRXJyb3IgYXMgZToKICAgIGVyciA9IGUucmVhZCgpLmRlY29kZSgpCiAgICBwcmludCgnRVJSTyAnICsgc3RyKGUuY29kZSkgKyAnOiAnICsgZXJyKQogICAgcmFpc2UKCnByaW50KCdSZXNwb3N0YTogJyArIGpzb24uZHVtcHMocmVzcClbOjIwMF0pCmNlcnRfYjY0ID0gcmVzcFsnZGF0YSddWydhdHRyaWJ1dGVzJ11bJ2NlcnRpZmljYXRlQ29udGVudCddCndpdGggb3BlbignL3RtcC9uZXdfY2VydC5jZXInLCAnd2InKSBhcyBmOgogICAgZi53cml0ZShiYXNlNjQuYjY0ZGVjb2RlKGNlcnRfYjY0KSkKY2VydF9pZCA9IHJlc3BbJ2RhdGEnXVsnaWQnXQp3aXRoIG9wZW4oJy90bXAvY2VydF9pZC50eHQnLCAndycpIGFzIGY6CiAgICBmLndyaXRlKGNlcnRfaWQpCnByaW50KCdDZXJ0IE9LOiAnICsgY2VydF9pZCkK" | base64 --decode > /tmp/gen_cert.py
+          echo "aW1wb3J0IGp3dCwgdGltZSwganNvbiwgdXJsbGliLnJlcXVlc3QsIHVybGxpYi5lcnJvciwgb3MsIGJhc2U2NCwgc3VicHJvY2Vzcywgc3lzCgprZXlfaWQgPSBvcy5lbnZpcm9uWydLRVlfSUQnXQppc3N1ZXJfaWQgPSBvcy5lbnZpcm9uWydJU1NVRVJfSUQnXQphcGlfa2V5X2I2NCA9IG9zLmVudmlyb25bJ0FQSV9LRVknXQpwcml2YXRlX2tleSA9IGJhc2U2NC5iNjRkZWNvZGUoYXBpX2tleV9iNjQpLmRlY29kZSgndXRmLTgnKQoKZGVmIG1ha2VfdG9rZW4oKToKICAgIHBheWxvYWQgPSB7J2lzcyc6IGlzc3Vlcl9pZCwgJ2lhdCc6IGludCh0aW1lLnRpbWUoKSksICdleHAnOiBpbnQodGltZS50aW1lKCkpICsgMTIwMCwgJ2F1ZCc6ICdhcHBzdG9yZWNvbm5lY3QtdjEnfQogICAgcmV0dXJuIGp3dC5lbmNvZGUocGF5bG9hZCwgcHJpdmF0ZV9rZXksIGFsZ29yaXRobT0nRVMyNTYnLCBoZWFkZXJzPXsna2lkJzoga2V5X2lkfSkKCmRlZiBnZXRfaGVhZGVycygpOgogICAgcmV0dXJuIHsnQXV0aG9yaXphdGlvbic6ICdCZWFyZXIgJyArIG1ha2VfdG9rZW4oKSwgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJ30KCiMgUmV2b2dhciBjZXJ0aWZpY2Fkb3MgZXhpc3RlbnRlcwpwcmludCgnUmV2b2dhbmRvIGNlcnRpZmljYWRvcyBpT1MgRGlzdHJpYnV0aW9uIGV4aXN0ZW50ZXMuLi4nKQpyZXEgPSB1cmxsaWIucmVxdWVzdC5SZXF1ZXN0KCdodHRwczovL2FwaS5hcHBzdG9yZWNvbm5lY3QuYXBwbGUuY29tL3YxL2NlcnRpZmljYXRlcz9maWx0ZXJbY2VydGlmaWNhdGVUeXBlXT1JT1NfRElTVFJJQlVUSU9OJmxpbWl0PTEwJywgaGVhZGVycz1nZXRfaGVhZGVycygpKQp3aXRoIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocmVxKSBhcyByZXNwOgogICAgZGF0YSA9IGpzb24ubG9hZHMocmVzcC5yZWFkKCkpCmZvciBjZXJ0IGluIGRhdGEuZ2V0KCdkYXRhJywgW10pOgogICAgY2VydF9pZCA9IGNlcnRbJ2lkJ10KICAgIHByaW50KCdSZXZvZ2FuZG86ICcgKyBjZXJ0WydhdHRyaWJ1dGVzJ11bJ25hbWUnXSkKICAgIGRlbF9yZXEgPSB1cmxsaWIucmVxdWVzdC5SZXF1ZXN0KCdodHRwczovL2FwaS5hcHBzdG9yZWNvbm5lY3QuYXBwbGUuY29tL3YxL2NlcnRpZmljYXRlcy8nICsgY2VydF9pZCwgaGVhZGVycz1nZXRfaGVhZGVycygpLCBtZXRob2Q9J0RFTEVURScpCiAgICB0cnk6CiAgICAgICAgdXJsbGliLnJlcXVlc3QudXJsb3BlbihkZWxfcmVxKQogICAgICAgIHByaW50KCdPSycpCiAgICBleGNlcHQgdXJsbGliLmVycm9yLkhUVFBFcnJvciBhcyBlOgogICAgICAgIHByaW50KCdBdmlzbzogJyArIHN0cihlLmNvZGUpKQoKIyBHZXJhciBub3ZhIGNoYXZlIGUgQ1NSCnN1YnByb2Nlc3MucnVuKFsnb3BlbnNzbCcsICdnZW5yc2EnLCAnLW91dCcsICcvdG1wL21hY19rZXkua2V5JywgJzIwNDgnXSwgY2hlY2s9VHJ1ZSkKY3NyX2NvbmZpZyA9ICdbcmVxXVxuZGVmYXVsdF9iaXRzID0gMjA0OFxucHJvbXB0ID0gbm9cbmRlZmF1bHRfbWQgPSBzaGEyNTZcbmRpc3Rpbmd1aXNoZWRfbmFtZSA9IGRuXG5bZG5dXG5DTiA9IGlQaG9uZSBEaXN0cmlidXRpb25cbk8gPSBDYXJsb3MgUm9iZXJ0byBKdW5xdWVpcmFcbkMgPSBCUlxuZW1haWxBZGRyZXNzID0gcGl4cHBwYXBwQGdtYWlsLmNvbVxuJwp3aXRoIG9wZW4oJy90bXAvY3NyLmNvbmYnLCAndycpIGFzIGY6CiAgICBmLndyaXRlKGNzcl9jb25maWcpCnN1YnByb2Nlc3MucnVuKFsnb3BlbnNzbCcsICdyZXEnLCAnLW5ldycsICcta2V5JywgJy90bXAvbWFjX2tleS5rZXknLCAnLW91dCcsICcvdG1wL21hY19jc3IuY3NyJywgJy1jb25maWcnLCAnL3RtcC9jc3IuY29uZiddLCBjaGVjaz1UcnVlKQp3aXRoIG9wZW4oJy90bXAvbWFjX2Nzci5jc3InLCAncicpIGFzIGY6CiAgICBjc3JfcGVtID0gZi5yZWFkKCkKY3NyX2xpbmVzID0gW2wgZm9yIGwgaW4gY3NyX3BlbS5zcGxpdCgnXG4nKSBpZiBsIGFuZCBub3QgbC5zdGFydHN3aXRoKCctLS0tLScpXQpjc3JfYjY0ID0gJycuam9pbihjc3JfbGluZXMpCgojIENyaWFyIGNlcnRpZmljYWRvCnByaW50KCdDcmlhbmRvIG5vdm8gY2VydGlmaWNhZG8uLi4nKQpib2R5ID0ganNvbi5kdW1wcyh7J2RhdGEnOiB7J3R5cGUnOiAnY2VydGlmaWNhdGVzJywgJ2F0dHJpYnV0ZXMnOiB7J2NlcnRpZmljYXRlVHlwZSc6ICdJT1NfRElTVFJJQlVUSU9OJywgJ2NzckNvbnRlbnQnOiBjc3JfYjY0fX19KS5lbmNvZGUoKQpyZXEgPSB1cmxsaWIucmVxdWVzdC5SZXF1ZXN0KCdodHRwczovL2FwaS5hcHBzdG9yZWNvbm5lY3QuYXBwbGUuY29tL3YxL2NlcnRpZmljYXRlcycsIGRhdGE9Ym9keSwgaGVhZGVycz1nZXRfaGVhZGVycygpLCBtZXRob2Q9J1BPU1QnKQp0cnk6CiAgICB3aXRoIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocmVxKSBhcyByZXNwOgogICAgICAgIGRhdGEgPSBqc29uLmxvYWRzKHJlc3AucmVhZCgpKQogICAgY2VydF9jb250ZW50ID0gZGF0YVsnZGF0YSddWydhdHRyaWJ1dGVzJ11bJ2NlcnRpZmljYXRlQ29udGVudCddCiAgICBjZXJ0X2J5dGVzID0gYmFzZTY0LmI2NGRlY29kZShjZXJ0X2NvbnRlbnQpCiAgICB3aXRoIG9wZW4oJy90bXAvbmV3X2NlcnQuY2VyJywgJ3diJykgYXMgZjoKICAgICAgICBmLndyaXRlKGNlcnRfYnl0ZXMpCiAgICAjIFNhbHZhciBjZXJ0X2lkIHBhcmEgbyBwcm94aW1vIHNjcmlwdAogICAgd2l0aCBvcGVuKCcvdG1wL2NlcnRfaWQudHh0JywgJ3cnKSBhcyBmOgogICAgICAgIGYud3JpdGUoZGF0YVsnZGF0YSddWydpZCddKQogICAgcHJpbnQoJ0NlcnRpZmljYWRvIGNyaWFkbzogJyArIGRhdGFbJ2RhdGEnXVsnYXR0cmlidXRlcyddWyduYW1lJ10pCiAgICBwcmludCgnSUQ6ICcgKyBkYXRhWydkYXRhJ11bJ2lkJ10pCmV4Y2VwdCB1cmxsaWIuZXJyb3IuSFRUUEVycm9yIGFzIGU6CiAgICBwcmludCgnRXJybyAnICsgc3RyKGUuY29kZSkgKyAnOiAnICsgZS5yZWFkKCkuZGVjb2RlKCkpCiAgICBzeXMuZXhpdCgxKQo=" | base64 --decode > /tmp/gen_cert.py
           python3 /tmp/gen_cert.py
-          echo "CERT_ID=$(cat /tmp/cert_id.txt)" >> $GITHUB_ENV
 
-      - name: Import certificate into keychain
+      - name: Setup keychain
         run: |
-          # Converter cert DER para PEM
-          if openssl x509 -inform DER -in /tmp/new_cert.cer -out /tmp/new_cert.pem 2>/dev/null; then
-            echo "DER->PEM OK"
-          else
-            cp /tmp/new_cert.cer /tmp/new_cert.pem
-            echo "ja era PEM"
-          fi
-          # Criar p12
-          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -passout pass:pppix123
-          # Criar keychain dedicado
-          security create-keychain -p pppix123 pppix.keychain
-          security set-keychain-settings -t 7200 -u pppix.keychain
-          security list-keychains -d user -s pppix.keychain $(security list-keychains -d user | tr -d '"')
-          security unlock-keychain -p pppix123 pppix.keychain
-          # Importar cert no keychain
-          security import /tmp/pppix.p12 -k pppix.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/security -A
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k pppix123 pppix.keychain
-          echo "=== Identidades ==="
-          security find-identity -v -p codesigning pppix.keychain
-          CERT_IDENTITY=$(security find-identity -v -p codesigning pppix.keychain | grep -E 'Apple Distribution|iPhone Distribution' | head -1 | sed 's/.*"\(.*\)"/\1/')
-          if [ -z "$CERT_IDENTITY" ]; then
-            echo "ERRO: sem certificado no keychain"
-            exit 1
-          fi
-          KEYCHAIN_PATH=$(security list-keychains -d user | grep pppix | tr -d '" ')
+          openssl x509 -inform DER -in /tmp/new_cert.cer -out /tmp/new_cert.pem
+          openssl x509 -in /tmp/new_cert.pem -noout -subject
+          curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
+          openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem
+          curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
+          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123
+          security create-keychain -p temppass123 build.keychain
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
+          security default-keychain -s build.keychain
+          security unlock-keychain -p temppass123 build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/AppleRoot.cer
+          sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/AppleWWDRCAG3.cer
+          security import /tmp/pppix.p12 -k build.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
+          echo '=== Identidades ==='
+          security find-identity -v -p codesigning build.keychain
+          CERT_IDENTITY=$(security find-identity -v -p codesigning build.keychain | grep -E 'Apple Distribution|iPhone Distribution' | head -1 | sed 's/.*"\(.*\)"/\1/')
+          if [ -z "$CERT_IDENTITY" ]; then echo 'ERRO: sem certificado valido no keychain'; exit 1; fi
           echo "CERT_IDENTITY=$CERT_IDENTITY" >> $GITHUB_ENV
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "KEYCHAIN_PATH=$HOME/Library/Keychains/build.keychain-db" >> $GITHUB_ENV
           echo "Usando: $CERT_IDENTITY"
 
-      - name: Create provisioning profiles
+      - name: Create and install provisioning profile
         env:
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          CERT_ID: ${{ env.CERT_ID }}
         run: |
-          echo "aW1wb3J0IGp3dCwgdGltZSwganNvbiwgdXJsbGliLnJlcXVlc3QsIHVybGxpYi5lcnJvciwgdXJsbGliLnBhcnNlLCBvcywgYmFzZTY0LCBzdWJwcm9jZXNzLCBzeXMsIHBsaXN0bGliLCBzaHV0aWwKCmtleV9pZCA9IG9zLmVudmlyb25bJ0tFWV9JRCddCmlzc3Vlcl9pZCA9IG9zLmVudmlyb25bJ0lTU1VFUl9JRCddCmFwaV9rZXlfYjY0ID0gb3MuZW52aXJvblsnQVBJX0tFWSddCnByaXZhdGVfa2V5ID0gYmFzZTY0LmI2NGRlY29kZShhcGlfa2V5X2I2NCkuZGVjb2RlKCd1dGYtOCcpCmNlcnRfaWQgPSBvcy5lbnZpcm9uWydDRVJUX0lEJ10KCmRlZiBtYWtlX3Rva2VuKCk6CiAgICBwYXlsb2FkID0geydpc3MnOiBpc3N1ZXJfaWQsICdpYXQnOiBpbnQodGltZS50aW1lKCkpLCAnZXhwJzogaW50KHRpbWUudGltZSgpKSArIDEyMDAsICdhdWQnOiAnYXBwc3RvcmVjb25uZWN0LXYxJ30KICAgIHJldHVybiBqd3QuZW5jb2RlKHBheWxvYWQsIHByaXZhdGVfa2V5LCBhbGdvcml0aG09J0VTMjU2JywgaGVhZGVycz17J2tpZCc6IGtleV9pZH0pCgpkZWYgZ2V0X2hlYWRlcnMoKToKICAgIHJldHVybiB7J0F1dGhvcml6YXRpb24nOiAnQmVhcmVyICcgKyBtYWtlX3Rva2VuKCksICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbid9CgpkZWYgYXBpX2dldChwYXRoKToKICAgIHJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20nICsgcGF0aCwgaGVhZGVycz1nZXRfaGVhZGVycygpKQogICAgd2l0aCB1cmxsaWIucmVxdWVzdC51cmxvcGVuKHJlcSkgYXMgcjoKICAgICAgICByZXR1cm4ganNvbi5sb2FkcyhyLnJlYWQoKSkKCmRlZiBhcGlfcG9zdChwYXRoLCBib2R5KToKICAgIHJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20nICsgcGF0aCwgZGF0YT1qc29uLmR1bXBzKGJvZHkpLmVuY29kZSgpLCBoZWFkZXJzPWdldF9oZWFkZXJzKCksIG1ldGhvZD0nUE9TVCcpCiAgICB3aXRoIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocmVxKSBhcyByOgogICAgICAgIHJldHVybiBqc29uLmxvYWRzKHIucmVhZCgpKQoKZGVmIGFwaV9kZWxldGUocGF0aCk6CiAgICByZXEgPSB1cmxsaWIucmVxdWVzdC5SZXF1ZXN0KCdodHRwczovL2FwaS5hcHBzdG9yZWNvbm5lY3QuYXBwbGUuY29tJyArIHBhdGgsIGhlYWRlcnM9Z2V0X2hlYWRlcnMoKSwgbWV0aG9kPSdERUxFVEUnKQogICAgdHJ5OgogICAgICAgIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocmVxKQogICAgZXhjZXB0IHVybGxpYi5lcnJvci5IVFRQRXJyb3IgYXMgZToKICAgICAgICBwcmludCgnICBkZWxldGUgYXZpc286ICcgKyBzdHIoZS5jb2RlKSkKCnByaW50KCdjZXJ0X2lkOiAnICsgY2VydF9pZCkKCmZvciBuYW1lIGluIFsnUFBQSVgtTWFpbicsICdQUFBJWC1CbG9jaycsICdQUFBJWC1Nb25pdG9yJywgJ1BQUElYLVNoaWVsZCddOgogICAgZGF0YSA9IGFwaV9nZXQoJy92MS9wcm9maWxlcz9maWx0ZXJbbmFtZV09JyArIHVybGxpYi5wYXJzZS5xdW90ZShuYW1lKSArICcmbGltaXQ9MTAnKQogICAgZm9yIHAgaW4gZGF0YS5nZXQoJ2RhdGEnLCBbXSk6CiAgICAgICAgcHJpbnQoJ0RlbGV0YW5kbyBwcm9maWxlOiAnICsgcFsnYXR0cmlidXRlcyddWyduYW1lJ10pCiAgICAgICAgYXBpX2RlbGV0ZSgnL3YxL3Byb2ZpbGVzLycgKyBwWydpZCddKQoKZGF0YSA9IGFwaV9nZXQoJy92MS9idW5kbGVJZHM/bGltaXQ9NTAnKQpidW5kbGVzID0ge2JbJ2F0dHJpYnV0ZXMnXVsnaWRlbnRpZmllciddOiBiWydpZCddIGZvciBiIGluIGRhdGEuZ2V0KCdkYXRhJywgW10pfQpwcmludCgnQnVuZGxlczogJyArIHN0cihsaXN0KGJ1bmRsZXMua2V5cygpKSkpCgp0YXJnZXRzID0gWwogICAgKCd0ZWNoLnBwcGl4LmFwcCcsICdQUFBJWC1NYWluJyksCiAgICAoJ3RlY2gucHBwaXguYXBwLmJsb2NrJywgJ1BQUElYLUJsb2NrJyksCiAgICAoJ3RlY2gucHBwaXguYXBwLm1vbml0b3InLCAnUFBQSVgtTW9uaXRvcicpLAogICAgKCd0ZWNoLnBwcGl4LmFwcC5zaGllbGQnLCAnUFBQSVgtU2hpZWxkJyksCl0KCnByb2ZpbGVzX2RpciA9IG9zLnBhdGguZXhwYW5kdXNlcignfi9MaWJyYXJ5L01vYmlsZURldmljZS9Qcm92aXNpb25pbmcgUHJvZmlsZXMvJykKb3MubWFrZWRpcnMocHJvZmlsZXNfZGlyLCBleGlzdF9vaz1UcnVlKQp1dWlkcyA9IHt9Cgpmb3IgYnVuZGxlX2lkX3N0ciwgbmFtZSBpbiB0YXJnZXRzOgogICAgYnVuZGxlX2lkID0gYnVuZGxlcy5nZXQoYnVuZGxlX2lkX3N0cikKICAgIGlmIG5vdCBidW5kbGVfaWQ6CiAgICAgICAgcHJpbnQoJ0VSUk86ICcgKyBidW5kbGVfaWRfc3RyICsgJyBuYW8gZW5jb250cmFkbycpCiAgICAgICAgc3lzLmV4aXQoMSkKICAgIHByaW50KCdDcmlhbmRvOiAnICsgbmFtZSkKICAgIHRyeToKICAgICAgICByZXNwID0gYXBpX3Bvc3QoJy92MS9wcm9maWxlcycsIHsnZGF0YSc6IHsKICAgICAgICAgICAgJ3R5cGUnOiAncHJvZmlsZXMnLAogICAgICAgICAgICAnYXR0cmlidXRlcyc6IHsnbmFtZSc6IG5hbWUsICdwcm9maWxlVHlwZSc6ICdJT1NfQVBQX1NUT1JFJ30sCiAgICAgICAgICAgICdyZWxhdGlvbnNoaXBzJzogewogICAgICAgICAgICAgICAgJ2J1bmRsZUlkJzogeydkYXRhJzogeyd0eXBlJzogJ2J1bmRsZUlkcycsICdpZCc6IGJ1bmRsZV9pZH19LAogICAgICAgICAgICAgICAgJ2NlcnRpZmljYXRlcyc6IHsnZGF0YSc6IFt7J3R5cGUnOiAnY2VydGlmaWNhdGVzJywgJ2lkJzogY2VydF9pZH1dfQogICAgICAgICAgICB9CiAgICAgICAgfX0pCiAgICBleGNlcHQgdXJsbGliLmVycm9yLkhUVFBFcnJvciBhcyBlOgogICAgICAgIHByaW50KCdFcnJvICcgKyBzdHIoZS5jb2RlKSArICc6ICcgKyBlLnJlYWQoKS5kZWNvZGUoKSkKICAgICAgICBzeXMuZXhpdCgxKQogICAgY29udGVudCA9IGJhc2U2NC5iNjRkZWNvZGUocmVzcFsnZGF0YSddWydhdHRyaWJ1dGVzJ11bJ3Byb2ZpbGVDb250ZW50J10pCiAgICB0bXAgPSAnL3RtcC9wcHBpeF8nICsgYnVuZGxlX2lkX3N0ciArICcubW9iaWxlcHJvdmlzaW9uJwogICAgb3Blbih0bXAsICd3YicpLndyaXRlKGNvbnRlbnQpCiAgICBvdXQgPSBzdWJwcm9jZXNzLmNoZWNrX291dHB1dChbJ3NlY3VyaXR5JywgJ2NtcycsICctRCcsICctaScsIHRtcF0pCiAgICBwbGlzdCA9IHBsaXN0bGliLmxvYWRzKG91dCkKICAgIHV1aWQgPSBwbGlzdFsnVVVJRCddCiAgICBhcHBfaWQgPSBwbGlzdC5nZXQoJ0VudGl0bGVtZW50cycsIHt9KS5nZXQoJ2FwcGxpY2F0aW9uLWlkZW50aWZpZXInLCAnTi9BJykKICAgIHByaW50KCcgIFVVSUQ9JyArIHV1aWQgKyAnIEFwcElEPScgKyBhcHBfaWQpCiAgICB1dWlkc1tidW5kbGVfaWRfc3RyXSA9IHV1aWQKICAgIHNodXRpbC5jb3B5KHRtcCwgcHJvZmlsZXNfZGlyICsgdXVpZCArICcubW9iaWxlcHJvdmlzaW9uJykKCndpdGggb3BlbignL3RtcC9wcm9maWxlX3V1aWRzLnR4dCcsICd3JykgYXMgZjoKICAgIGZvciBrLCB2IGluIHV1aWRzLml0ZW1zKCk6CiAgICAgICAgZi53cml0ZShrICsgJz0nICsgdiArICdcbicpCndpdGggb3BlbignL3RtcC9wcm9maWxlX3V1aWQudHh0JywgJ3cnKSBhcyBmOgogICAgZi53cml0ZSh1dWlkc1sndGVjaC5wcHBpeC5hcHAnXSkKcHJpbnQoJ1Byb2ZpbGVzIE9LOiAnICsgc3RyKHV1aWRzKSkK" | base64 --decode > /tmp/gen_profile.py
+          echo "aW1wb3J0IGp3dCwgdGltZSwganNvbiwgdXJsbGliLnJlcXVlc3QsIHVybGxpYi5lcnJvciwgb3MsIGJhc2U2NCwgc3VicHJvY2Vzcywgc3lzLCBwbGlzdGxpYiwgc2h1dGlsCgprZXlfaWQgPSBvcy5lbnZpcm9uWydLRVlfSUQnXQppc3N1ZXJfaWQgPSBvcy5lbnZpcm9uWydJU1NVRVJfSUQnXQphcGlfa2V5X2I2NCA9IG9zLmVudmlyb25bJ0FQSV9LRVknXQpwcml2YXRlX2tleSA9IGJhc2U2NC5iNjRkZWNvZGUoYXBpX2tleV9iNjQpLmRlY29kZSgndXRmLTgnKQoKZGVmIG1ha2VfdG9rZW4oKToKICAgIHBheWxvYWQgPSB7J2lzcyc6IGlzc3Vlcl9pZCwgJ2lhdCc6IGludCh0aW1lLnRpbWUoKSksICdleHAnOiBpbnQodGltZS50aW1lKCkpICsgMTIwMCwgJ2F1ZCc6ICdhcHBzdG9yZWNvbm5lY3QtdjEnfQogICAgcmV0dXJuIGp3dC5lbmNvZGUocGF5bG9hZCwgcHJpdmF0ZV9rZXksIGFsZ29yaXRobT0nRVMyNTYnLCBoZWFkZXJzPXsna2lkJzoga2V5X2lkfSkKCmRlZiBnZXRfaGVhZGVycygpOgogICAgcmV0dXJuIHsnQXV0aG9yaXphdGlvbic6ICdCZWFyZXIgJyArIG1ha2VfdG9rZW4oKSwgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJ30KCiMgTGVyIGNlcnRfaWQgc2Fsdm8Kd2l0aCBvcGVuKCcvdG1wL2NlcnRfaWQudHh0JykgYXMgZjoKICAgIGNlcnRfaWQgPSBmLnJlYWQoKS5zdHJpcCgpCnByaW50KCdVc2FuZG8gY2VydF9pZDogJyArIGNlcnRfaWQpCgojIEJ1c2NhciBidW5kbGUgSUQKcmVxID0gdXJsbGliLnJlcXVlc3QuUmVxdWVzdCgnaHR0cHM6Ly9hcGkuYXBwc3RvcmVjb25uZWN0LmFwcGxlLmNvbS92MS9idW5kbGVJZHM/ZmlsdGVyW2lkZW50aWZpZXJdPXRlY2gucHBwaXguYXBwJmxpbWl0PTUnLCBoZWFkZXJzPWdldF9oZWFkZXJzKCkpCndpdGggdXJsbGliLnJlcXVlc3QudXJsb3BlbihyZXEpIGFzIHJlc3A6CiAgICBkYXRhID0ganNvbi5sb2FkcyhyZXNwLnJlYWQoKSkKaWYgbm90IGRhdGFbJ2RhdGEnXToKICAgIHByaW50KCdFUlJPOiBCdW5kbGUgSUQgdGVjaC5wcHBpeC5hcHAgbmFvIGVuY29udHJhZG8nKQogICAgc3lzLmV4aXQoMSkKYnVuZGxlX2lkID0gZGF0YVsnZGF0YSddWzBdWydpZCddCnByaW50KCdCdW5kbGUgSUQgZW5jb250cmFkbzogJyArIGJ1bmRsZV9pZCkKCiMgRGVsZXRhciBwcm9maWxlcyBhbnRpZ29zIGNvbSBlc3NlIG5vbWUKcmVxID0gdXJsbGliLnJlcXVlc3QuUmVxdWVzdCgnaHR0cHM6Ly9hcGkuYXBwc3RvcmVjb25uZWN0LmFwcGxlLmNvbS92MS9wcm9maWxlcz9maWx0ZXJbbmFtZV09UFBQSVglMjBBcHBTdG9yZSZsaW1pdD0xMCcsIGhlYWRlcnM9Z2V0X2hlYWRlcnMoKSkKd2l0aCB1cmxsaWIucmVxdWVzdC51cmxvcGVuKHJlcSkgYXMgcmVzcDoKICAgIGRhdGEgPSBqc29uLmxvYWRzKHJlc3AucmVhZCgpKQpmb3IgcCBpbiBkYXRhLmdldCgnZGF0YScsIFtdKToKICAgIHByaW50KCdEZWxldGFuZG8gcHJvZmlsZSBhbnRpZ286ICcgKyBwWydhdHRyaWJ1dGVzJ11bJ25hbWUnXSArICcgKCcgKyBwWydpZCddICsgJyknKQogICAgZGVsX3JlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20vdjEvcHJvZmlsZXMvJyArIHBbJ2lkJ10sIGhlYWRlcnM9Z2V0X2hlYWRlcnMoKSwgbWV0aG9kPSdERUxFVEUnKQogICAgdHJ5OgogICAgICAgIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4oZGVsX3JlcSkKICAgICAgICBwcmludCgnRGVsZXRhZG8uJykKICAgIGV4Y2VwdCB1cmxsaWIuZXJyb3IuSFRUUEVycm9yIGFzIGU6CiAgICAgICAgcHJpbnQoJ0F2aXNvIGFvIGRlbGV0YXI6ICcgKyBzdHIoZS5jb2RlKSkKCiMgQ3JpYXIgbm92byBwcm9maWxlCnByaW50KCdDcmlhbmRvIG5vdm8gcHJvdmlzaW9uaW5nIHByb2ZpbGUuLi4nKQpib2R5ID0ganNvbi5kdW1wcyh7CiAgICAnZGF0YSc6IHsKICAgICAgICAndHlwZSc6ICdwcm9maWxlcycsCiAgICAgICAgJ2F0dHJpYnV0ZXMnOiB7J25hbWUnOiAnUFBQSVggQXBwU3RvcmUnLCAncHJvZmlsZVR5cGUnOiAnSU9TX0FQUF9TVE9SRSd9LAogICAgICAgICdyZWxhdGlvbnNoaXBzJzogewogICAgICAgICAgICAnYnVuZGxlSWQnOiB7J2RhdGEnOiB7J3R5cGUnOiAnYnVuZGxlSWRzJywgJ2lkJzogYnVuZGxlX2lkfX0sCiAgICAgICAgICAgICdjZXJ0aWZpY2F0ZXMnOiB7J2RhdGEnOiBbeyd0eXBlJzogJ2NlcnRpZmljYXRlcycsICdpZCc6IGNlcnRfaWR9XX0KICAgICAgICB9CiAgICB9Cn0pLmVuY29kZSgpCnJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20vdjEvcHJvZmlsZXMnLCBkYXRhPWJvZHksIGhlYWRlcnM9Z2V0X2hlYWRlcnMoKSwgbWV0aG9kPSdQT1NUJykKdHJ5OgogICAgd2l0aCB1cmxsaWIucmVxdWVzdC51cmxvcGVuKHJlcSkgYXMgcmVzcDoKICAgICAgICByZXNwX2RhdGEgPSBqc29uLmxvYWRzKHJlc3AucmVhZCgpKQogICAgcHJvZmlsZV9jb250ZW50ID0gcmVzcF9kYXRhWydkYXRhJ11bJ2F0dHJpYnV0ZXMnXVsncHJvZmlsZUNvbnRlbnQnXQogICAgcHJvZmlsZV9ieXRlcyA9IGJhc2U2NC5iNjRkZWNvZGUocHJvZmlsZV9jb250ZW50KQogICAgd2l0aCBvcGVuKCcvdG1wL3BwcGl4Lm1vYmlsZXByb3Zpc2lvbicsICd3YicpIGFzIGY6CiAgICAgICAgZi53cml0ZShwcm9maWxlX2J5dGVzKQogICAgcHJpbnQoJ1Byb2ZpbGUgY3JpYWRvOiAnICsgcmVzcF9kYXRhWydkYXRhJ11bJ2F0dHJpYnV0ZXMnXVsnbmFtZSddKQoKICAgICMgRXh0cmFpciBVVUlEIGUgSU1QUklNSVIgVE9ET1MgRU5USVRMRU1FTlRTCiAgICBvdXQgPSBzdWJwcm9jZXNzLmNoZWNrX291dHB1dChbJ3NlY3VyaXR5JywgJ2NtcycsICctRCcsICctaScsICcvdG1wL3BwcGl4Lm1vYmlsZXByb3Zpc2lvbiddKQogICAgcGxpc3QgPSBwbGlzdGxpYi5sb2FkcyhvdXQpCiAgICB1dWlkID0gcGxpc3RbJ1VVSUQnXQogICAgcHJpbnQoJ1VVSUQ6ICcgKyB1dWlkKQogICAgcHJpbnQoJz09PSBFTlRJVExFTUVOVFMgRE8gUEVSRklMID09PScpCiAgICBmb3IgaywgdiBpbiBwbGlzdC5nZXQoJ0VudGl0bGVtZW50cycsIHt9KS5pdGVtcygpOgogICAgICAgIHByaW50KCcgICcgKyBrICsgJzogJyArIHN0cih2KSkKICAgIGhhc19hcHBsZV9zaWduaW4gPSAnY29tLmFwcGxlLmRldmVsb3Blci5hcHBsZXNpZ25pbicgaW4gcGxpc3QuZ2V0KCdFbnRpdGxlbWVudHMnLCB7fSkKICAgIHByaW50KCdTaWduIEluIHdpdGggQXBwbGUgbm8gcGVyZmlsOiAnICsgc3RyKGhhc19hcHBsZV9zaWduaW4pKQogICAgcHJpbnQoJz09PT09PT09PT09PT09PT09PT09PT09PT09PT09PScpCgogICAgIyBJbnN0YWxhciBwcm9maWxlCiAgICBwcm9maWxlc19kaXIgPSBvcy5wYXRoLmV4cGFuZHVzZXIoJ34vTGlicmFyeS9Nb2JpbGVEZXZpY2UvUHJvdmlzaW9uaW5nIFByb2ZpbGVzLycpCiAgICBvcy5tYWtlZGlycyhwcm9maWxlc19kaXIsIGV4aXN0X29rPVRydWUpCiAgICBkZXN0ID0gcHJvZmlsZXNfZGlyICsgdXVpZCArICcubW9iaWxlcHJvdmlzaW9uJwogICAgc2h1dGlsLmNvcHkoJy90bXAvcHBwaXgubW9iaWxlcHJvdmlzaW9uJywgZGVzdCkKICAgIHByaW50KCdQcm9maWxlIGluc3RhbGFkbyBlbTogJyArIGRlc3QpCgogICAgIyBTYWx2YXIgVVVJRCBwYXJhIHVzYXIgbm8geGNvZGVidWlsZAogICAgd2l0aCBvcGVuKCcvdG1wL3Byb2ZpbGVfdXVpZC50eHQnLCAndycpIGFzIGY6CiAgICAgICAgZi53cml0ZSh1dWlkKQoKZXhjZXB0IHVybGxpYi5lcnJvci5IVFRQRXJyb3IgYXMgZToKICAgIGVycm9yX2JvZHkgPSBlLnJlYWQoKS5kZWNvZGUoKQogICAgcHJpbnQoJ0Vycm8gJyArIHN0cihlLmNvZGUpICsgJzogJyArIGVycm9yX2JvZHkpCiAgICBzeXMuZXhpdCgxKQo=" | base64 --decode > /tmp/gen_profile.py
           python3 /tmp/gen_profile.py
           echo "PROFILE_UUID=$(cat /tmp/profile_uuid.txt)" >> $GITHUB_ENV
 
-      - name: Convert sirene.mp3 to sirene.caf for iOS notifications
+      - name: Generate .xcodeproj with correct signing
         run: |
-          # iOS requer .caf/.aiff/.wav para sons de notificação (não .mp3)
-          # Converter para CAF com formato IMA4 (menor tamanho, compatível iOS)
-          if [ -f "PPPIX/Resources/sirene.mp3" ]; then
-            afconvert PPPIX/Resources/sirene.mp3 PPPIX/Resources/sirene.caf -d ima4 -f caff
-            echo "Convertido: $(ls -lh PPPIX/Resources/sirene.caf)"
-          else
-            echo "AVISO: sirene.mp3 não encontrado em PPPIX/Resources/"
-          fi
-
-      - name: Generate xcodeproj with signing
-        run: |
-          echo "aW1wb3J0IG9zLCByZSwgc3VicHJvY2VzcwoKaWRlbnRpdHkgPSBvcy5lbnZpcm9uWydDRVJUX0lERU5USVRZJ10KdXVpZHMgPSB7fQp3aXRoIG9wZW4oJy90bXAvcHJvZmlsZV91dWlkcy50eHQnKSBhcyBmOgogICAgZm9yIGxpbmUgaW4gZjoKICAgICAgICBsaW5lID0gbGluZS5zdHJpcCgpCiAgICAgICAgaWYgJz0nIGluIGxpbmU6CiAgICAgICAgICAgIGssIHYgPSBsaW5lLnNwbGl0KCc9JywgMSkKICAgICAgICAgICAgdXVpZHNba10gPSB2Cgpjb250ZW50ID0gb3BlbigncHJvamVjdC55bWwnKS5yZWFkKCkKY29udGVudCA9IHJlLnN1YihyJ0NPREVfU0lHTl9JREVOVElUWTogIlteIl0qIicsICdDT0RFX1NJR05fSURFTlRJVFk6ICInICsgaWRlbnRpdHkgKyAnIicsIGNvbnRlbnQpCmNvbnRlbnQgPSBjb250ZW50LnJlcGxhY2UoJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIlBQUElYLU1haW4iJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkcy5nZXQoJ3RlY2gucHBwaXguYXBwJywgJ1BQUElYLU1haW4nKSArICciJykKY29udGVudCA9IGNvbnRlbnQucmVwbGFjZSgnUFJPVklTSU9OSU5HX1BST0ZJTEVfU1BFQ0lGSUVSOiAiUFBQSVgtQmxvY2siJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkcy5nZXQoJ3RlY2gucHBwaXguYXBwLmJsb2NrJywgJ1BQUElYLUJsb2NrJykgKyAnIicpCmNvbnRlbnQgPSBjb250ZW50LnJlcGxhY2UoJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIlBQUElYLU1vbml0b3IiJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkcy5nZXQoJ3RlY2gucHBwaXguYXBwLm1vbml0b3InLCAnUFBQSVgtTW9uaXRvcicpICsgJyInKQpjb250ZW50ID0gY29udGVudC5yZXBsYWNlKCdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICJQUFBJWC1TaGllbGQiJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyB1dWlkcy5nZXQoJ3RlY2gucHBwaXguYXBwLnNoaWVsZCcsICdQUFBJWC1TaGllbGQnKSArICciJykKb3BlbigncHJvamVjdC55bWwnLCAndycpLndyaXRlKGNvbnRlbnQpCnByaW50KCdVVUlEcyBhcGxpY2Fkb3M6JykKZm9yIGwgaW4gY29udGVudC5zcGxpdCgnXG4nKToKICAgIGlmICdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVInIGluIGw6CiAgICAgICAgcHJpbnQoJyAnICsgbC5zdHJpcCgpKQpzdWJwcm9jZXNzLnJ1bihbJ3hjb2RlZ2VuJywgJ2dlbmVyYXRlJywgJy0tc3BlYycsICdwcm9qZWN0LnltbCddLCBjaGVjaz1UcnVlKQpwcmludCgneGNvZGVwcm9qIE9LJykK" | base64 --decode > /tmp/update_signing.py
+          echo "aW1wb3J0IG9zLCByZSwgc3VicHJvY2VzcwoKaWRlbnRpdHkgPSBvcy5lbnZpcm9uWydDRVJUX0lERU5USVRZJ10Kd2l0aCBvcGVuKCcvdG1wL3Byb2ZpbGVfdXVpZC50eHQnKSBhcyBmOgogICAgcHJvZmlsZV91dWlkID0gZi5yZWFkKCkuc3RyaXAoKQoKcHJpbnQoJ0lkZW50aXR5OiAnICsgaWRlbnRpdHkpCnByaW50KCdQcm9maWxlIFVVSUQ6ICcgKyBwcm9maWxlX3V1aWQpCgpjb250ZW50ID0gb3BlbigncHJvamVjdC55bWwnKS5yZWFkKCkKIyBBdHVhbGl6YXIgQ09ERV9TSUdOX0lERU5USVRZCmNvbnRlbnQgPSByZS5zdWIocidDT0RFX1NJR05fSURFTlRJVFk6ICJbXiJdKiInLCAnQ09ERV9TSUdOX0lERU5USVRZOiAiJyArIGlkZW50aXR5ICsgJyInLCBjb250ZW50KQojIEF0dWFsaXphciBQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVIgcGFyYSB1c2FyIG8gVVVJRApjb250ZW50ID0gcmUuc3ViKHInUFJPVklTSU9OSU5HX1BST0ZJTEVfU1BFQ0lGSUVSOiAiW14iXSoiJywgJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIicgKyBwcm9maWxlX3V1aWQgKyAnIicsIGNvbnRlbnQpCm9wZW4oJ3Byb2plY3QueW1sJywgJ3cnKS53cml0ZShjb250ZW50KQpwcmludCgncHJvamVjdC55bWwgYXR1YWxpemFkby4nKQpzdWJwcm9jZXNzLnJ1bihbJ3hjb2RlZ2VuJywgJ2dlbmVyYXRlJywgJy0tc3BlYycsICdwcm9qZWN0LnltbCddLCBjaGVjaz1UcnVlKQpwcmludCgneGNvZGVwcm9qIHJlZ2VuZXJhZG8uJykK" | base64 --decode > /tmp/update_signing.py
           python3 /tmp/update_signing.py
 
       - name: Resolve SPM
-        run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX-Full -resolvePackageDependencies -clonedSourcePackagesDirPath $RUNNER_TEMP/spm
+        run: xcodebuild -project PPPIX.xcodeproj -scheme PPPIX -resolvePackageDependencies -clonedSourcePackagesDirPath $RUNNER_TEMP/spm
 
       - name: Archive
         run: |
-          security unlock-keychain -p pppix123 pppix.keychain
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k pppix123 pppix.keychain
+          security unlock-keychain -p temppass123 build.keychain
           xcodebuild \
             -project PPPIX.xcodeproj \
-            -scheme PPPIX-Full \
+            -scheme PPPIX \
             -configuration Release \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -destination "generic/platform=iOS" \
             -clonedSourcePackagesDirPath $RUNNER_TEMP/spm \
             CODE_SIGN_IDENTITY="$CERT_IDENTITY" \
             CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
-            archive 2>&1 | tee /tmp/xcodebuild.log; BUILD_EXIT=${PIPESTATUS[0]}
-          grep -E "error:|\.swift:[0-9]" /tmp/xcodebuild.log | grep -v "^$" | head -30
-          exit $BUILD_EXIT
-
-      - name: Verificar entitlements no archive
-        run: |
-          APP_PATH=$(find $RUNNER_TEMP/PPPIX.xcarchive -name "PPPIX.app" | head -1)
-          echo "=== Entitlements assinados no app ==="
-          codesign -d --entitlements :- "$APP_PATH" 2>/dev/null || echo "codesign falhou"
-          echo "=== Verificando aps-environment ==="
-          codesign -d --entitlements :- "$APP_PATH" 2>/dev/null | grep -A1 "aps-environment" || echo "AVISO: aps-environment NAO encontrado no binario!"
+            archive
 
       - name: Export IPA
         run: |
-          MAIN_UUID=$(grep "tech.pppix.app=" /tmp/profile_uuids.txt | cut -d= -f2)
-          BLOCK_UUID=$(grep "tech.pppix.app.block=" /tmp/profile_uuids.txt | cut -d= -f2)
-          MONITOR_UUID=$(grep "tech.pppix.app.monitor=" /tmp/profile_uuids.txt | cut -d= -f2)
-          SHIELD_UUID=$(grep "tech.pppix.app.shield=" /tmp/profile_uuids.txt | cut -d= -f2)
-          cat > /tmp/ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>teamID</key><string>K5SWZ92Z64</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>signingCertificate</key><string>iPhone Distribution</string>
-            <key>provisioningProfiles</key><dict>
-              <key>tech.pppix.app</key><string>${MAIN_UUID}</string>
-              <key>tech.pppix.app.block</key><string>${BLOCK_UUID}</string>
-              <key>tech.pppix.app.monitor</key><string>${MONITOR_UUID}</string>
-              <key>tech.pppix.app.shield</key><string>${SHIELD_UUID}</string>
-            </dict>
-          </dict></plist>
-          EOF
-          cat /tmp/ExportOptions.plist
+          security unlock-keychain -p temppass123 build.keychain
+          echo "aW1wb3J0IG9zCndpdGggb3BlbignL3RtcC9wcm9maWxlX3V1aWQudHh0JykgYXMgZjoKICAgIHV1aWQgPSBmLnJlYWQoKS5zdHJpcCgpCmNvbnRlbnQgPSAnJyc8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/Pgo8IURPQ1RZUEUgcGxpc3QgUFVCTElDICItLy9BcHBsZS8vRFREIFBMSVNUIDEuMC8vRU4iICJodHRwOi8vd3d3LmFwcGxlLmNvbS9EVERzL1Byb3BlcnR5TGlzdC0xLjAuZHRkIj4KPHBsaXN0IHZlcnNpb249IjEuMCI+CjxkaWN0PgogIDxrZXk+bWV0aG9kPC9rZXk+PHN0cmluZz5hcHAtc3RvcmUtY29ubmVjdDwvc3RyaW5nPgogIDxrZXk+dGVhbUlEPC9rZXk+PHN0cmluZz5LNVNXWjkyWjY0PC9zdHJpbmc+CiAgPGtleT5zaWduaW5nU3R5bGU8L2tleT48c3RyaW5nPm1hbnVhbDwvc3RyaW5nPgogIDxrZXk+c2lnbmluZ0NlcnRpZmljYXRlPC9rZXk+PHN0cmluZz5BcHBsZSBEaXN0cmlidXRpb248L3N0cmluZz4KICA8a2V5PnByb3Zpc2lvbmluZ1Byb2ZpbGVzPC9rZXk+CiAgPGRpY3Q+CiAgICA8a2V5PnRlY2gucHBwaXguYXBwPC9rZXk+PHN0cmluZz5QUFBJWCBBcHBTdG9yZTwvc3RyaW5nPgogIDwvZGljdD4KPC9kaWN0Pgo8L3BsaXN0PicnJwpvcGVuKCcvdG1wL0V4cG9ydE9wdGlvbnMucGxpc3QnLCAndycpLndyaXRlKGNvbnRlbnQpCnByaW50KCdFeHBvcnRPcHRpb25zLnBsaXN0IGNyaWFkbycpCg==" | base64 --decode > /tmp/mk_plist.py
+          python3 /tmp/mk_plist.py
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/PPPIX.xcarchive \
             -exportPath $RUNNER_TEMP/PPPIX_ipa \
             -exportOptionsPlist /tmp/ExportOptions.plist
+
+      - name: Check signature
+        run: |
+          unzip -o $RUNNER_TEMP/PPPIX_ipa/PPPIX.ipa -d /tmp/ipa_check > /dev/null 2>&1
+          echo '=== Verificando assinatura ==='
+          codesign -dv --verbose=4 /tmp/ipa_check/Payload/PPPIX.app 2>&1 | grep -E 'Authority|TeamID|Identifier'
+          echo '=== Authority NAO deve ser unavailable ==='
 
       - name: Upload to TestFlight
         env:
@@ -167,7 +128,8 @@ jobs:
             --type ios \
             --apiKey ${KEY_ID} \
             --apiIssuer ${ISSUER_ID} \
-            --private-key-path ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+            --private-key-path ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
+            --verbose 2>&1
 
       - name: Upload IPA como artefato
         if: always()
