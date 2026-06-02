@@ -76,6 +76,26 @@ jobs:
           echo "PROFILE_UUID=$(cat /tmp/profile_uuid.txt)" >> $GITHUB_ENV
           echo "PROFILE_UUIDS=$(cat /tmp/profile_uuids.txt | tr '\n' '|')" >> $GITHUB_ENV
 
+      - name: Auto-increment version
+        run: |
+          # Build number = GitHub run number (sempre único e crescente)
+          BUILD=${{ github.run_number }}
+
+          # Ler versão atual do project.yml e incrementar patch automaticamente
+          CURRENT=$(grep 'MARKETING_VERSION:' project.yml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          MAJOR=$(echo $CURRENT | cut -d. -f1)
+          MINOR=$(echo $CURRENT | cut -d. -f2)
+          PATCH=$(echo $CURRENT | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+
+          # Atualizar project.yml com nova versão e novo build number
+          sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"$NEW_VERSION\"/" project.yml
+          sed -i '' "s/CURRENT_PROJECT_VERSION: \"[0-9]*\"/CURRENT_PROJECT_VERSION: \"$BUILD\"/" project.yml
+          echo "Versão: $NEW_VERSION (build $BUILD)"
+          echo "APP_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$BUILD" >> $GITHUB_ENV
+
       - name: Generate .xcodeproj with correct signing
         run: |
           echo "aW1wb3J0IG9zLCByZSwgc3VicHJvY2VzcwoKaWRlbnRpdHkgPSBvcy5lbnZpcm9uWydDRVJUX0lERU5USVRZJ10KdXVpZHMgPSB7fQp3aXRoIG9wZW4oJy90bXAvcHJvZmlsZV91dWlkcy50eHQnKSBhcyBmOgogICAgZm9yIGxpbmUgaW4gZjoKICAgICAgICBsaW5lID0gbGluZS5zdHJpcCgpCiAgICAgICAgaWYgJz0nIGluIGxpbmU6CiAgICAgICAgICAgIGssIHYgPSBsaW5lLnNwbGl0KCc9JywgMSkKICAgICAgICAgICAgdXVpZHNba10gPSB2CgpwcmludCgnSWRlbnRpdHk6ICcgKyBpZGVudGl0eSkKcHJpbnQoJ1VVSURzOiAnICsgc3RyKHV1aWRzKSkKCmNvbnRlbnQgPSBvcGVuKCdwcm9qZWN0LnltbCcpLnJlYWQoKQpjb250ZW50ID0gcmUuc3ViKHInQ09ERV9TSUdOX0lERU5USVRZOiAiW14iXSoiJywgJ0NPREVfU0lHTl9JREVOVElUWTogIicgKyBpZGVudGl0eSArICciJywgY29udGVudCkKY29udGVudCA9IGNvbnRlbnQucmVwbGFjZSgnUFJPVklTSU9OSU5HX1BST0ZJTEVfU1BFQ0lGSUVSOiAiUFBQSVgtTWFpbiInLCAnUFJPVklTSU9OSU5HX1BST0ZJTEVfU1BFQ0lGSUVSOiAiJyArIHV1aWRzLmdldCgibWFpbiIsICJQUFBJWC1NYWluIikgKyAnIicpCmNvbnRlbnQgPSBjb250ZW50LnJlcGxhY2UoJ1BST1ZJU0lPTklOR19QUk9GSUxFX1NQRUNJRklFUjogIlBQUElYLUJsb2NrIicsICdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICInICsgdXVpZHMuZ2V0KCJibG9jayIsICJQUFBJWC1CbG9jayIpICsgJyInKQpjb250ZW50ID0gY29udGVudC5yZXBsYWNlKCdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICJQUFBJWC1Nb25pdG9yIicsICdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICInICsgdXVpZHMuZ2V0KCJtb25pdG9yIiwgIlBQUElYLU1vbml0b3IiKSArICciJykKY29udGVudCA9IGNvbnRlbnQucmVwbGFjZSgnUFJPVklTSU9OSU5HX1BST0ZJTEVfU1BFQ0lGSUVSOiAiUFBQSVgtU2hpZWxkIicsICdQUk9WSVNJT05JTkdfUFJPRklMRV9TUEVDSUZJRVI6ICInICsgdXVpZHMuZ2V0KCJzaGllbGQiLCAiUFBQSVgtU2hpZWxkIikgKyAnIicpCm9wZW4oJ3Byb2plY3QueW1sJywgJ3cnKS53cml0ZShjb250ZW50KQpwcmludCgncHJvamVjdC55bWwgYXR1YWxpemFkby4nKQpzdWJwcm9jZXNzLnJ1bihbJ3hjb2RlZ2VuJywgJ2dlbmVyYXRlJywgJy0tc3BlYycsICdwcm9qZWN0LnltbCddLCBjaGVjaz1UcnVlKQpwcmludCgneGNvZGVwcm9qIHJlZ2VuZXJhZG8uJykK" | base64 --decode > /tmp/update_signing.py
