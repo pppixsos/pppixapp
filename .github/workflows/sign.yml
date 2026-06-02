@@ -57,9 +57,7 @@ jobs:
           # Adicionar certs Apple no System e no build.keychain
           sudo security add-trusted-cert -d -r trustRoot    -k /Library/Keychains/System.keychain /tmp/AppleRoot.cer
           sudo security add-trusted-cert -d -r trustAsRoot  -k /Library/Keychains/System.keychain /tmp/AppleWWDRCAG3.cer
-          security import /tmp/AppleRoot.cer        -k build.keychain -T /usr/bin/codesign 2>/dev/null || true
-          security import /tmp/AppleWWDRCAG3.cer    -k build.keychain -T /usr/bin/codesign 2>/dev/null || true
-          security import /tmp/pppix.p12            -k build.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
+          security import /tmp/pppix.p12 -k build.keychain -P pppix123 -A
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
           echo '=== Identidades ==='
           security find-identity -v -p codesigning build.keychain
