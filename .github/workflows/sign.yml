@@ -44,29 +44,25 @@ jobs:
       - name: Setup keychain
         run: |
           openssl x509 -inform DER -in /tmp/new_cert.cer -out /tmp/new_cert.pem
-          openssl x509 -in /tmp/new_cert.pem -noout -subject
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
           openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem
           curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
-          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123
-          security create-keychain -p temppass123 build.keychain
-          security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
-          security default-keychain -s build.keychain
-          security unlock-keychain -p temppass123 build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
+          openssl pkcs12 -legacy -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123
+          # Usar login.keychain — fix definitivo para errSecInternalComponent no macOS 15
+          KEYCHAIN=$HOME/Library/Keychains/login.keychain-db
+          security unlock-keychain -p "" "$KEYCHAIN" 2>/dev/null || true
           sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/AppleRoot.cer
           sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/AppleWWDRCAG3.cer
-          # Importar WWDR e Root na build.keychain (necessário no macOS 15)
-          security import /tmp/AppleWWDRCAG3.cer -k build.keychain 2>/dev/null || true
-          security import /tmp/AppleRoot.cer -k build.keychain 2>/dev/null || true
-          security import /tmp/pppix.p12 -k build.keychain -P pppix123 -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
+          security import /tmp/AppleRoot.cer -k "$KEYCHAIN" 2>/dev/null || true
+          security import /tmp/AppleWWDRCAG3.cer -k "$KEYCHAIN" 2>/dev/null || true
+          security import /tmp/pppix.p12 -k "$KEYCHAIN" -P pppix123 -T /usr/bin/codesign -A
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s "$KEYCHAIN"
           echo '=== Identidades ==='
-          security find-identity -v -p codesigning build.keychain
-          CERT_IDENTITY=$(security find-identity -v -p codesigning build.keychain | grep -E 'Apple Distribution|iPhone Distribution' | head -1 | sed 's/.*"\(.*\)"/\1/')
-          if [ -z "$CERT_IDENTITY" ]; then echo 'ERRO: sem certificado valido no keychain'; exit 1; fi
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          CERT_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep -E 'Apple Distribution|iPhone Distribution' | head -1 | sed 's/.*"\(.*\)"/\1/')
+          if [ -z "$CERT_IDENTITY" ]; then echo 'ERRO: sem certificado valido'; exit 1; fi
           echo "CERT_IDENTITY=$CERT_IDENTITY" >> $GITHUB_ENV
-          echo "KEYCHAIN_PATH=$HOME/Library/Keychains/build.keychain-db" >> $GITHUB_ENV
+          echo "KEYCHAIN_PATH=$HOME/Library/Keychains/login.keychain-db" >> $GITHUB_ENV
           echo "Usando: $CERT_IDENTITY"
 
       - name: Create and install provisioning profile
@@ -90,9 +86,7 @@ jobs:
 
       - name: Archive
         run: |
-          security unlock-keychain -p temppass123 build.keychain
-          security set-keychain-settings -t 7200 -u build.keychain
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s "$HOME/Library/Keychains/login.keychain-db"
           xcodebuild \
             -project PPPIX.xcodeproj \
             -scheme PPPIX \
@@ -107,7 +101,6 @@ jobs:
 
       - name: Export IPA
         run: |
-          security unlock-keychain -p temppass123 build.keychain
           echo "aW1wb3J0IG9zCndpdGggb3BlbignL3RtcC9wcm9maWxlX3V1aWQudHh0JykgYXMgZjoKICAgIHV1aWQgPSBmLnJlYWQoKS5zdHJpcCgpCmNvbnRlbnQgPSAnJyc8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/Pgo8IURPQ1RZUEUgcGxpc3QgUFVCTElDICItLy9BcHBsZS8vRFREIFBMSVNUIDEuMC8vRU4iICJodHRwOi8vd3d3LmFwcGxlLmNvbS9EVERzL1Byb3BlcnR5TGlzdC0xLjAuZHRkIj4KPHBsaXN0IHZlcnNpb249IjEuMCI+CjxkaWN0PgogIDxrZXk+bWV0aG9kPC9rZXk+PHN0cmluZz5hcHAtc3RvcmUtY29ubmVjdDwvc3RyaW5nPgogIDxrZXk+dGVhbUlEPC9rZXk+PHN0cmluZz5LNVNXWjkyWjY0PC9zdHJpbmc+CiAgPGtleT5zaWduaW5nU3R5bGU8L2tleT48c3RyaW5nPm1hbnVhbDwvc3RyaW5nPgogIDxrZXk+c2lnbmluZ0NlcnRpZmljYXRlPC9rZXk+PHN0cmluZz5BcHBsZSBEaXN0cmlidXRpb248L3N0cmluZz4KICA8a2V5PnByb3Zpc2lvbmluZ1Byb2ZpbGVzPC9rZXk+CiAgPGRpY3Q+CiAgICA8a2V5PnRlY2gucHBwaXguYXBwPC9rZXk+PHN0cmluZz5QUFBJWCBBcHBTdG9yZTwvc3RyaW5nPgogIDwvZGljdD4KPC9kaWN0Pgo8L3BsaXN0PicnJwpvcGVuKCcvdG1wL0V4cG9ydE9wdGlvbnMucGxpc3QnLCAndycpLndyaXRlKGNvbnRlbnQpCnByaW50KCdFeHBvcnRPcHRpb25zLnBsaXN0IGNyaWFkbycpCg==" | base64 --decode > /tmp/mk_plist.py
           python3 /tmp/mk_plist.py
           xcodebuild -exportArchive \
