@@ -187,10 +187,10 @@ struct LoginView: View {
     private func signInWithGoogle() {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let root = scene.windows.first?.rootViewController else { return }
-        // Verificar se CLIENT_ID está configurado
-        guard GIDSignIn.sharedInstance.configuration != nil else {
-            errorMessage = "Google Sign In não configurado. Verifique GoogleService-Info.plist"
-            return
+        // Configurar lazily — garantido independente do AppDelegate
+        if GIDSignIn.sharedInstance.configuration == nil {
+            let clientID = "11117611081-c4ubusln48ed44n8d1rknc308ddfpqdf.apps.googleusercontent.com"
+            GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
         }
         isSocialLoading = true; errorMessage = ""
         GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
