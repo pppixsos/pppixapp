@@ -142,8 +142,9 @@ struct LoginView: View {
     private func handleAppleResult(_ result: Result<ASAuthorizationAppleIDCredential, Error>) async {
         switch result {
         case .failure(let e):
-            if (e as? ASAuthorizationError)?.code != .canceled {
-                errorMessage = "Erro ao entrar com Apple."
+            let code = (e as? ASAuthorizationError)?.code
+            if code != .canceled {
+                errorMessage = "Apple erro: \(e.localizedDescription)"
             }
         case .success(let cred):
             guard let tokenData = cred.identityToken,
