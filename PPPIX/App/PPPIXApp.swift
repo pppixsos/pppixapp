@@ -1,553 +1,312 @@
 import SwiftUI
-import FirebaseCore
-import FirebaseMessaging
-import UserNotifications
+import AuthenticationServices
 import GoogleSignIn
+import FirebaseMessaging
 
-@main
-struct PPPIXApp: App {
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+struct LoginView: View {
 
-    var body: some Scene {
-        WindowGroup {
-            RootView()
-                .preferredColorScheme(.dark)
+    @State private var email = ""
+    @State private var password = ""
+    @State private var showPassword = false
+    @State private var isLoading = false
+    @State private var isSocialLoading = false
+    @State private var errorMessage = ""
+    @State private var showRegister = false
+    @State private var showForgotPassword = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(hex: "#0A0A12").ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 28) {
+
+                        // Logo
+                        VStack(spacing: 12) {
+                            Image(systemName: "shield.fill")
+                                .font(.system(size: 64))
+                                .foregroundStyle(LinearGradient(
+                                    colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                            Text("PPPIX")
+                                .font(.system(size: 32, weight: .bold))
+                                .foregroundColor(.white)
+                            Text("Sua segurança financeira")
+                                .font(.subheadline)
+                                .foregroundColor(Color(white: 0.6))
+                        }
+                        .padding(.top, 56)
+
+                        // Social login
+                        VStack(spacing: 10) {
+                            SocialButton(
+                                icon: "apple.logo",
+                                title: "Continuar com Apple",
+                                isLoading: isSocialLoading
+                            ) { signInWithApple() }
+
+                            SocialButton(
+                                icon: "g.circle.fill",
+                                title: "Continuar com Google",
+                                isLoading: isSocialLoading
+                            ) { signInWithGoogle() }
+                        }
+
+                        // Divisor
+                        HStack {
+                            Rectangle().fill(Color(white: 0.15)).frame(height: 1)
+                            Text("ou").font(.caption).foregroundColor(Color(white: 0.4)).padding(.horizontal, 8)
+                            Rectangle().fill(Color(white: 0.15)).frame(height: 1)
+                        }
+
+                        // Email / senha
+                        VStack(spacing: 14) {
+                            PPPIXTextField(title: "Email", placeholder: "seu@email.com",
+                                          text: $email, keyboardType: .emailAddress,
+                                          autocapitalization: .never)
+                            PPPIXSecureField(title: "Senha", placeholder: "Digite sua senha",
+                                            text: $password, showPassword: $showPassword)
+                        }
+
+                        if !errorMessage.isEmpty {
+                            Text(errorMessage)
+                                .font(.footnote).foregroundColor(Color(hex: "#FF4444"))
+                                .multilineTextAlignment(.center)
+                        }
+
+                        PPPIXButton(title: "Entrar", isLoading: isLoading) {
+                            Task { await login() }
+                        }
+
+                        Button("Esqueci minha senha") { showForgotPassword = true }
+                            .font(.subheadline).foregroundColor(Color(hex: "#3366FF"))
+
+                        Button {
+                            showRegister = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("Não tem conta?").foregroundColor(Color(white: 0.6))
+                                Text("Cadastre-se").foregroundColor(Color(hex: "#3366FF")).fontWeight(.semibold)
+                            }.font(.subheadline)
+                        }
+
+                        Spacer(minLength: 40)
+                    }
+                    .padding(.horizontal, 24)
+                }
+            }
+            .navigationDestination(isPresented: $showRegister) { RegisterView() }
+            .sheet(isPresented: $showForgotPassword) { ForgotPasswordView() }
+        }
+    }
+
+    // MARK: - Email login
+
+    private func login() async {
+        let e = email.trimmingCharacters(in: .whitespaces)
+        guard !e.isEmpty else { errorMessage = "Informe seu email."; return }
+        guard e.contains("@") else { errorMessage = "Email inválido."; return }
+        guard !password.isEmpty else { errorMessage = "Informe sua senha."; return }
+
+        isLoading = true; errorMessage = ""
+        do {
+            let r = try await APIClient.shared.login(email: e, password: password)
+            await finishLogin(access: r.access, refresh: r.refresh)
+        } catch APIError.unauthorized {
+            errorMessage = "Email ou senha incorretos."
+        } catch APIError.badRequest(let msg) {
+            errorMessage = msg
+        } catch {
+            errorMessage = "Erro de conexão. Verifique sua internet."
+        }
+        isLoading = false
+    }
+
+    // MARK: - Apple Sign In
+
+    private func signInWithApple() {
+        let provider = ASAuthorizationAppleIDProvider()
+        let req = provider.createRequest()
+        req.requestedScopes = [.fullName, .email]
+        let controller = ASAuthorizationController(authorizationRequests: [req])
+        AppleSignInDelegate.shared.onComplete = { result in
+            Task { @MainActor in
+                await handleAppleResult(result)
+            }
+        }
+        controller.delegate = AppleSignInDelegate.shared
+        controller.presentationContextProvider = AppleSignInDelegate.shared
+        controller.performRequests()
+    }
+
+    private func handleAppleResult(_ result: Result<ASAuthorizationAppleIDCredential, Error>) async {
+        switch result {
+        case .failure(let e):
+            let code = (e as? ASAuthorizationError)?.code
+            if code != .canceled {
+                errorMessage = "Apple erro: \(e.localizedDescription)"
+            }
+        case .success(let cred):
+            guard let tokenData = cred.identityToken,
+                  let token = String(data: tokenData, encoding: .utf8) else {
+                errorMessage = "Token Apple inválido."; return
+            }
+            isSocialLoading = true; errorMessage = ""
+            // Apple só envia nome na primeira vez — salvar localmente
+            let firstName = cred.fullName?.givenName
+            let lastName  = cred.fullName?.familyName
+            // Salvar nome se veio (primeira vez)
+            if let fn = firstName, !fn.isEmpty {
+                UserDefaults.standard.set(fn, forKey: "apple_first_name")
+            }
+            if let ln = lastName, !ln.isEmpty {
+                UserDefaults.standard.set(ln, forKey: "apple_last_name")
+            }
+            // Usar nome salvo se não veio agora
+            let savedFirst = UserDefaults.standard.string(forKey: "apple_first_name")
+            let savedLast  = UserDefaults.standard.string(forKey: "apple_last_name")
+            do {
+                let r = try await APIClient.shared.socialLogin(
+                    provider: "apple", token: token,
+                    firstName: firstName ?? savedFirst,
+                    lastName: lastName ?? savedLast)
+                await finishLogin(access: r.access, refresh: r.refresh)
+            } catch APIError.badRequest(let msg) {
+                errorMessage = msg
+            } catch APIError.unauthorized {
+                errorMessage = "Não autorizado pelo servidor Apple."
+            } catch {
+                errorMessage = "Apple: \(error.localizedDescription)"
+            }
+            isSocialLoading = false
+        }
+    }
+
+    // MARK: - Google Sign In
+
+    private func signInWithGoogle() {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let root = scene.windows.first?.rootViewController else { return }
+        // Verificar se CLIENT_ID está configurado
+        guard GIDSignIn.sharedInstance.configuration != nil else {
+            errorMessage = "Google Sign In não configurado. Verifique GoogleService-Info.plist"
+            return
+        }
+        isSocialLoading = true; errorMessage = ""
+        GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
+            // Extrair dados fora do Task para evitar data race
+            let signInError = error
+            let idToken = result?.user.idToken?.tokenString
+            let firstName = result?.user.profile?.givenName
+            let lastName = result?.user.profile?.familyName
+
+            Task { @MainActor in
+                if let signInError = signInError {
+                    if (signInError as NSError).code != GIDSignInError.canceled.rawValue {
+                        errorMessage = "Erro ao entrar com Google."
+                    }
+                    isSocialLoading = false; return
+                }
+                guard let idToken = idToken else {
+                    errorMessage = "Token Google inválido."
+                    isSocialLoading = false; return
+                }
+                do {
+                    let r = try await APIClient.shared.socialLogin(
+                        provider: "google", token: idToken,
+                        firstName: firstName,
+                        lastName: lastName)
+                    await finishLogin(access: r.access, refresh: r.refresh)
+                } catch APIError.badRequest(let msg) {
+                    errorMessage = msg
+                } catch {
+                    errorMessage = "Google: \(error.localizedDescription)"
+                }
+                isSocialLoading = false
+            }
+        }
+    }
+
+    // MARK: - Finish login
+
+    private func finishLogin(access: String, refresh: String) async {
+        SessionManager.shared.saveTokens(access: access, refresh: refresh)
+        do {
+            let me = try await APIClient.shared.getMe()
+            SessionManager.shared.saveUserInfo(id: me.id, email: me.email, name: me.fullName)
+        } catch {
+            SessionManager.shared.saveUserInfo(id: 0, email: email, name: email)
+        }
+        await registerPushTokens()
+    }
+
+    private func registerPushTokens() async {
+        if let apns = SessionManager.shared.pendingApnsToken, !apns.isEmpty {
+            try? await APIClient.shared.registerFcmDevice(token: apns, platform: "ios_apns")
+        }
+        if let fcm = SessionManager.shared.fcmToken {
+            try? await APIClient.shared.registerFcmDevice(token: fcm, platform: "ios")
         }
     }
 }
 
-class AppDelegate: NSObject, UIApplicationDelegate {
+// MARK: - Social Button
 
-    static var pendingUnlockScreen = false
-    static var skipNextAuthReset = false
+private struct SocialButton: View {
+    let icon: String
+    let title: String
+    let isLoading: Bool
+    let action: () -> Void
 
-    // Deduplicação unificada via AlertDeduplicator (UserDefaults persistente)
-
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
-    ) -> Bool {
-        UNUserNotificationCenter.current().delegate = self
-        setupNotificationCategories()
-
-        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
-            FirebaseApp.configure()
-            Messaging.messaging().delegate = self
-        }
-        // Configurar Google Sign In — ler CLIENT_ID direto do plist
-        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
-           let plist = NSDictionary(contentsOfFile: path),
-           let clientID = plist["CLIENT_ID"] as? String {
-            GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
-        }
-
-        // Registrar para remote notifications IMEDIATAMENTE (sem aguardar permissão)
-        // Firebase precisa do APNS token antes de gerar FCM token
-        UIApplication.shared.registerForRemoteNotifications()
-
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .sound, .badge, .timeSensitive]) { granted, _ in
-            if granted {
-                DispatchQueue.main.async {
-                    UIApplication.shared.registerForRemoteNotifications()
-                }
-            }
-        }
-
-        Task { @MainActor in
-            #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.checkAuthorization()
-            #endif
-        }
-
-        // Esquenta o GPS logo que o app abre (igual FusedLocationClient do Android)
-        LocationService.shared.warmUp()
-
-        BackgroundTaskManager.shared.registerTasks()
-
-        // Quando usuário fizer login, tentar registrar FCM token se disponível
-        NotificationCenter.default.addObserver(
-            forName: .pppixUserDidLogin, object: nil, queue: .main) { _ in
-            if let token = SessionManager.shared.fcmToken {
-                Task { @MainActor in
-                    do {
-                        try await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
-                        AlertDiagnosticLog.shared.log("FCM re-registrado após login")
-                    } catch {
-                        AlertDiagnosticLog.shared.log("FCM re-registro ERRO: \(error)")
-                    }
-                }
-            } else {
-                // Forçar refresh do token FCM
-                Messaging.messaging().deleteToken { error in
-                    if let error = error {
-                        AlertDiagnosticLog.shared.log("FCM deleteToken erro: \(error.localizedDescription)")
-                    } else {
-                        Messaging.messaging().token { token, error in
-                            if let token = token {
-                                Task { @MainActor in
-                                    AlertDiagnosticLog.shared.log("FCM token forçado: \(token.prefix(20))...")
-                                    try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return true
-    }
-
-    private func setupNotificationCategories() {
-        let unlockAction = UNNotificationAction(
-            identifier: "UNLOCK_ACTION",
-            title: "🔑 Digitar Senha",
-            options: [.foreground]
-        )
-        let category = UNNotificationCategory(
-            identifier: "PPPIX_UNLOCK",
-            actions: [unlockAction],
-            intentIdentifiers: [],
-            options: [.customDismissAction]
-        )
-        UNUserNotificationCenter.current().setNotificationCategories([category])
-    }
-
-    func application(_ application: UIApplication,
-                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        Messaging.messaging().apnsToken = deviceToken
-        let tokenStr = deviceToken.map { String(format: "%02x", $0) }.joined()
-        Task { @MainActor in AlertDiagnosticLog.shared.log("APNS token OK: \(tokenStr.prefix(20))...") }
-        // Registrar APNS token diretamente no backend (para push sem Firebase)
-        Task { @MainActor in
-            if SessionManager.shared.isLoggedIn {
-                do {
-                    try await APIClient.shared.registerFcmDevice(token: tokenStr, platform: "ios_apns")
-                    AlertDiagnosticLog.shared.log("APNS token registrado no backend ✅")
-                } catch {
-                    AlertDiagnosticLog.shared.log("APNS token registro erro: \(error)")
-                }
-            } else {
-                SessionManager.shared.pendingApnsToken = tokenStr
-                AlertDiagnosticLog.shared.log("APNS token guardado para após login")
-            }
-        }
-
-        // Tentar gerar FCM token com retry (Firebase precisa processar o APNS token)
-        Self.fetchFCMTokenWithRetry(attempt: 1)
-    }
-
-    static func fetchFCMTokenWithRetry(attempt: Int) {
-        let delays = [1.0, 3.0, 5.0, 10.0, 20.0]
-        let delay = attempt <= delays.count ? delays[attempt - 1] : 30.0
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            Messaging.messaging().token { token, error in
-                if let token = token, !token.isEmpty {
-                    Task { @MainActor in
-                        AlertDiagnosticLog.shared.log("FCM token gerado (tentativa \(attempt)): \(token.prefix(20))...")
-                        SessionManager.shared.fcmToken = token
-                        if SessionManager.shared.isLoggedIn {
-                            do {
-                                try await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
-                                AlertDiagnosticLog.shared.log("FCM registrado no backend ✅")
-                            } catch {
-                                AlertDiagnosticLog.shared.log("FCM registro erro: \(error)")
-                            }
-                        }
-                    }
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                if isLoading {
+                    ProgressView().tint(Color(white: 0.8)).frame(width: 20)
                 } else {
-                    Task { @MainActor in AlertDiagnosticLog.shared.log("FCM tentativa \(attempt) falhou: \(error?.localizedDescription ?? "sem token"). Tentando novamente...") }
-                    if attempt < 6 {
-                        fetchFCMTokenWithRetry(attempt: attempt + 1)
-                    }
+                    Image(systemName: icon)
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                        .frame(width: 20)
                 }
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
             }
+            .frame(maxWidth: .infinity).frame(height: 50)
+            .background(Color(white: 0.1))
+            .cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(white: 0.18), lineWidth: 1))
         }
-    }
-
-    func application(_ application: UIApplication,
-                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("[PPPIX] APNS register failed: \(error)")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("APNS FALHOU: \(error.localizedDescription)") }
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] APNS register failed: \(error)") }
-    }
-
-    // Chamado para push data-only (silent) — throttled pelo iOS, usar apenas como fallback
-    func application(_ application: UIApplication,
-                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
-                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-
-        Messaging.messaging().appDidReceiveMessage(userInfo)
-
-        let payload = Self.extractPayload(userInfo)
-        let action = str(payload["action"])
-
-        print("[PPPIX] didReceiveRemoteNotification — action='\(action)' keys=\(Array(payload.keys).sorted())")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] didReceiveRemoteNotification — action='\(action)' keys=\(Array(payload.keys).sorted())") }
-
-        if action == "unlock" {
-            triggerUnlockScreen()
-            completionHandler(.newData)
-        } else if action == "reblock" {
-            #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.forceReblock()
-            #endif
-            completionHandler(.newData)
-        } else {
-            // Pode ser alerta de emergência — processar no MainActor
-            Task { @MainActor in
-                _ = self.handleEmergencyPayload(payload)
-            }
-            completionHandler(.newData)
-        }
-    }
-
-    func application(_ app: UIApplication, open url: URL,
-                     options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        if url.scheme == "pppix" && url.host == "unlock" { triggerUnlockScreen() }
-        return true
-    }
-
-    func triggerUnlockScreen() {
-        AppDelegate.pendingUnlockScreen = true
-        let d = UserDefaults(suiteName: "group.tech.pppix.app")
-        d?.set(true, forKey: "pppix_show_password_screen")
-        d?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
-        d?.synchronize()
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .pppixForceOpenUnlockScreen, object: nil)
-        }
-    }
-
-    // MARK: - Emergency alert handling
-
-    /// Cria notificação local de emergência diretamente (chamado pelo polling)
-    @MainActor func createEmergencyNotification(alertId: Int, alertType: String, senderEmail: String, senderName: String) {
-        let displayName = senderName.isEmpty ? (senderEmail.components(separatedBy: "@").first ?? "Contato") : senderName
-        let content = UNMutableNotificationContent()
-        content.title = "🚨 Alerta de Emergência"
-        content.body = "\(displayName) pode estar em perigo! Toque para ver detalhes."
-        content.interruptionLevel = .timeSensitive
-        content.userInfo = [
-            "alert_id": String(alertId),
-            "alert_type": alertType,
-            "sender_email": senderEmail,
-            "sender_name": senderName
-        ]
-        if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
-            AlertDiagnosticLog.shared.log("NOTIF: criando com sirene.caf id=\(alertId)")
-        } else if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
-            AlertDiagnosticLog.shared.log("NOTIF: criando com sirene.mp3 id=\(alertId)")
-        } else {
-            content.sound = .default
-            AlertDiagnosticLog.shared.log("NOTIF: criando com som padrão id=\(alertId)")
-        }
-        let identifier = "pppix_alert_\(alertId)"
-        // Trigger de 1s garante que iOS processa corretamente em qualquer estado do app
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-        ) { error in
-            if let error = error {
-                Task { @MainActor in AlertDiagnosticLog.shared.log("NOTIF: erro ao adicionar: \(error)") }
-            } else {
-                Task { @MainActor in AlertDiagnosticLog.shared.log("NOTIF: adicionada com sucesso id=\(alertId)") }
-            }
-        }
-        // Tocar sirene via AVAudioPlayer se app estiver ativo
-        if UIApplication.shared.applicationState == .active {
-            EmergencyAudioService.shared.playSiren()
-        }
-        // Notificar UI
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .incomingEmergencyAlert, object: nil, userInfo: ["alert_id": alertId])
-        }
-    }
-
-    /// Processa payload de alerta de emergência.
-    /// Retorna true se o payload continha um alerta de emergência.
-    @discardableResult
-    @MainActor func handleEmergencyPayload(_ payload: [String: Any], createLocalNotification: Bool = true) -> Bool {
-        let alertType   = str(payload["alert_type"])
-        let senderEmail = str(payload["sender_email"])
-        let myEmail     = SessionManager.shared.userEmail
-
-        print("[PPPIX] handleEmergencyPayload — type='\(alertType)' sender='\(senderEmail)' me='\(myEmail)'")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("RECEBER(FCM): tipo=\(alertType) de=\(senderEmail)") }
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload — type='\(alertType)' sender='\(senderEmail)' me='\(myEmail)'") }
-
-        // Filtra alertas enviados por mim mesmo (igual Android)
-        // Só filtra se myEmail está disponível (pode estar vazio em background)
-        if !myEmail.isEmpty && !senderEmail.isEmpty &&
-           senderEmail.lowercased() == myEmail.lowercased() {
-            print("[PPPIX] handleEmergencyPayload — ignorado: é meu próprio alerta")
-            Task { @MainActor in AlertDiagnosticLog.shared.log("RECEBER(FCM): IGNORADO - meu próprio alerta") }
-            Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload — ignorado: é meu próprio alerta") }
-            return false
-        }
-
-        // Deve ter alert_type com conteúdo de emergência (igual Android)
-        guard !alertType.isEmpty else {
-            AlertDiagnosticLog.shared.log("NOTIF: alertType vazio — ignorado")
-            return false
-        }
-
-        let isEmergency = alertType == "emergency_password"
-                       || alertType == "wrong_password"
-                       || alertType.lowercased().contains("emergency")
-                       || alertType.lowercased().contains("alert")
-        guard isEmergency else {
-            AlertDiagnosticLog.shared.log("NOTIF: alertType='\(alertType)' não é emergência — ignorado")
-            return false
-        }
-
-        let alertId    = intVal(payload["alert_id"] ?? payload["id"])
-        let rawSenderName = str(payload["sender_name"])
-        let senderName = rawSenderName.isEmpty ? (senderEmail.components(separatedBy: "@").first ?? "Contato") : rawSenderName
-
-        // Deduplicar: não processar o mesmo alerta duas vezes
-        if alertId > 0 {
-            guard !AlertDeduplicator.shared.contains(alertId) else {
-                AlertDiagnosticLog.shared.log("NOTIF: id=\(alertId) já no Deduplicator — ignorado")
-                return false
-            }
-            AlertDeduplicator.shared.markShown(alertId)
-            AlertDiagnosticLog.shared.log("NOTIF: id=\(alertId) marcado no Deduplicator")
-            // Limita o set a 50 entradas para não crescer indefinidamente
-        }
-
-        print("[PPPIX] handleEmergencyPayload PROCESSANDO — id=\(alertId) sender=\(senderEmail)")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("RECEBER(FCM): PROCESSANDO id=\(alertId) de=\(senderEmail)") }
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload PROCESSANDO — id=\(alertId) sender=\(senderEmail)") }
-
-        let appState = UIApplication.shared.applicationState
-
-        // Criar notificação local com som apenas quando necessário
-        // (quando não há push FCM para mostrar o banner automaticamente)
-        let notifContent = UNMutableNotificationContent()
-        let displayName = senderName.isEmpty ? senderEmail : senderName
-        notifContent.title = "🚨 Alerta de Emergência"
-        notifContent.body  = "\(displayName) pode estar em perigo! Toque para ver detalhes."
-        notifContent.interruptionLevel = .timeSensitive
-        notifContent.userInfo = [
-            "alert_id":     alertId > 0 ? String(alertId) : "0",
-            "alert_type":   alertType,
-            "sender_email": senderEmail,
-            "sender_name":  senderName
-        ]
-        // Som da notificação — sirene.caf se disponível, senão som padrão alto
-        // O sirene.caf é gerado pelo sign.yml via afconvert do sirene.mp3
-        if let cafURL = Bundle.main.url(forResource: "sirene", withExtension: "caf") {
-            _ = cafURL // arquivo existe
-            notifContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
-            Task { @MainActor in AlertDiagnosticLog.shared.log("Notif: usando sirene.caf") }
-        } else if Bundle.main.url(forResource: "sirene", withExtension: "mp3") != nil {
-            notifContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
-            Task { @MainActor in AlertDiagnosticLog.shared.log("Notif: usando sirene.mp3 (sem caf)") }
-        } else {
-            notifContent.sound = UNNotificationSound.default
-            Task { @MainActor in AlertDiagnosticLog.shared.log("Notif: usando som padrão (sem sirene)") }
-        }
-        let identifier = alertId > 0 ? "pppix_alert_\(alertId)" : "pppix_alert_\(Int(Date().timeIntervalSince1970))"
-
-        if createLocalNotification {
-            // Criar notificação local (quando veio via polling ou foreground sem push)
-            if appState == .active {
-                UNUserNotificationCenter.current().add(
-                    UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
-                )
-                EmergencyAudioService.shared.playSiren()
-            } else {
-                UNUserNotificationCenter.current().add(
-                    UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
-                )
-            }
-        } else {
-            // Veio via push FCM — só tocar sirene se app estiver ativo
-            if appState == .active {
-                EmergencyAudioService.shared.playSiren()
-            }
-        }
-
-        // Notificar a UI para abrir a tela de alerta
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .incomingEmergencyAlert,
-                object: nil,
-                userInfo: ["alert_id": alertId]
-            )
-        }
-        return true
-    }
-
-    private func str(_ val: Any?) -> String {
-        (val as? String) ?? (val as? NSString).map(String.init) ?? ""
-    }
-
-    private func intVal(_ val: Any?) -> Int {
-        (val as? Int) ?? (val as? String).flatMap(Int.init) ?? (val as? NSNumber).map { $0.intValue } ?? 0
+        .disabled(isLoading)
     }
 }
 
-extension String {
-    func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
-}
+// MARK: - Apple Sign In Delegate
 
-extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
+final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate,
+    ASAuthorizationControllerPresentationContextProviding {
 
-    // App em FOREGROUND — notificação chegou antes do usuário ver
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        Messaging.messaging().appDidReceiveMessage(notification.request.content.userInfo)
-        let payload = Self.extractPayload(notification.request.content.userInfo)
-        let action  = str(payload["action"])
+    static let shared = AppleSignInDelegate()
+    var onComplete: ((Result<ASAuthorizationAppleIDCredential, Error>) -> Void)?
 
-        print("[PPPIX] willPresent — action='\(action)' identifier=\(notification.request.identifier)")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] willPresent — action='\(action)' identifier=\(notification.request.identifier)") }
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow } ?? UIWindow()
+    }
 
-        let identifier = notification.request.identifier
-
-        switch action {
-        case "unlock":
-            // NUNCA mostrar banner de unlock — o PPPIX já abre a tela de senha diretamente
-            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notification.request.identifier])
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
-            triggerUnlockScreen()
-            completionHandler([])
-        case "reblock":
-            // Reblock notificação — aplicar shield imediatamente
-            #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.forceReblock()
-            #endif
-            completionHandler([])
-        default:
-            // Se é notificação local que já criamos (pppix_alert_X), mostrar e tocar sirene
-            if identifier.hasPrefix("pppix_alert_") {
-                // Tocar sirene via AVAudioPlayer para som mais longo e persistente
-                EmergencyAudioService.shared.playSiren()
-                completionHandler([.banner, .sound, .badge])
-                return
-            }
-            // É notificação FCM original — processar
-            // Mostrar o banner FCM com som (não criar notificação local duplicada)
-            handleEmergencyPayload(payload, createLocalNotification: false)
-            // Mostrar o banner FCM com som diretamente
-            completionHandler([.banner, .sound, .badge])
+    func authorizationController(controller: ASAuthorizationController,
+                                 didCompleteWithAuthorization authorization: ASAuthorization) {
+        if let cred = authorization.credential as? ASAuthorizationAppleIDCredential {
+            onComplete?(.success(cred))
         }
     }
 
-    // Usuário TOCOU na notificação
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
-    ) {
-        Messaging.messaging().appDidReceiveMessage(response.notification.request.content.userInfo)
-        let payload = Self.extractPayload(response.notification.request.content.userInfo)
-        let action  = str(payload["action"])
-
-        print("[PPPIX] didReceive (tap) — action='\(action)' identifier=\(response.notification.request.identifier)")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] didReceive (tap) — action='\(action)' identifier=\(response.notification.request.identifier)") }
-
-        switch action {
-        case "reblock":
-            #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.forceReblock()
-            #endif
-        case "unlock":
-            // Remover notificação de unlock imediatamente ao tocar
-            UNUserNotificationCenter.current().removeDeliveredNotifications(
-                withIdentifiers: [response.notification.request.identifier, "pppix_unlock"]
-            )
-            UNUserNotificationCenter.current().removePendingNotificationRequests(
-                withIdentifiers: ["pppix_unlock"]
-            )
-            triggerUnlockScreen()
-        default:
-            if response.actionIdentifier == "UNLOCK_ACTION" {
-                triggerUnlockScreen()
-            } else {
-                // Toque em notificação de alerta de emergência
-                let alertId = intVal(payload["alert_id"] ?? payload["id"])
-                let alertType = str(payload["alert_type"])
-
-                print("[PPPIX] didReceive tap emergência — id=\(alertId) type=\(alertType)")
-                Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] didReceive tap emergência — id=\(alertId) type=\(alertType)") }
-
-                if alertId > 0 || alertType.lowercased().contains("emergency") {
-                    EmergencyAudioService.shared.playSiren()
-                    DispatchQueue.main.async {
-                        NotificationCenter.default.post(
-                            name: .incomingEmergencyAlert,
-                            object: nil,
-                            userInfo: ["alert_id": alertId]
-                        )
-                    }
-                }
-            }
-        }
-        completionHandler()
+    func authorizationController(controller: ASAuthorizationController,
+                                 didCompleteWithError error: Error) {
+        onComplete?(.failure(error))
     }
-
-    // Extrai payload FCM independente do formato (notification+data ou data puro)
-    static func extractPayload(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
-        var result = [String: Any]()
-
-        // Copia tudo que tem chave String
-        for (k, v) in userInfo {
-            if let key = k as? String { result[key] = v }
-        }
-
-        // Desembala campo "data" — pode ser Dict, JSON string, ou ausente
-        if let data = userInfo["data"] as? [AnyHashable: Any] {
-            for (k, v) in data { if let key = k as? String { result[key] = v } }
-        } else if let data = userInfo["data"] as? [String: Any] {
-            for (k, v) in data { result[k] = v }
-        } else if let dataStr = userInfo["data"] as? String,
-                  let dataBytes = dataStr.data(using: .utf8),
-                  let dataDict = try? JSONSerialization.jsonObject(with: dataBytes) as? [String: Any] {
-            for (k, v) in dataDict { result[k] = v }
-        }
-
-        print("[PPPIX] extractPayload — chaves: \(result.keys.sorted().joined(separator: ", "))")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] extractPayload — chaves: \(result.keys.sorted().joined(separator: ", "))") }
-        return result
-    }
-
-}
-
-extension AppDelegate: @preconcurrency MessagingDelegate {
-    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        guard let token = fcmToken else { return }
-        print("[PPPIX] FCM token atualizado: \(token.prefix(20))...")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] FCM token atualizado: \(token.prefix(20))...") }
-        SessionManager.shared.fcmToken = token
-        if SessionManager.shared.isLoggedIn {
-            Task { @MainActor in
-                do {
-                    try await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
-                    AlertDiagnosticLog.shared.log("FCM iOS registrado com sucesso")
-                } catch {
-                    AlertDiagnosticLog.shared.log("FCM iOS registro ERRO: \(error)")
-                }
-            }
-        } else {
-            Task { @MainActor in AlertDiagnosticLog.shared.log("FCM token recebido mas não logado — guardado para depois") }
-        }
-    }
-}
-
-extension Notification.Name {
-    static let openAlertDetail            = Notification.Name("pppix.openAlertDetail")
-    static let incomingEmergencyAlert     = Notification.Name("pppix.incomingEmergencyAlert")
-    static let sessionExpired             = Notification.Name("pppix.sessionExpired")
-    static let openUnlockScreen           = Notification.Name("pppix.openUnlockScreen")
-    static let pppixForceOpenUnlockScreen = Notification.Name("pppix.forceOpenUnlockScreen")
-    static let pppixUserDidLogin          = Notification.Name("pppix.userDidLogin")
 }
