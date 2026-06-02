@@ -151,17 +151,31 @@ struct LoginView: View {
                 errorMessage = "Token Apple inválido."; return
             }
             isSocialLoading = true; errorMessage = ""
+            // Apple só envia nome na primeira vez — salvar localmente
             let firstName = cred.fullName?.givenName
             let lastName  = cred.fullName?.familyName
+            // Salvar nome se veio (primeira vez)
+            if let fn = firstName, !fn.isEmpty {
+                UserDefaults.standard.set(fn, forKey: "apple_first_name")
+            }
+            if let ln = lastName, !ln.isEmpty {
+                UserDefaults.standard.set(ln, forKey: "apple_last_name")
+            }
+            // Usar nome salvo se não veio agora
+            let savedFirst = UserDefaults.standard.string(forKey: "apple_first_name")
+            let savedLast  = UserDefaults.standard.string(forKey: "apple_last_name")
             do {
                 let r = try await APIClient.shared.socialLogin(
                     provider: "apple", token: token,
-                    firstName: firstName, lastName: lastName)
+                    firstName: firstName ?? savedFirst,
+                    lastName: lastName ?? savedLast)
                 await finishLogin(access: r.access, refresh: r.refresh)
             } catch APIError.badRequest(let msg) {
                 errorMessage = msg
+            } catch APIError.unauthorized {
+                errorMessage = "Não autorizado pelo servidor Apple."
             } catch {
-                errorMessage = "Erro ao entrar com Apple. Tente novamente."
+                errorMessage = "Apple: \(error.localizedDescription)"
             }
             isSocialLoading = false
         }
@@ -172,6 +186,11 @@ struct LoginView: View {
     private func signInWithGoogle() {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let root = scene.windows.first?.rootViewController else { return }
+        // Verificar se CLIENT_ID está configurado
+        guard GIDSignIn.sharedInstance.configuration != nil else {
+            errorMessage = "Google Sign In não configurado. Verifique GoogleService-Info.plist"
+            return
+        }
         isSocialLoading = true; errorMessage = ""
         GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
             // Extrair dados fora do Task para evitar data race
@@ -200,7 +219,7 @@ struct LoginView: View {
                 } catch APIError.badRequest(let msg) {
                     errorMessage = msg
                 } catch {
-                    errorMessage = "Erro ao entrar com Google. Tente novamente."
+                    errorMessage = "Google: \(error.localizedDescription)"
                 }
                 isSocialLoading = false
             }
