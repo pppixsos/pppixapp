@@ -47,7 +47,7 @@ jobs:
           curl -s https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
           openssl x509 -inform DER -in /tmp/AppleWWDRCAG3.cer -out /tmp/AppleWWDRCAG3.pem
           curl -s https://www.apple.com/appleca/AppleIncRootCertificate.cer -o /tmp/AppleRoot.cer
-          openssl pkcs12 -legacy -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123
+          openssl pkcs12 -export -out /tmp/pppix.p12 -inkey /tmp/mac_key.key -in /tmp/new_cert.pem -certfile /tmp/AppleWWDRCAG3.pem -passout pass:pppix123
           # Usar login.keychain — fix definitivo para errSecInternalComponent no macOS 15
           KEYCHAIN=$HOME/Library/Keychains/login.keychain-db
           security unlock-keychain -p "" "$KEYCHAIN" 2>/dev/null || true
