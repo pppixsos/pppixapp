@@ -2,6 +2,7 @@ import SwiftUI
 import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
+import GoogleSignIn
 
 @main
 struct PPPIXApp: App {
@@ -32,6 +33,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
             FirebaseApp.configure()
             Messaging.messaging().delegate = self
+        }
+        // Configurar Google Sign In
+        if let clientID = FirebaseApp.app()?.options.clientID {
+            GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
         }
 
         // Registrar para remote notifications IMEDIATAMENTE (sem aguardar permissão)
