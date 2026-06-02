@@ -20,6 +20,9 @@ packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     from: "8.0.0"
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
 targets:
   PPPIX:
     type: application
@@ -84,6 +87,9 @@ targets:
           - CFBundleURLName: tech.pppix.app
             CFBundleURLSchemes:
               - pppix
+          - CFBundleURLName: com.google.googleusercontent
+            CFBundleURLSchemes:
+              - com.googleusercontent.apps.11117611081-c4ubusln48ed44n8d1rknc308ddfpqdf
     entitlements:
       path: PPPIX/PPPIX.entitlements
       properties:
@@ -101,6 +107,10 @@ targets:
         product: FirebaseCore
       - package: Firebase
         product: FirebaseMessaging
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
       - package: GoogleSignIn
         product: GoogleSignIn
       - package: GoogleSignIn
