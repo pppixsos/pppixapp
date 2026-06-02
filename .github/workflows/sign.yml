@@ -88,6 +88,8 @@ jobs:
       - name: Archive
         run: |
           security unlock-keychain -p temppass123 build.keychain
+          security set-keychain-settings -t 7200 -u build.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
           xcodebuild \
             -project PPPIX.xcodeproj \
             -scheme PPPIX \
