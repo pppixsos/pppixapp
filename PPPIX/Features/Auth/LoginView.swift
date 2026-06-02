@@ -174,22 +174,28 @@ struct LoginView: View {
               let root = scene.windows.first?.rootViewController else { return }
         isSocialLoading = true; errorMessage = ""
         GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
+            // Extrair dados fora do Task para evitar data race
+            let signInError = error
+            let idToken = result?.user.idToken?.tokenString
+            let firstName = result?.user.profile?.givenName
+            let lastName = result?.user.profile?.familyName
+
             Task { @MainActor in
-                if let error = error {
-                    if (error as NSError).code != GIDSignInError.canceled.rawValue {
+                if let signInError = signInError {
+                    if (signInError as NSError).code != GIDSignInError.canceled.rawValue {
                         errorMessage = "Erro ao entrar com Google."
                     }
                     isSocialLoading = false; return
                 }
-                guard let idToken = result?.user.idToken?.tokenString else {
+                guard let idToken = idToken else {
                     errorMessage = "Token Google inválido."
                     isSocialLoading = false; return
                 }
                 do {
                     let r = try await APIClient.shared.socialLogin(
                         provider: "google", token: idToken,
-                        firstName: result?.user.profile?.givenName,
-                        lastName: result?.user.profile?.familyName)
+                        firstName: firstName,
+                        lastName: lastName)
                     await finishLogin(access: r.access, refresh: r.refresh)
                 } catch APIError.badRequest(let msg) {
                     errorMessage = msg
