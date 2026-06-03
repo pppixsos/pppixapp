@@ -16,5 +16,10 @@
     <array>
         <string>Default</string>
     </array>
+    <key>com.apple.developer.in-app-payments</key>
+    <array>
+        <string>tech.pppix.app.premium_mensal</string>
+        <string>tech.pppix.app.premium_anual</string>
+    </array>
 </dict>
 </plist>
