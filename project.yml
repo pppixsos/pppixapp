@@ -97,12 +97,16 @@ targets:
           - group.tech.pppix.app
         com.apple.developer.applesignin:
           - Default
+        com.apple.developer.in-app-payments:
+          - tech.pppix.app.premium_mensal
+          - tech.pppix.app.premium_anual
     capabilities:
       com.apple.developer.family-controls: {}
       com.apple.developer.applesignin:
           - Default
       com.apple.developer.usernotifications.time-sensitive: {}
       push-notifications: {}
+      in-app-purchase: {}
     dependencies:
       - package: Firebase
         product: FirebaseCore
