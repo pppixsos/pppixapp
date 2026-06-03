@@ -51,13 +51,13 @@ jobs:
           security create-keychain -p temppass123 build.keychain
           security set-keychain-settings -t 21600 -u build.keychain
           security unlock-keychain -p temppass123 build.keychain
-          security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\\"//g)
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
           security default-keychain -s build.keychain
           security import /tmp/pppix.p12 -k build.keychain -P pppix123 -A
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temppass123 build.keychain
           echo '=== Identidades ==='
           security find-identity -v -p codesigning build.keychain
-          CERT_IDENTITY=$(security find-identity -v -p codesigning build.keychain | grep -E 'Apple Distribution|iPhone Distribution' | head -1 | sed 's/.*\"\(.*\)\"/\1/')
+          CERT_IDENTITY=$(security find-identity -v -p codesigning build.keychain | grep -E 'Apple Distribution|iPhone Distribution' | head -1 | sed 's/.*"\(.*\)"/\1/')
           if [ -z "$CERT_IDENTITY" ]; then echo 'ERRO: sem certificado valido no keychain'; exit 1; fi
           echo "CERT_IDENTITY=$CERT_IDENTITY" >> $GITHUB_ENV
           echo "KEYCHAIN_PATH=$HOME/Library/Keychains/build.keychain-db" >> $GITHUB_ENV
@@ -72,20 +72,19 @@ jobs:
           echo "aW1wb3J0IGp3dCwgdGltZSwganNvbiwgdXJsbGliLnJlcXVlc3QsIHVybGxpYi5lcnJvciwgb3MsIGJhc2U2NCwgc3VicHJvY2Vzcywgc3lzLCBwbGlzdGxpYiwgc2h1dGlsCgprZXlfaWQgPSBvcy5lbnZpcm9uWydLRVlfSUQnXQppc3N1ZXJfaWQgPSBvcy5lbnZpcm9uWydJU1NVRVJfSUQnXQphcGlfa2V5X2I2NCA9IG9zLmVudmlyb25bJ0FQSV9LRVknXQpwcml2YXRlX2tleSA9IGJhc2U2NC5iNjRkZWNvZGUoYXBpX2tleV9iNjQpLmRlY29kZSgndXRmLTgnKQoKZGVmIG1ha2VfdG9rZW4oKToKICAgIHBheWxvYWQgPSB7J2lzcyc6IGlzc3Vlcl9pZCwgJ2lhdCc6IGludCh0aW1lLnRpbWUoKSksICdleHAnOiBpbnQodGltZS50aW1lKCkpICsgMTIwMCwgJ2F1ZCc6ICdhcHBzdG9yZWNvbm5lY3QtdjEnfQogICAgcmV0dXJuIGp3dC5lbmNvZGUocGF5bG9hZCwgcHJpdmF0ZV9rZXksIGFsZ29yaXRobT0nRVMyNTYnLCBoZWFkZXJzPXsna2lkJzoga2V5X2lkfSkKCmRlZiBnZXRfaGVhZGVycygpOgogICAgcmV0dXJuIHsnQXV0aG9yaXphdGlvbic6ICdCZWFyZXIgJyArIG1ha2VfdG9rZW4oKSwgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJ30KCndpdGggb3BlbignL3RtcC9jZXJ0X2lkLnR4dCcpIGFzIGY6CiAgICBjZXJ0X2lkID0gZi5yZWFkKCkuc3RyaXAoKQpwcmludCgnY2VydF9pZDogJyArIGNlcnRfaWQpCgojIEJ1c2NhciB0b2RvcyBvcyBidW5kbGUgSURzIGRlIHVtYSB2ZXoKcmVxID0gdXJsbGliLnJlcXVlc3QuUmVxdWVzdCgnaHR0cHM6Ly9hcGkuYXBwc3RvcmVjb25uZWN0LmFwcGxlLmNvbS92MS9idW5kbGVJZHM/bGltaXQ9NTAnLCBoZWFkZXJzPWdldF9oZWFkZXJzKCkpCndpdGggdXJsbGliLnJlcXVlc3QudXJsb3BlbihyZXEpIGFzIHJlc3A6CiAgICBkYXRhID0ganNvbi5sb2FkcyhyZXNwLnJlYWQoKSkKYnVuZGxlcyA9IHtiWydhdHRyaWJ1dGVzJ11bJ2lkZW50aWZpZXInXTogYlsnaWQnXSBmb3IgYiBpbiBkYXRhLmdldCgnZGF0YScsIFtdKX0KcHJpbnQoJ0J1bmRsZXMgZW5jb250cmFkb3M6ICcgKyBzdHIobGlzdChidW5kbGVzLmtleXMoKSkpKQoKdGFyZ2V0cyA9IFsKICAgICgndGVjaC5wcHBpeC5hcHAnLCAgICAgICAgICdQUFBJWCBBcHBTdG9yZScsICAgICAgICAgJ21haW4nKSwKICAgICgndGVjaC5wcHBpeC5hcHAuYmxvY2snLCAgICdQUFBJWCBCbG9jayBBcHBTdG9yZScsICAgJ2Jsb2NrJyksCiAgICAoJ3RlY2gucHBwaXguYXBwLm1vbml0b3InLCAnUFBQSVggTW9uaXRvciBBcHBTdG9yZScsICdtb25pdG9yJyksCiAgICAoJ3RlY2gucHBwaXguYXBwLnNoaWVsZCcsICAnUFBQSVggU2hpZWxkIEFwcFN0b3JlJywgICdzaGllbGQnKSwKXQoKcHJvZmlsZXNfZGlyID0gb3MucGF0aC5leHBhbmR1c2VyKCd+L0xpYnJhcnkvTW9iaWxlRGV2aWNlL1Byb3Zpc2lvbmluZyBQcm9maWxlcy8nKQpvcy5tYWtlZGlycyhwcm9maWxlc19kaXIsIGV4aXN0X29rPVRydWUpCnV1aWRzID0ge30KCmZvciBidW5kbGVfaWRfc3RyLCBwcm9maWxlX25hbWUsIGtleSBpbiB0YXJnZXRzOgogICAgYnVuZGxlX2lkID0gYnVuZGxlcy5nZXQoYnVuZGxlX2lkX3N0cikKICAgIGlmIG5vdCBidW5kbGVfaWQ6CiAgICAgICAgcHJpbnQoJ0VSUk86ICcgKyBidW5kbGVfaWRfc3RyICsgJyBuYW8gZW5jb250cmFkbyBubyBwb3J0YWwnKQogICAgICAgIHN5cy5leGl0KDEpCgogICAgIyBEZWxldGFyIHByb2ZpbGVzIGFudGlnb3MgY29tIGVzc2Ugbm9tZQogICAgdXJsID0gJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20vdjEvcHJvZmlsZXM/ZmlsdGVyW25hbWVdPScgKyB1cmxsaWIucmVxdWVzdC5xdW90ZShwcm9maWxlX25hbWUpICsgJyZsaW1pdD0xMCcKICAgIHJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QodXJsLCBoZWFkZXJzPWdldF9oZWFkZXJzKCkpCiAgICB3aXRoIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocmVxKSBhcyByZXNwOgogICAgICAgIG9sZCA9IGpzb24ubG9hZHMocmVzcC5yZWFkKCkpCiAgICBmb3IgcCBpbiBvbGQuZ2V0KCdkYXRhJywgW10pOgogICAgICAgIGRlbF9yZXEgPSB1cmxsaWIucmVxdWVzdC5SZXF1ZXN0KCdodHRwczovL2FwaS5hcHBzdG9yZWNvbm5lY3QuYXBwbGUuY29tL3YxL3Byb2ZpbGVzLycgKyBwWydpZCddLCBoZWFkZXJzPWdldF9oZWFkZXJzKCksIG1ldGhvZD0nREVMRVRFJykKICAgICAgICB0cnk6IHVybGxpYi5yZXF1ZXN0LnVybG9wZW4oZGVsX3JlcSkKICAgICAgICBleGNlcHQ6IHBhc3MKCiAgICAjIENyaWFyIG5vdm8gcHJvZmlsZQogICAgcHJpbnQoJ0NyaWFuZG86ICcgKyBwcm9maWxlX25hbWUgKyAnIHBhcmEgJyArIGJ1bmRsZV9pZF9zdHIpCiAgICBib2R5ID0ganNvbi5kdW1wcyh7J2RhdGEnOiB7CiAgICAgICAgJ3R5cGUnOiAncHJvZmlsZXMnLAogICAgICAgICdhdHRyaWJ1dGVzJzogeyduYW1lJzogcHJvZmlsZV9uYW1lLCAncHJvZmlsZVR5cGUnOiAnSU9TX0FQUF9TVE9SRSd9LAogICAgICAgICdyZWxhdGlvbnNoaXBzJzogewogICAgICAgICAgICAnYnVuZGxlSWQnOiB7J2RhdGEnOiB7J3R5cGUnOiAnYnVuZGxlSWRzJywgJ2lkJzogYnVuZGxlX2lkfX0sCiAgICAgICAgICAgICdjZXJ0aWZpY2F0ZXMnOiB7J2RhdGEnOiBbeyd0eXBlJzogJ2NlcnRpZmljYXRlcycsICdpZCc6IGNlcnRfaWR9XX0KICAgICAgICB9CiAgICB9fSkuZW5jb2RlKCkKICAgIHJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoJ2h0dHBzOi8vYXBpLmFwcHN0b3JlY29ubmVjdC5hcHBsZS5jb20vdjEvcHJvZmlsZXMnLCBkYXRhPWJvZHksIGhlYWRlcnM9Z2V0X2hlYWRlcnMoKSwgbWV0aG9kPSdQT1NUJykKICAgIHRyeToKICAgICAgICB3aXRoIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocmVxKSBhcyByZXNwOgogICAgICAgICAgICByZXNwX2RhdGEgPSBqc29uLmxvYWRzKHJlc3AucmVhZCgpKQogICAgZXhjZXB0IHVybGxpYi5lcnJvci5IVFRQRXJyb3IgYXMgZToKICAgICAgICBwcmludCgnRXJybyAnICsgc3RyKGUuY29kZSkgKyAnOiAnICsgZS5yZWFkKCkuZGVjb2RlKCkpCiAgICAgICAgc3lzLmV4aXQoMSkKCiAgICBwcm9maWxlX2J5dGVzID0gYmFzZTY0LmI2NGRlY29kZShyZXNwX2RhdGFbJ2RhdGEnXVsnYXR0cmlidXRlcyddWydwcm9maWxlQ29udGVudCddKQogICAgdG1wID0gJy90bXAvcHBwaXhfJyArIGtleSArICcubW9iaWxlcHJvdmlzaW9uJwogICAgb3Blbih0bXAsICd3YicpLndyaXRlKHByb2ZpbGVfYnl0ZXMpCgogICAgb3V0ID0gc3VicHJvY2Vzcy5jaGVja19vdXRwdXQoWydzZWN1cml0eScsICdjbXMnLCAnLUQnLCAnLWknLCB0bXBdKQogICAgcGxpc3QgPSBwbGlzdGxpYi5sb2FkcyhvdXQpCiAgICB1dWlkID0gcGxpc3RbJ1VVSUQnXQogICAgZW50cyA9IHBsaXN0LmdldCgnRW50aXRsZW1lbnRzJywge30pCiAgICBhcHBfaWQgPSBlbnRzLmdldCgnYXBwbGljYXRpb24taWRlbnRpZmllcicsICdOL0EnKQogICAgaGFzX2lhcCA9ICdjb20uYXBwbGUuZGV2ZWxvcGVyLmluLWFwcC1wYXltZW50cycgaW4gZW50cwogICAgcHJpbnQoJyAgVVVJRD0nICsgdXVpZCArICcgQXBwSUQ9JyArIGFwcF9pZCArICcgSUFQPScgKyBzdHIoaGFzX2lhcCkpCiAgICB1dWlkc1trZXldID0gdXVpZAogICAgc2h1dGlsLmNvcHkodG1wLCBwcm9maWxlc19kaXIgKyB1dWlkICsgJy5tb2JpbGVwcm92aXNpb24nKQoKIyBTYWx2YXIgVVVJRHMKd2l0aCBvcGVuKCcvdG1wL3Byb2ZpbGVfdXVpZHMudHh0JywgJ3cnKSBhcyBmOgogICAgZm9yIGssIHYgaW4gdXVpZHMuaXRlbXMoKToKICAgICAgICBmLndyaXRlKGsgKyAnPScgKyB2ICsgJ1xuJykKd2l0aCBvcGVuKCcvdG1wL3Byb2ZpbGVfdXVpZC50eHQnLCAndycpIGFzIGY6CiAgICBmLndyaXRlKHV1aWRzWydtYWluJ10pCnByaW50KCdQcm9maWxlcyBPSzogJyArIHN0cih1dWlkcykpCg==" | base64 --decode > /tmp/gen_profile.py
           python3 /tmp/gen_profile.py
           echo "PROFILE_UUID=$(cat /tmp/profile_uuid.txt)" >> $GITHUB_ENV
-          echo "PROFILE_UUIDS=$(cat /tmp/profile_uuids.txt | tr '\n' '|')" >> $GITHUB_ENV
 
       - name: Auto-increment version
         run: |
           BUILD=${{ github.run_number }}
-          CURRENT=$(grep 'MARKETING_VERSION:' project.yml | head -1 | sed 's/.*\"\(.*\)\"/\1/')
+          CURRENT=$(grep 'MARKETING_VERSION:' project.yml | head -1 | sed 's/.*"\(.*\)"/\1/')
           MAJOR=$(echo $CURRENT | cut -d. -f1)
           MINOR=$(echo $CURRENT | cut -d. -f2)
           PATCH=$(echo $CURRENT | cut -d. -f3)
           NEW_PATCH=$((PATCH + 1))
           NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
-          sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"$NEW_VERSION\"/" project.yml
-          sed -i '' "s/CURRENT_PROJECT_VERSION: \"[0-9]*\"/CURRENT_PROJECT_VERSION: \"$BUILD\"/" project.yml
-          echo "Versão: $NEW_VERSION (build $BUILD)"
+          sed -i '' 's/MARKETING_VERSION: "[^"]*"/MARKETING_VERSION: "'"$NEW_VERSION"'"/' project.yml
+          sed -i '' 's/CURRENT_PROJECT_VERSION: "[0-9]*/CURRENT_PROJECT_VERSION: "'"$BUILD"'/' project.yml
+          echo "Versao: $NEW_VERSION (build $BUILD)"
           echo "APP_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "BUILD_NUMBER=$BUILD" >> $GITHUB_ENV
 
