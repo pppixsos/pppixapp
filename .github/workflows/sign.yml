@@ -74,18 +74,10 @@ jobs:
 
       - name: Auto-increment version
         run: |
-          BUILD=${{ github.run_number }}
-          CURRENT=$(grep 'MARKETING_VERSION:' project.yml | head -1 | sed 's/.*\"\(.*\)\"/\1/')
-          MAJOR=$(echo $CURRENT | cut -d. -f1)
-          MINOR=$(echo $CURRENT | cut -d. -f2)
-          PATCH=$(echo $CURRENT | cut -d. -f3)
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
-          sed -i '' 's/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"'\"$NEW_VERSION\"'\"/' project.yml
-          sed -i '' 's/CURRENT_PROJECT_VERSION: \"[0-9]*/CURRENT_PROJECT_VERSION: \"'\"$BUILD\"'/' project.yml
-          echo "Versao: $NEW_VERSION (build $BUILD)"
-          echo "APP_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "BUILD_NUMBER=$BUILD" >> $GITHUB_ENV
+          echo "aW1wb3J0IHJlLCBzeXMsIG9zCgpidWlsZCA9IG9zLmVudmlyb25bJ0JVSUxEJ10KY29udGVudCA9IG9wZW4oJ3Byb2plY3QueW1sJykucmVhZCgpCgptID0gcmUuc2VhcmNoKHInTUFSS0VUSU5HX1ZFUlNJT046XHMqIihcZCspXC4oXGQrKVwuKFxkKykiJywgY29udGVudCkKaWYgbm90IG06CiAgICBzeXMuZXhpdCgnTUFSS0VUSU5HX1ZFUlNJT04gbmFvIGVuY29udHJhZG8gbm8gcHJvamVjdC55bWwnKQoKbWFqb3IsIG1pbm9yLCBwYXRjaCA9IG0uZ3JvdXAoMSksIG0uZ3JvdXAoMiksIHN0cihpbnQobS5ncm91cCgzKSkgKyAxKQpuZXdfdmVyc2lvbiA9IGYne21ham9yfS57bWlub3J9LntwYXRjaH0nCgpjb250ZW50ID0gcmUuc3ViKHInTUFSS0VUSU5HX1ZFUlNJT046XHMqIlteIl0rIicsIGYnTUFSS0VUSU5HX1ZFUlNJT046ICJ7bmV3X3ZlcnNpb259IicsIGNvbnRlbnQpCmNvbnRlbnQgPSByZS5zdWIocidDVVJSRU5UX1BST0pFQ1RfVkVSU0lPTjpccyoiW14iXSsiJywgZidDVVJSRU5UX1BST0pFQ1RfVkVSU0lPTjogIntidWlsZH0iJywgY29udGVudCkKCm9wZW4oJ3Byb2plY3QueW1sJywgJ3cnKS53cml0ZShjb250ZW50KQpwcmludChmJ1ZlcnNhbzoge25ld192ZXJzaW9ufSAoYnVpbGQge2J1aWxkfSknKQpvcGVuKCcvdG1wL2FwcF92ZXJzaW9uLnR4dCcsICd3Jykud3JpdGUobmV3X3ZlcnNpb24pCg==" | base64 --decode > /tmp/auto_increment.py
+          BUILD=${{ github.run_number }} python3 /tmp/auto_increment.py
+          echo "APP_VERSION=$(cat /tmp/app_version.txt)" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=${{ github.run_number }}" >> $GITHUB_ENV
 
       - name: Generate .xcodeproj with correct signing
         run: |
