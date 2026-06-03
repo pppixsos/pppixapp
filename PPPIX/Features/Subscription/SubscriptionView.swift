@@ -745,8 +745,12 @@ final class StoreManager: ObservableObject {
     ]
 
     @Published var products: [Product] = []
-    @Published var isPremium: Bool = false
     @Published var isLoading = false
+
+    // isPremium persiste no UserDefaults — não some ao fechar o app
+    @Published var isPremium: Bool = UserDefaults.standard.bool(forKey: "pppix_is_premium") {
+        didSet { UserDefaults.standard.set(isPremium, forKey: "pppix_is_premium") }
+    }
 
     func loadProducts() async {
         isLoading = true
@@ -758,12 +762,36 @@ final class StoreManager: ObservableObject {
     }
 
     func checkPremiumStatus() async {
+        var found = false
         for await result in Transaction.currentEntitlements {
             if case .verified(let tx) = result,
                productIds.contains(tx.productID) {
                 isPremium = true
                 AdManager.shared.setPremium(true)
+                found = true
                 return
+            }
+        }
+        // Se StoreKit não confirmou nenhuma assinatura ativa, resetar
+        if !found && isPremium {
+            isPremium = false
+            AdManager.shared.setPremium(false)
+        }
+    }
+
+    // Listener de renovações automáticas — chamar no app init
+    func listenForTransactions() -> Task<Void, Error> {
+        return Task.detached {
+            for await result in Transaction.updates {
+                if case .verified(let tx) = result {
+                    await MainActor.run {
+                        if self.productIds.contains(tx.productID) {
+                            self.isPremium = true
+                            AdManager.shared.setPremium(true)
+                        }
+                    }
+                    await tx.finish()
+                }
             }
         }
     }
