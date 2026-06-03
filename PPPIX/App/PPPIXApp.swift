@@ -3,6 +3,7 @@ import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
 import GoogleSignIn
+import StoreKit
 
 @main
 struct PPPIXApp: App {
@@ -58,6 +59,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         LocationService.shared.warmUp()
 
         BackgroundTaskManager.shared.registerTasks()
+
+        // StoreKit: ouvir renovações automáticas de assinatura
+        Task { @MainActor in
+            _ = StoreManager.shared.listenForTransactions()
+        }
 
         // Quando usuário fizer login, tentar registrar FCM token se disponível
         NotificationCenter.default.addObserver(
