@@ -129,7 +129,7 @@ private struct PermissionRow: View {
     let title: String
     let description: String
     let status: PermissionStatus
-    var actionLabel: String = "Conceder"
+    var actionLabel: String = "Continuar"
     var errorMessage: String? = nil
     let onGrant: () -> Void
 
