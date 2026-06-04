@@ -91,7 +91,7 @@ struct AppListView: View {
                 Button {
                     Task { await manager.requestAuthorization() }
                 } label: {
-                    Text("Conceder Acesso")
+                    Text("Continuar")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
