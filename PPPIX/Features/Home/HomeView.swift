@@ -3,9 +3,7 @@ import SwiftUI
 struct HomeView: View {
 
     @ObservedObject private var session = SessionManager.shared
-    @ObservedObject private var store = StoreManager.shared
     @State private var showAlertDetail: Int? = nil
-    @State private var showPaywall = false
 
     private var firstName: String {
         session.userName.split(separator: " ").first.map(String.init) ?? "Usuário"
@@ -120,21 +118,8 @@ struct HomeView: View {
         .sheet(item: $showAlertDetail) { alertId in
             AlertDetailView(alertId: alertId)
         }
-        .sheet(isPresented: $showPaywall) {
-            SubscriptionView()
-        }
-        .task {
-            // Atualizar nome do usuário ao abrir
-            if let me = try? await APIClient.shared.getMe() {
-                SessionManager.shared.saveUserInfo(id: me.id, email: me.email, name: me.fullName)
-            }
-            await store.loadProducts()
-            // Mostrar paywall toda vez que abrir, enquanto nao for premium
-            if !store.isPremium {
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
-                showPaywall = true
-            }
-        }
+
+
     }
 }
 
@@ -217,8 +202,6 @@ private struct PremiumCard: View {
                 .stroke(Color(hex: "#6633FF").opacity(0.4), lineWidth: 1)
         )
         .sheet(isPresented: $showSubscription) {
-            SubscriptionView()
-        }
     }
 }
 
