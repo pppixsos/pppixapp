@@ -4,7 +4,7 @@ import UserNotifications
 
 /// Equivalente ao AppMonitorService.kt do Android.
 /// Mantém o app vivo via BGTaskScheduler + Silent Push + Background App Refresh.
-@MainActor
+// NÃO usar @MainActor — BGTaskScheduler chama handlers em background thread
 final class BackgroundTaskManager {
 
     static let shared = BackgroundTaskManager()
@@ -20,14 +20,23 @@ final class BackgroundTaskManager {
             forTaskWithIdentifier: appRefreshIdentifier,
             using: nil
         ) { task in
-            self.handleAppRefresh(task: task as! BGAppRefreshTask)
+            // Guard evita crash do as! force cast
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            self.handleAppRefresh(task: refreshTask)
         }
 
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: processingIdentifier,
             using: nil
         ) { task in
-            self.handleProcessing(task: task as! BGProcessingTask)
+            guard let processingTask = task as? BGProcessingTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            self.handleProcessing(task: processingTask)
         }
     }
 
@@ -51,7 +60,7 @@ final class BackgroundTaskManager {
     private func handleAppRefresh(task: BGAppRefreshTask) {
         scheduleAppRefresh() // Re-agenda imediatamente
 
-        let taskOp = Task {
+        let taskOp = Task { @MainActor in
             if SessionManager.shared.isLoggedIn {
                 // Verificar alertas em background
                 if let alerts = try? await APIClient.shared.getReceivedAlerts() {
@@ -109,7 +118,10 @@ final class BackgroundTaskManager {
     // MARK: - App lifecycle hooks (chamar no SceneDelegate/App)
 
     func appDidEnterBackground() {
-        scheduleAppRefresh()
-        scheduleProcessing()
+        // Sempre chamar do main thread
+        DispatchQueue.main.async {
+            self.scheduleAppRefresh()
+            self.scheduleProcessing()
+        }
     }
 }
