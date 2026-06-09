@@ -1,13 +1,13 @@
 import AVFoundation
+import AudioToolbox
 import UIKit
 
-/// Equivalente ao EmergencyService.kt do Android.
-/// Toca sirene.mp3 via AVAudioPlayer com categoria de áudio .alarm.
+/// Toca sirene de emergência — funciona com ringer silenciado via .playback
 @MainActor
 final class EmergencyAudioService {
 
     static let shared = EmergencyAudioService()
-    private init() { configureAudioSession() }
+    private init() {}
 
     private var player: AVAudioPlayer?
     var isPlaying: Bool { player?.isPlaying ?? false }
@@ -15,7 +15,7 @@ final class EmergencyAudioService {
     // MARK: - Play
 
     func playSiren() {
-        // Garantir que roda na main thread
+        // Garantir main thread
         guard Thread.isMainThread else {
             DispatchQueue.main.async { self.playSiren() }
             return
@@ -24,19 +24,22 @@ final class EmergencyAudioService {
 
         configureAudioSession()
 
-        // Tenta .caf primeiro (formato iOS nativo), depois .mp3 como fallback
-        let url = Bundle.main.url(forResource: "sirene", withExtension: "caf")
-               ?? Bundle.main.url(forResource: "sirene", withExtension: "mp3")
+        // Tentar mp3 direto (caf é gerado no CI mas pode não existir)
+        let url = Bundle.main.url(forResource: "sirene", withExtension: "mp3")
+               ?? Bundle.main.url(forResource: "sirene", withExtension: "caf")
+               ?? Bundle.main.url(forResource: "sirene", withExtension: "wav")
+
         guard let url = url else {
-            // Fallback: vibração
+            // Fallback garantido: vibração repetida
             playVibrationFallback()
             return
         }
 
         do {
             player = try AVAudioPlayer(contentsOf: url)
-            player?.numberOfLoops = -1 // loop infinito
+            player?.numberOfLoops = -1
             player?.volume = 1.0
+            player?.prepareToPlay()
             player?.play()
         } catch {
             playVibrationFallback()
@@ -56,10 +59,10 @@ final class EmergencyAudioService {
     }
 
     // MARK: - Audio Session
+    // .playback ignora o ringer silenciado — único modo confiável para alarmes
 
     private func configureAudioSession() {
         do {
-            // .playback ignora modo silencioso quando usada corretamente
             try AVAudioSession.sharedInstance().setCategory(
                 .playback,
                 mode: .default,
@@ -72,10 +75,12 @@ final class EmergencyAudioService {
     }
 
     private func playVibrationFallback() {
-        // Vibra repetidamente como fallback
         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
     }
 }
-
-// AudioServicesPlaySystemSound precisa do import
-import AudioToolbox
