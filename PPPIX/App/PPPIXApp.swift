@@ -215,7 +215,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             #endif
             completionHandler(.newData)
         } else {
-            // Pode ser alerta de emergência — processar no MainActor
+            // Alerta de emergência — processar e guardar ID para abrir tela ao foreground
+            let alertId = intVal(payload["alert_id"] ?? payload["id"])
+            if alertId > 0 {
+                AppDelegate.pendingAlertId = alertId
+            }
             Task { @MainActor in
                 _ = self.handleEmergencyPayload(payload)
             }
