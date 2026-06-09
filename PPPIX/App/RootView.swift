@@ -1,5 +1,6 @@
 import SwiftUI
 import AudioToolbox
+import MapKit
 import UserNotifications
 import CoreLocation
 
@@ -329,31 +330,32 @@ struct EmergencyAlertView: View {
                         .padding(.top, 10)
                         .padding(.bottom, 20)
 
-                    // Mapa estático via Google Maps Static API
-                    if alert.has_location, let lat = alert.latitude, let lng = alert.longitude {
-                        // Fallback: abrir no Google Maps
-                        Button {
-                            if let url = alert.googleMapsURL { UIApplication.shared.open(url) }
-                        } label: {
-                            ZStack {
-                                // Fundo do mapa
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color(hex: "#1A1A2E"))
-                                    .frame(height: 200)
-                                VStack(spacing: 8) {
-                                    Image(systemName: "map.fill")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(Color(hex: "#4444FF"))
-                                    Text("📍 \(lat), \(lng)")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(.white)
-                                    Text("Toque para abrir no Maps")
-                                        .font(.caption)
-                                        .foregroundColor(Color(hex: "#44AAFF"))
+                    // Mapa nativo
+                    if alert.has_location, let latStr = alert.latitude, let lngStr = alert.longitude,
+                       let lat = Double(latStr), let lng = Double(lngStr) {
+                        VStack(spacing: 0) {
+                            MapPreviewView(latitude: lat, longitude: lng)
+                                .frame(height: 200)
+                                .cornerRadius(12)
+                            HStack {
+                                Text("📍 \(latStr), \(lngStr)")
+                                    .font(.caption)
+                                    .foregroundColor(Color(white: 0.5))
+                                Spacer()
+                                if let url = alert.googleMapsURL {
+                                    Link(destination: url) {
+                                        Text("Abrir Maps →")
+                                            .font(.caption.bold())
+                                            .foregroundColor(Color(hex: "#44AAFF"))
+                                    }
                                 }
                             }
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(hex: "#1A1A1A"))
                         }
+                        .cornerRadius(12)
+                        .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                     }
 
