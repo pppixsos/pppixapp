@@ -124,6 +124,10 @@ struct HomeView: View {
             SubscriptionView()
         }
         .task {
+            // Atualizar nome do usuário ao abrir
+            if let me = try? await APIClient.shared.getMe() {
+                SessionManager.shared.saveUserInfo(id: me.id, email: me.email, name: me.fullName)
+            }
             await store.loadProducts()
             // Mostrar paywall toda vez que abrir, enquanto nao for premium
             if !store.isPremium {
