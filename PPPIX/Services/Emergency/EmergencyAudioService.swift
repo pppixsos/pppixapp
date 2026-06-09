@@ -50,17 +50,14 @@ final class EmergencyAudioService {
 
     private func configureAudioSession() {
         do {
-            // .alarm ignora modo silencioso e toca mesmo com ringer desligado
+            // .playback ignora modo silencioso quando usada corretamente
             try AVAudioSession.sharedInstance().setCategory(
-                .alarm,
+                .playback,
                 mode: .default,
                 options: []
             )
             try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
-            // Fallback para .playback se .alarm não estiver disponível
-            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
-            try? AVAudioSession.sharedInstance().setActive(true)
             print("[PPPIX] Audio session error: \(error)")
         }
     }
