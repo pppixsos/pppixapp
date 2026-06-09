@@ -74,6 +74,16 @@ struct RootView: View {
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.checkAuthorization()
             #endif
+            // Verificar se há alerta pendente (app aberto via tap na notificação)
+            if let pendingId = AppDelegate.pendingAlertId {
+                AppDelegate.pendingAlertId = nil
+                Task { @MainActor in
+                    if let a = try? await APIClient.shared.getAlert(id: pendingId) {
+                        EmergencyAudioService.shared.playSiren()
+                        emergencyAlert = a
+                    }
+                }
+            }
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
@@ -94,6 +104,16 @@ struct RootView: View {
                     withIdentifiers: ["pppix_unlock"]
                 )
                 checkPasswordFlag()
+                // Verificar alerta pendente ao voltar ao foreground
+                if let pendingId = AppDelegate.pendingAlertId {
+                    AppDelegate.pendingAlertId = nil
+                    Task { @MainActor in
+                        if let a = try? await APIClient.shared.getAlert(id: pendingId) {
+                            EmergencyAudioService.shared.playSiren()
+                            emergencyAlert = a
+                        }
+                    }
+                }
                 pollAlertsOnce()
                 startAlertPolling()
             default: break
@@ -244,7 +264,7 @@ struct RootView: View {
     }
 }
 
-// MARK: - Tela de Emergência Fullscreen
+// MARK: - Tela de Emergência Fullscreen (igual Android)
 struct EmergencyAlertView: View {
     let alert: Alert
     let onDismiss: () -> Void
@@ -255,120 +275,188 @@ struct EmergencyAlertView: View {
         alert.sender_email.lowercased() == SessionManager.shared.userEmail.lowercased()
     }
 
-    var body: some View {
-        ZStack {
-            Color(hex: "#0A0005").ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Header
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 64))
-                            .foregroundColor(Color(hex: "#FF2222"))
-                        Text("🚨 ALERTA DE EMERGÊNCIA")
-                            .font(.title2.bold()).foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                        Text(alert.message)
-                            .font(.subheadline).foregroundColor(Color(white: 0.7))
-                            .multilineTextAlignment(.center).padding(.horizontal, 8)
-                    }
-                    .frame(maxWidth: .infinity).padding(.vertical, 28)
-                    .background(Color(hex: "#330000")).cornerRadius(16)
-
-                    infoCard(icon: "person.fill", color: Color(hex: "#3366FF"),
-                             label: "Pessoa",
-                             value: alert.sender_name.isEmpty ? alert.sender_email : alert.sender_name)
-
-                    if alert.has_location, let url = alert.googleMapsURL {
-                        Link(destination: url) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 20)).foregroundColor(.white).frame(width: 36)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Localização GPS").font(.caption).foregroundColor(Color(white: 0.5))
-                                    Text("Ver no Google Maps ↗")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(Color(hex: "#44AAFF"))
-                                }
-                                Spacer()
-                            }
-                            .padding(14).background(Color(hex: "#141422")).cornerRadius(14)
-                        }
-                    } else {
-                        infoCard(icon: "location.slash.fill", color: Color(hex: "#FF6600"),
-                                 label: "Localização", value: "Não disponível")
-                    }
-
-                    if !alert.vehicleText.isEmpty {
-                        infoCard(icon: "car.fill", color: Color(hex: "#FF6600"),
-                                 label: "Veículo", value: alert.vehicleText)
-                    }
-
-                    infoCard(icon: "clock.fill", color: Color(hex: "#9966FF"),
-                             label: "Horário", value: alert.formattedDate)
-
-                    // Botão 190
-                    Button {
-                        if let url = URL(string: "tel://190") { UIApplication.shared.open(url) }
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "phone.fill").font(.system(size: 18, weight: .bold))
-                            Text("LIGAR 190 — POLÍCIA").font(.system(size: 16, weight: .bold))
-                        }
-                        .foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 18)
-                        .background(Color(hex: "#CC0000")).cornerRadius(14)
-                    }
-
-                    // Botão parar sirene (sempre visível)
-                    Button {
-                        EmergencyAudioService.shared.stopSiren()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "speaker.slash.fill")
-                            Text("Parar Sirene")
-                                .font(.system(size: 14, weight: .semibold))
-                        }
-                        .foregroundColor(Color(white: 0.6))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color(white: 0.1))
-                        .cornerRadius(12)
-                    }
-
-                    if isSender && !cancelled {
-                        PPPIXButton(title: "Estou Bem — Cancelar Alerta", isLoading: isCancelling) {
-                            Task {
-                                isCancelling = true
-                                try? await APIClient.shared.patchAlertStatus(id: alert.id, status: "cancelled")
-                                isCancelling = false; cancelled = true
-                                EmergencyAudioService.shared.stopSiren()
-                                onDismiss()
-                            }
-                        }
-                    } else {
-                        Button("Fechar") {
-                            EmergencyAudioService.shared.stopSiren()
-                            onDismiss()
-                        }
-                        .font(.subheadline).foregroundColor(Color(white: 0.4)).padding(.bottom, 8)
-                    }
-                    Spacer(minLength: 40)
-                }
-                .padding(.horizontal, 20).padding(.top, 40)
-            }
-        }
+    private var displayName: String {
+        alert.sender_name.isEmpty ? alert.sender_email : alert.sender_name
     }
 
-    private func infoCard(icon: String, color: Color, label: String, value: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon).font(.system(size: 18)).foregroundColor(color).frame(width: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(.caption).foregroundColor(Color(white: 0.5))
-                Text(value).font(.system(size: 14, weight: .medium)).foregroundColor(.white)
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 0) {
+
+                    // Sirene
+                    Text("🚨")
+                        .font(.system(size: 72))
+                        .padding(.top, 48)
+                        .padding(.bottom, 8)
+
+                    // Título
+                    Text("Senha de Emergência")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(Color(hex: "#FF3333"))
+                        .multilineTextAlignment(.center)
+
+                    // Nome do remetente
+                    Text("De: \(displayName)")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(Color(hex: "#FFCC00"))
+                        .padding(.top, 6)
+
+                    // Mensagem
+                    Text(alert.message)
+                        .font(.system(size: 15))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 10)
+                        .padding(.bottom, 20)
+
+                    // Mapa estático via Google Maps Static API
+                    if alert.has_location, let lat = alert.latitude, let lng = alert.longitude {
+                        let mapURL = "https://maps.googleapis.com/maps/api/staticmap?center=\(lat),\(lng)&zoom=15&size=600x300&markers=color:red%7C\(lat),\(lng)&key=AIzaSyD-placeholder"
+                        // Fallback: abrir no Google Maps
+                        Button {
+                            if let url = alert.googleMapsURL { UIApplication.shared.open(url) }
+                        } label: {
+                            ZStack {
+                                // Fundo do mapa
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(hex: "#1A1A2E"))
+                                    .frame(height: 200)
+                                VStack(spacing: 8) {
+                                    Image(systemName: "map.fill")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(Color(hex: "#4444FF"))
+                                    Text("📍 \(lat), \(lng)")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.white)
+                                    Text("Toque para abrir no Maps")
+                                        .font(.caption)
+                                        .foregroundColor(Color(hex: "#44AAFF"))
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                        }
+                        .padding(.bottom, 12)
+                    }
+
+                    // Veículo
+                    if !alert.vehicleText.isEmpty {
+                        HStack(spacing: 10) {
+                            Text("🚗")
+                                .font(.system(size: 18))
+                            Text(alert.vehicleText)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(Color(hex: "#FFCC00"))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(14)
+                        .background(Color(hex: "#1A1A1A"))
+                        .cornerRadius(10)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                    }
+
+                    VStack(spacing: 12) {
+                        // Ver no Google Maps
+                        if let url = alert.googleMapsURL {
+                            Button {
+                                UIApplication.shared.open(url)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text("🗺️")
+                                    Text("ABRIR NO GOOGLE MAPS")
+                                        .font(.system(size: 15, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(Color(hex: "#1A4DCC"))
+                                .cornerRadius(10)
+                            }
+                        }
+
+                        // Ligar 190
+                        Button {
+                            if let url = URL(string: "tel://190") { UIApplication.shared.open(url) }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text("📞")
+                                Text("LIGAR PARA 190 — POLÍCIA")
+                                    .font(.system(size: 15, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color(hex: "#CC0000"))
+                            .cornerRadius(10)
+                        }
+
+                        // Parar sirene
+                        Button {
+                            EmergencyAudioService.shared.stopSiren()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "speaker.slash.fill")
+                                Text("Parar Sirene")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .foregroundColor(Color(white: 0.6))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(hex: "#222222"))
+                            .cornerRadius(10)
+                        }
+
+                        // Cancelar alerta (se for o remetente)
+                        if isSender && !cancelled {
+                            Button {
+                                Task {
+                                    isCancelling = true
+                                    try? await APIClient.shared.patchAlertStatus(id: alert.id, status: "cancelled")
+                                    isCancelling = false
+                                    cancelled = true
+                                    EmergencyAudioService.shared.stopSiren()
+                                    onDismiss()
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    if isCancelling { ProgressView().tint(.white) }
+                                    else {
+                                        Image(systemName: "checkmark.circle.fill")
+                                        Text("Estou Bem — Cancelar Alerta")
+                                            .font(.system(size: 14, weight: .semibold))
+                                    }
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color(hex: "#006600"))
+                                .cornerRadius(10)
+                            }
+                            .disabled(isCancelling)
+                        }
+
+                        // Fechar
+                        Button {
+                            EmergencyAudioService.shared.stopSiren()
+                            onDismiss()
+                        } label: {
+                            Text("FECHAR")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(Color(white: 0.5))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color(hex: "#1A1A1A"))
+                                .cornerRadius(10)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 40)
+                }
             }
-            Spacer()
         }
-        .padding(14).background(Color(hex: "#141422")).cornerRadius(14)
     }
 }
 
