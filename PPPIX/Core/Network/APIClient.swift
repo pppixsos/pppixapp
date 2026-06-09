@@ -146,12 +146,18 @@ final class APIClient {
                let results = paged.results { return results }
         } catch {}
 
-        // Fallback: filtra do endpoint geral
+        // Fallback: filtra do endpoint geral — SÓ os que EU recebi (to_user_email == meu email)
         do {
+            let myEmail = SessionManager.shared.userEmail.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
             let data = try await rawGet("connections/?status=pending")
-            if let list = try? JSONDecoder().decode([Connection].self, from: data) { return list }
-            if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
-               let results = paged.results { return results }
+            var all: [Connection] = []
+            if let list = try? JSONDecoder().decode([Connection].self, from: data) { all = list }
+            else if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
+                    let results = paged.results { all = results }
+            // Filtrar apenas os que eu recebi — to_user_email é o meu email
+            return all.filter {
+                $0.to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) == myEmail
+            }
         } catch {}
 
         return []
