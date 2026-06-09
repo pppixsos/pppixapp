@@ -67,10 +67,10 @@ struct RootView: View {
             UnlockPasswordView(isPresented: $showUnlockScreen, onPPPIXAccess: {
                 showUnlockScreen = false
                 auth.isAuthenticated = true
-            }
+            })
         }
         .fullScreenCover(item: $emergencyAlert) { alert in
-            EmergencyAlertView(alert: alert, onDismiss: { emergencyAlert = nil }
+            EmergencyAlertView(alert: alert, onDismiss: { emergencyAlert = nil })
         }
         .onAppear {
             #if !targetEnvironment(simulator)
@@ -87,7 +87,7 @@ struct RootView: View {
                 }
             }
         }
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase, perform: { phase in
             switch phase {
             case .background:
                 stopAlertPolling()
@@ -120,7 +120,7 @@ struct RootView: View {
                 startAlertPolling()
             default: break
             }
-        }
+        })
         .onReceive(NotificationCenter.default.publisher(for: .pppixForceOpenUnlockScreen)) { _ in
             guard !showUnlockScreen else { return }
             showUnlockScreen = true
@@ -179,7 +179,7 @@ struct RootView: View {
                 AlertDeduplicator.shared.markShown($0.id) // marcar antigos como vistos
             }
             return !isMine && s != "cancelled" && s != "cancel" && !shown.contains($0.id) && isRecent
-        }
+        })
         guard let a = candidate else {
             AlertDiagnosticLog.shared.log("RECEBER(\(source)): nenhum alerta novo")
             return
@@ -628,7 +628,7 @@ struct UnlockPasswordView: View {
             }
         }
         .onAppear { focused = true }
-        .fullScreenCover(isPresented: $showArrow, onDismiss: { isPresented = false } {
+        .fullScreenCover(isPresented: $showArrow, onDismiss: { isPresented = false }) {
             ArrowUnlockView(appName: unlockedApp, isPresented: $showArrow)
         }
     }
@@ -713,7 +713,7 @@ struct UnlockPasswordView: View {
                 AlertDiagnosticLog.shared.log("ENVIAR: \(connections.count) conexões, ids=\(recipientIds)")
 
                 let vehicles = (try? await APIClient.shared.getVehicles()) ?? []
-                let vehicle  = vehicles.first(where: { $0.is_active } ?? vehicles.first
+                let vehicle  = vehicles.first(where: { $0.is_active }) ?? vehicles.first
                 let vPayload = vehicle.map {
                     VehicleInfoPayload(model: $0.model, license_plate: $0.license_plate,
                                        color: $0.color, year: $0.year)
