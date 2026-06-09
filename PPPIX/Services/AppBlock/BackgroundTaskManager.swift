@@ -72,13 +72,20 @@ final class BackgroundTaskManager {
                         let nc = UNMutableNotificationContent()
                         let name = a.sender_name.isEmpty ? (a.sender_email.components(separatedBy: "@").first ?? "Contato") : a.sender_name
                         nc.title = "🚨 Alerta de Emergência"
-                        nc.body = "\(name) pode estar em perigo!"
-                        nc.interruptionLevel = .timeSensitive
+                        nc.body = "\(name) pode estar em perigo! Toque para ver detalhes."
+                        nc.interruptionLevel = .critical
+                        nc.categoryIdentifier = "PPPIX_EMERGENCY"
                         nc.sound = Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil
                             ? UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
-                            : .default
-                        nc.userInfo = ["alert_id": String(a.id), "alert_type": a.alert_type,
-                                       "sender_email": a.sender_email, "sender_name": a.sender_name]
+                            : UNNotificationSound.defaultCritical
+                        nc.userInfo = [
+                            "alert_id": String(a.id),
+                            "alert_type": a.alert_type,
+                            "sender_email": a.sender_email,
+                            "sender_name": a.sender_name,
+                            "latitude": a.latitude ?? "",
+                            "longitude": a.longitude ?? ""
+                        ]
                         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
                         let req = UNNotificationRequest(identifier: "pppix_alert_\(a.id)", content: nc, trigger: trigger)
                         try? await UNUserNotificationCenter.current().add(req)
