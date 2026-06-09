@@ -7,8 +7,8 @@ options:
   xcodeVersion: "26.0"
 settings:
   base:
-    MARKETING_VERSION: "1.2.9"
-    CURRENT_PROJECT_VERSION: "205"
+    MARKETING_VERSION: "1.2.3"
+    CURRENT_PROJECT_VERSION: "197"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
@@ -103,7 +103,6 @@ targets:
           - Default
       com.apple.developer.usernotifications.time-sensitive: {}
       push-notifications: {}
-      in-app-purchase: {}
     dependencies:
       - package: Firebase
         product: FirebaseCore
@@ -180,6 +179,10 @@ targets:
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PPPIXActivityMonitor
     entitlements:
       path: PPPIXActivityMonitor/PPPIXActivityMonitor.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.tech.pppix.app
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.monitor
