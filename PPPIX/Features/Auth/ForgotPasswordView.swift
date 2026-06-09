@@ -71,9 +71,9 @@ struct ForgotPasswordView: View {
                                         .padding()
                                         .background(Color(white: 0.08))
                                         .cornerRadius(12)
-                                        .onChange(of: code) { _ in
+                                        .onChange(of: code, perform: { _ in
                                             code = String(code.filter { $0.isNumber }.prefix(6))
-                                        }
+                                        })
                                 }
                                 .padding(.horizontal, 24)
                             }
