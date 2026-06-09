@@ -146,18 +146,12 @@ final class APIClient {
                let results = paged.results { return results }
         } catch {}
 
-        // Fallback: filtra do endpoint geral — SÓ os que EU recebi (to_user_email == meu email)
+        // Fallback: filtra do endpoint geral
         do {
-            let myEmail = SessionManager.shared.userEmail.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
             let data = try await rawGet("connections/?status=pending")
-            var all: [Connection] = []
-            if let list = try? JSONDecoder().decode([Connection].self, from: data) { all = list }
-            else if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
-                    let results = paged.results { all = results }
-            // Filtrar apenas os que eu recebi — to_user_email é o meu email
-            return all.filter {
-                $0.to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) == myEmail
-            }
+            if let list = try? JSONDecoder().decode([Connection].self, from: data) { return list }
+            if let paged = try? JSONDecoder().decode(ConnectionListResponse.self, from: data),
+               let results = paged.results { return results }
         } catch {}
 
         return []
@@ -326,7 +320,12 @@ final class APIClient {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        if T.self == EmptyResponse.self { return EmptyResponse() as! T }
+        if T.self == EmptyResponse.self {
+            guard let result = EmptyResponse() as? T else {
+                throw APIError.unknown
+            }
+            return result
+        }
         do { return try JSONDecoder().decode(type, from: data) }
         catch { throw APIError.decodingError(error.localizedDescription) }
     }
