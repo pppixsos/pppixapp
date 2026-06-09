@@ -331,7 +331,6 @@ struct EmergencyAlertView: View {
 
                     // Mapa estático via Google Maps Static API
                     if alert.has_location, let lat = alert.latitude, let lng = alert.longitude {
-                        let mapURL = "https://maps.googleapis.com/maps/api/staticmap?center=\(lat),\(lng)&zoom=15&size=600x300&markers=color:red%7C\(lat),\(lng)&key=AIzaSyD-placeholder"
                         // Fallback: abrir no Google Maps
                         Button {
                             if let url = alert.googleMapsURL { UIApplication.shared.open(url) }
