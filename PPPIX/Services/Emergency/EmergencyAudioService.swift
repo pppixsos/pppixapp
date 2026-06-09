@@ -15,6 +15,11 @@ final class EmergencyAudioService {
     // MARK: - Play
 
     func playSiren() {
+        // Garantir que roda na main thread
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { self.playSiren() }
+            return
+        }
         guard !isPlaying else { return }
 
         configureAudioSession()
@@ -41,6 +46,10 @@ final class EmergencyAudioService {
     // MARK: - Stop
 
     func stopSiren() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { self.stopSiren() }
+            return
+        }
         player?.stop()
         player = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
