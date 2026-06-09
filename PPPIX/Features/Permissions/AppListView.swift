@@ -24,7 +24,7 @@ struct AppListView: View {
         .navigationBarTitleDisplayMode(.large)
         .onAppear { manager.checkAuthorization() }
         .familyActivityPicker(isPresented: $showPicker, selection: $tempSelection)
-        .onChange(of: showPicker) { isOpen in
+        .onChange(of: showPicker, perform: { isOpen in
             if !isOpen {
                 let changed = tempSelection.applicationTokens != manager.currentSelection.applicationTokens
                     || tempSelection.categoryTokens != manager.currentSelection.categoryTokens
@@ -32,7 +32,7 @@ struct AppListView: View {
                     showConfirm = true
                 }
             }
-        }
+        })
         .confirmationDialog("Ativar proteção?", isPresented: $showConfirm, titleVisibility: .visible) {
             Button("Ativar Proteção") {
                 manager.applySelection(tempSelection)
