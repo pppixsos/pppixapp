@@ -382,19 +382,31 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let identifier = alertId > 0 ? "pppix_alert_\(alertId)" : "pppix_alert_\(Int(Date().timeIntervalSince1970))"
 
         if createLocalNotification {
-            // Criar notificação local (quando veio via polling ou foreground sem push)
             if appState == .active {
+                // App ATIVO: mostrar tela fullscreen diretamente + sirene
+                // Notificação local com delay 0.5s garante que aparece mesmo em foreground
+                notifContent.interruptionLevel = .critical
                 UNUserNotificationCenter.current().add(
-                    UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
+                    UNNotificationRequest(
+                        identifier: identifier,
+                        content: notifContent,
+                        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
+                    )
                 )
                 EmergencyAudioService.shared.playSiren()
             } else {
+                // App em BACKGROUND ou fechado: notificação com delay mínimo
+                notifContent.interruptionLevel = .critical
                 UNUserNotificationCenter.current().add(
-                    UNNotificationRequest(identifier: identifier, content: notifContent, trigger: nil)
+                    UNNotificationRequest(
+                        identifier: identifier,
+                        content: notifContent,
+                        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+                    )
                 )
             }
         } else {
-            // Veio via push FCM — só tocar sirene se app estiver ativo
+            // Veio via push FCM
             if appState == .active {
                 EmergencyAudioService.shared.playSiren()
             }
