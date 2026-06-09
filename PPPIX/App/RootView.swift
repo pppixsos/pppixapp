@@ -87,7 +87,7 @@ struct RootView: View {
                 }
             }
         }
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase, perform: { phase in
             switch phase {
             case .background:
                 stopAlertPolling()
@@ -120,7 +120,7 @@ struct RootView: View {
                 startAlertPolling()
             default: break
             }
-        }
+        })
         .onReceive(NotificationCenter.default.publisher(for: .pppixForceOpenUnlockScreen)) { _ in
             guard !showUnlockScreen else { return }
             showUnlockScreen = true
