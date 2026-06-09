@@ -90,7 +90,6 @@ struct HomeView: View {
                         }
 
                         // Premium card oculto — app gratuito por enquanto
-                        // PremiumCard()
 
                         Spacer(minLength: 20)
                     }
@@ -156,75 +155,6 @@ private struct HomeCard<Dest: View>: View {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(color.opacity(0.2), lineWidth: 1)
             )
-        }
-    }
-}
-
-// MARK: - Premium Card
-
-private struct PremiumCard: View {
-    @State private var showSubscription = false
-
-    var body: some View {
-        // TODO: checar status premium via StoreKit
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "star.fill")
-                    .foregroundColor(.yellow)
-                Text("PPPIX Premium")
-                    .font(.headline)
-                    .foregroundColor(.white)
-            }
-            Text("Proteção completa • 3 dias grátis")
-                .font(.subheadline)
-                .foregroundColor(Color(white: 0.6))
-
-            HStack(spacing: 12) {
-                SubscriptionButton(title: "Mensal\nR$13,90") {
-                    showSubscription = true
-                }
-                SubscriptionButton(title: "Anual\nR$129,90") {
-                    showSubscription = true
-                }
-            }
-        }
-        .padding(16)
-        .background(
-            LinearGradient(
-                colors: [Color(hex: "#1A1033"), Color(hex: "#0A0A22")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .cornerRadius(14)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color(hex: "#6633FF").opacity(0.4), lineWidth: 1)
-        )
-        .sheet(isPresented: $showSubscription) {
-    }
-}
-
-private struct SubscriptionButton: View {
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .multilineTextAlignment(.center)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    LinearGradient(
-                        colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(8)
         }
     }
 }
