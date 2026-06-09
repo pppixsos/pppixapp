@@ -20,6 +20,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     static var pendingUnlockScreen = false
     static var skipNextAuthReset = false
+    static var pendingAlertId: Int? = nil
 
     // Deduplicação unificada via AlertDeduplicator (UserDefaults persistente)
 
@@ -529,6 +530,9 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
 
                 if alertId > 0 || alertType.lowercased().contains("emergency") {
                     EmergencyAudioService.shared.playSiren()
+                    if alertId > 0 {
+                        AppDelegate.pendingAlertId = alertId
+                    }
                     DispatchQueue.main.async {
                         NotificationCenter.default.post(
                             name: .incomingEmergencyAlert,
