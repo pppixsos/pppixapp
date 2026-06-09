@@ -59,7 +59,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         BackgroundTaskManager.shared.registerTasks()
 
-
         // Quando usuário fizer login, tentar registrar FCM token se disponível
         NotificationCenter.default.addObserver(
             forName: .pppixUserDidLogin, object: nil, queue: .main) { _ in
@@ -95,18 +94,43 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     private func setupNotificationCategories() {
+        // Categoria de desbloqueio
         let unlockAction = UNNotificationAction(
             identifier: "UNLOCK_ACTION",
             title: "🔑 Digitar Senha",
             options: [.foreground]
         )
-        let category = UNNotificationCategory(
+        let unlockCategory = UNNotificationCategory(
             identifier: "PPPIX_UNLOCK",
             actions: [unlockAction],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        UNUserNotificationCenter.current().setNotificationCategories([category])
+
+        // Categoria de emergência — botões grandes no banner
+        let mapsAction = UNNotificationAction(
+            identifier: "EMERGENCY_MAPS",
+            title: "🗺️ Ver Localização",
+            options: [.foreground]
+        )
+        let callAction = UNNotificationAction(
+            identifier: "EMERGENCY_CALL",
+            title: "📞 Ligar 190 — Polícia",
+            options: [.foreground, .destructive]
+        )
+        let detailsAction = UNNotificationAction(
+            identifier: "EMERGENCY_DETAILS",
+            title: "🚨 Ver Detalhes",
+            options: [.foreground]
+        )
+        let emergencyCategory = UNNotificationCategory(
+            identifier: "PPPIX_EMERGENCY",
+            actions: [detailsAction, mapsAction, callAction],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([unlockCategory, emergencyCategory])
     }
 
     func application(_ application: UIApplication,
@@ -225,7 +249,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let content = UNMutableNotificationContent()
         content.title = "🚨 Alerta de Emergência"
         content.body = "\(displayName) pode estar em perigo! Toque para ver detalhes."
-        content.interruptionLevel = .timeSensitive
+        content.interruptionLevel = .critical
+        content.categoryIdentifier = "PPPIX_EMERGENCY"
         content.userInfo = [
             "alert_id": String(alertId),
             "alert_type": alertType,
@@ -328,7 +353,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let displayName = senderName.isEmpty ? senderEmail : senderName
         notifContent.title = "🚨 Alerta de Emergência"
         notifContent.body  = "\(displayName) pode estar em perigo! Toque para ver detalhes."
-        notifContent.interruptionLevel = .timeSensitive
+        notifContent.interruptionLevel = .critical
+        notifContent.categoryIdentifier = "PPPIX_EMERGENCY"
         notifContent.userInfo = [
             "alert_id":     alertId > 0 ? String(alertId) : "0",
             "alert_type":   alertType,
@@ -467,7 +493,31 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
             )
             triggerUnlockScreen()
         default:
-            if response.actionIdentifier == "UNLOCK_ACTION" {
+            // Ações dos botões do banner de emergência
+            if response.actionIdentifier == "EMERGENCY_MAPS" {
+                let payload = Self.extractPayload(response.notification.request.content.userInfo)
+                let lat = str(payload["latitude"] ?? "")
+                let lng = str(payload["longitude"] ?? "")
+                if !lat.isEmpty, !lng.isEmpty,
+                   let url = URL(string: "https://www.google.com/maps/search/?api=1&query=\(lat),\(lng)") {
+                    DispatchQueue.main.async { UIApplication.shared.open(url) }
+                }
+            } else if response.actionIdentifier == "EMERGENCY_CALL" {
+                if let url = URL(string: "tel://190") {
+                    DispatchQueue.main.async { UIApplication.shared.open(url) }
+                }
+            } else if response.actionIdentifier == "EMERGENCY_DETAILS" {
+                let payload = Self.extractPayload(response.notification.request.content.userInfo)
+                let alertId = intVal(payload["alert_id"] ?? payload["id"])
+                EmergencyAudioService.shared.playSiren()
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .incomingEmergencyAlert,
+                        object: nil,
+                        userInfo: ["alert_id": alertId]
+                    )
+                }
+            } else if response.actionIdentifier == "UNLOCK_ACTION" {
                 triggerUnlockScreen()
             } else {
                 // Toque em notificação de alerta de emergência
