@@ -214,7 +214,8 @@ struct RootView: View {
             nc.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.mp3"))
             AlertDiagnosticLog.shared.log("NOTIF: som=sirene.mp3")
         }
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        // Trigger 0.1s — aparece mesmo com app em foreground
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
         let req = UNNotificationRequest(identifier: "pppix_alert_\(alertId)", content: nc, trigger: trigger)
         UNUserNotificationCenter.current().add(req) { error in
             if let error = error {
