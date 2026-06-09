@@ -383,19 +383,22 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         if createLocalNotification {
             if appState == .active {
-                // App ATIVO: mostrar tela fullscreen diretamente + sirene
-                // Notificação local com delay 0.5s garante que aparece mesmo em foreground
+                // App ATIVO em foreground:
+                // 1. Tocar sirene IMEDIATAMENTE (AVAudioPlayer funciona em foreground)
+                EmergencyAudioService.shared.playSiren()
+                // 2. Notificação com trigger 5s para aparecer no notification center
+                //    (no foreground, banners com trigger muito curto são suprimidos pelo iOS)
                 notifContent.interruptionLevel = .critical
                 UNUserNotificationCenter.current().add(
                     UNNotificationRequest(
                         identifier: identifier,
                         content: notifContent,
-                        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
+                        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
                     )
                 )
-                EmergencyAudioService.shared.playSiren()
+                // 3. A tela fullscreen é aberta pelo incomingEmergencyAlert (abaixo)
             } else {
-                // App em BACKGROUND ou fechado: notificação com delay mínimo
+                // Background ou fechado: notificação crítica imediata
                 notifContent.interruptionLevel = .critical
                 UNUserNotificationCenter.current().add(
                     UNNotificationRequest(
@@ -455,10 +458,13 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
 
         switch action {
         case "unlock":
-            // NUNCA mostrar banner de unlock — o PPPIX já abre a tela de senha diretamente
+            // App está em foreground — abrir tela de senha diretamente sem banner
             UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notification.request.identifier])
             UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
-            triggerUnlockScreen()
+            // Pequeno delay para garantir que a UI está pronta
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self.triggerUnlockScreen()
+            }
             completionHandler([])
         case "reblock":
             // Reblock notificação — aplicar shield imediatamente
@@ -467,17 +473,14 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
             #endif
             completionHandler([])
         default:
-            // Se é notificação local que já criamos (pppix_alert_X), mostrar e tocar sirene
+            // Notificação de emergência — sempre mostrar banner + som + badge
             if identifier.hasPrefix("pppix_alert_") {
-                // Tocar sirene via AVAudioPlayer para som mais longo e persistente
                 EmergencyAudioService.shared.playSiren()
                 completionHandler([.banner, .sound, .badge])
                 return
             }
-            // É notificação FCM original — processar
-            // Mostrar o banner FCM com som (não criar notificação local duplicada)
+            // Push FCM de emergência — processar payload E mostrar banner
             handleEmergencyPayload(payload, createLocalNotification: false)
-            // Mostrar o banner FCM com som diretamente
             completionHandler([.banner, .sound, .badge])
         }
     }
