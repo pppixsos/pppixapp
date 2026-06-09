@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 struct AlertDetailView: View {
 
@@ -89,38 +90,78 @@ struct AlertDetailView: View {
     private func detailSection(_ a: Alert) -> some View {
         VStack(spacing: 12) {
             DetailRow(icon: "clock.fill", color: Color(hex: "#3366FF"), label: "Data", value: a.formattedDate)
-            DetailRow(icon: "location.fill", color: Color(hex: "#FF6600"), label: "GPS", value: a.has_location ? "Disponivel" : "Indisponivel")
-            if a.has_location, let url = a.googleMapsURL {
-                Link(destination: url) {
+            DetailRow(icon: "person.fill", color: Color(hex: "#9966FF"), label: isSender ? "Para" : "De",
+                      value: a.sender_name.isEmpty ? a.sender_email : a.sender_name)
+
+            // Mapa com prévia
+            if a.has_location, let latStr = a.latitude, let lngStr = a.longitude,
+               let lat = Double(latStr), let lng = Double(lngStr) {
+                VStack(spacing: 0) {
+                    // Prévia do mapa nativo
+                    MapPreviewView(latitude: lat, longitude: lng)
+                        .frame(height: 200)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color(hex: "#FF6600").opacity(0.4), lineWidth: 1)
+                        )
+
+                    // Coordenadas + botão Maps
                     HStack {
-                        Image(systemName: "map.fill")
-                        Text("Ver no Maps").fontWeight(.semibold)
+                        Image(systemName: "location.fill")
+                            .foregroundColor(Color(hex: "#FF6600"))
+                            .font(.system(size: 12))
+                        Text("\(latStr), \(lngStr)")
+                            .font(.caption)
+                            .foregroundColor(Color(white: 0.5))
+                        Spacer()
+                        if let url = a.googleMapsURL {
+                            Link(destination: url) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.up.right.square.fill")
+                                        .font(.system(size: 12))
+                                    Text("Abrir Maps")
+                                        .font(.caption.bold())
+                                }
+                                .foregroundColor(Color(hex: "#44AAFF"))
+                            }
+                        }
                     }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color(hex: "#0099FF"))
-                    .cornerRadius(10)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(hex: "#141422"))
+                    .cornerRadius(0)
                 }
+                .cornerRadius(12)
+                .background(Color(hex: "#141422"))
+                .cornerRadius(12)
+            } else {
+                DetailRow(icon: "location.slash.fill", color: Color(hex: "#FF6600"), label: "GPS", value: "Localização não disponível")
             }
-            DetailRow(icon: "car.fill", color: Color(hex: "#FF6600"), label: "Veiculo", value: a.vehicleText.isEmpty ? "Nao informado" : a.vehicleText)
-            if isSender && !isCancelled {
-                PPPIXButton(title: "Estou Bem - Cancelar Alerta", isLoading: isCancelling) {
-                    showCancelConfirm = true
-                }
+
+            if !a.vehicleText.isEmpty {
+                DetailRow(icon: "car.fill", color: Color(hex: "#FF6600"), label: "Veículo", value: a.vehicleText)
             }
+
+            // Ligar 190
             Button {
                 if let url = URL(string: "tel://190") { UIApplication.shared.open(url) }
             } label: {
                 HStack {
                     Image(systemName: "phone.fill")
-                    Text("Ligar 190").fontWeight(.semibold)
+                    Text("Ligar 190 — Polícia").fontWeight(.semibold)
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color(hex: "#CC0000"))
                 .cornerRadius(12)
+            }
+
+            if isSender && !isCancelled {
+                PPPIXButton(title: "Estou Bem — Cancelar Alerta", isLoading: isCancelling) {
+                    showCancelConfirm = true
+                }
             }
         }
     }
@@ -162,5 +203,33 @@ private struct DetailRow: View {
         .padding(14)
         .background(Color(hex: "#141422"))
         .cornerRadius(14)
+    }
+}
+
+
+// MARK: - Mapa Nativo (prévia)
+struct MapPreviewView: UIViewRepresentable {
+    let latitude: Double
+    let longitude: Double
+
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView()
+        map.isScrollEnabled = false
+        map.isZoomEnabled = false
+        map.isUserInteractionEnabled = false
+        return map
+    }
+
+    func updateUIView(_ map: MKMapView, context: Context) {
+        let coord = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        let region = MKCoordinateRegion(center: coord,
+                                        latitudinalMeters: 800,
+                                        longitudinalMeters: 800)
+        map.setRegion(region, animated: false)
+        map.removeAnnotations(map.annotations)
+        let pin = MKPointAnnotation()
+        pin.coordinate = coord
+        pin.title = "Localização"
+        map.addAnnotation(pin)
     }
 }
