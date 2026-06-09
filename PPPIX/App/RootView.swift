@@ -1,4 +1,5 @@
 import SwiftUI
+import AudioToolbox
 import UserNotifications
 import CoreLocation
 
@@ -195,8 +196,16 @@ struct RootView: View {
         nc.title = "🚨 Alerta de Emergência"
         nc.body  = "\(dispName) pode estar em perigo! Toque para ver detalhes."
         nc.interruptionLevel = .timeSensitive
-        nc.userInfo = ["alert_id": String(alertId), "alert_type": a.alert_type,
-                       "sender_email": a.sender_email, "sender_name": a.sender_name]
+        nc.userInfo = [
+            "alert_id": String(alertId),
+            "alert_type": a.alert_type,
+            "sender_email": a.sender_email,
+            "sender_name": a.sender_name,
+            "latitude": a.latitude ?? "",
+            "longitude": a.longitude ?? ""
+        ]
+        nc.categoryIdentifier = "PPPIX_EMERGENCY"
+        nc.interruptionLevel = .critical
         if Bundle.main.url(forResource: "sirene", withExtension: "caf") != nil {
             nc.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "sirene.caf"))
             AlertDiagnosticLog.shared.log("NOTIF: som=sirene.caf")
@@ -214,6 +223,14 @@ struct RootView: View {
             }
         }
         EmergencyAudioService.shared.playSiren()
+        // Vibração de emergência — padrão longo repetido
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
         Task { @MainActor in
             try? await APIClient.shared.markAlertRead(id: a.id)
             AlertDiagnosticLog.shared.log("RECEBER: markAlertRead id=\(a.id)")
