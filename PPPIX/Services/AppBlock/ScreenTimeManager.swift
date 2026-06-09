@@ -137,44 +137,39 @@ final class ScreenTimeManager: ObservableObject {
     }
 
     private func startDeviceActivityMonitor(seconds: Int) {
-        // SOLUÇÃO DEFINITIVA: UNCalendarNotificationTrigger
-        // Agenda notificação silenciosa no tempo exato do reblock
-        // Funciona mesmo com app completamente fechado
         let reblockDate = Date().addingTimeInterval(Double(seconds))
-        let comps = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second],
-            from: reblockDate
-        )
 
+        // 1. Notificação silenciosa de reblock (acorda o app se em background)
         let content = UNMutableNotificationContent()
         content.title = ""
         content.body  = ""
         content.sound = nil
         content.userInfo = ["action": "reblock"]
-        // Notificação silenciosa — não aparece para o usuário
         content.interruptionLevel = .passive
-
+        let comps = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second], from: reblockDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "pppix_reblock_timer",
-            content: content,
-            trigger: trigger
-        )
-
-        // Remover reblock anterior e agendar novo
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_reblock_timer"])
-        UNUserNotificationCenter.current().add(request)
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "pppix_reblock_timer", content: content, trigger: trigger))
 
-        // DeviceActivityMonitor como camada extra (pode não funcionar mas tenta)
+        // 2. DeviceActivity: intervalo começa AGORA e termina no tempo de reblock
+        // O intervalDidEnd da extensão aplica o shield sem precisar do app aberto
         let center = DeviceActivityCenter()
         center.stopMonitoring([.init("pppix.reblock")])
-        var startComps = Calendar.current.dateComponents([.hour, .minute], from: Date())
-        var endComps   = Calendar.current.dateComponents([.hour, .minute], from: reblockDate)
-        startComps.second = 0; endComps.second = 0
-        if startComps.hour == endComps.hour && startComps.minute == endComps.minute {
-            endComps.minute = (endComps.minute ?? 0) + 1
+
+        // Usar dateComponents com second para precisão
+        var startComps = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second], from: Date())
+        var endComps = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second], from: reblockDate)
+
+        // Garantir que start != end
+        if startComps == endComps {
+            endComps.second = (endComps.second ?? 0) + 5
         }
+
         let schedule = DeviceActivitySchedule(
             intervalStart: startComps,
             intervalEnd: endComps,
