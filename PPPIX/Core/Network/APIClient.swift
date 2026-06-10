@@ -322,7 +322,7 @@ final class APIClient {
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         if T.self == EmptyResponse.self {
             guard let result = EmptyResponse() as? T else {
-                throw APIError.unknown
+                throw APIError.unknown("Cast failed")
             }
             return result
         }
