@@ -2,8 +2,6 @@ import BackgroundTasks
 import UIKit
 import UserNotifications
 
-/// Equivalente ao AppMonitorService.kt do Android.
-/// Mantém o app vivo via BGTaskScheduler + Silent Push + Background App Refresh.
 final class BackgroundTaskManager: @unchecked Sendable {
 
     static let shared = BackgroundTaskManager()
@@ -12,7 +10,7 @@ final class BackgroundTaskManager: @unchecked Sendable {
     private let appRefreshIdentifier = "tech.pppix.app.refresh"
     private let processingIdentifier = "tech.pppix.app.processing"
 
-    // MARK: - Register (chamar no didFinishLaunching)
+    // MARK: - Register
 
     func registerTasks() {
         BGTaskScheduler.shared.register(
@@ -58,30 +56,41 @@ final class BackgroundTaskManager: @unchecked Sendable {
     private func handleAppRefresh(task: BGAppRefreshTask) {
         scheduleAppRefresh()
 
-        // Sem @MainActor — task não é Sendable no Swift 6
-        // Usamos nonisolated Task para manter task no mesmo isolation domain
-        let taskOp = Task {
-            await doBackgroundWork()
-            // setTaskCompleted pode ser chamado de qualquer thread
-            task.setTaskCompleted(success: true)
+        // BGAppRefreshTask não é Sendable — não pode ser capturado por Task{}
+        // Usando DispatchQueue para evitar o problema de concorrência Swift 6
+        var expired = false
+        task.expirationHandler = {
+            expired = true
+            task.setTaskCompleted(success: false)
         }
 
-        task.expirationHandler = {
-            taskOp.cancel()
-            task.setTaskCompleted(success: false)
+        DispatchQueue.global(qos: .background).async {
+            guard !expired else { return }
+            guard SessionManager.shared.isLoggedIn else {
+                task.setTaskCompleted(success: true)
+                return
+            }
+
+            // Verificar alertas de forma síncrona via semáforo
+            let semaphore = DispatchSemaphore(value: 0)
+            Task {
+                defer { semaphore.signal() }
+                guard !expired else { return }
+                await self.checkAndNotifyAlerts()
+            }
+            semaphore.wait()
+
+            if !expired {
+                task.setTaskCompleted(success: true)
+            }
         }
     }
 
-    // Trabalho real isolado no MainActor separadamente
-    private func doBackgroundWork() async {
-        guard await MainActor.run(body: { SessionManager.shared.isLoggedIn }) else { return }
-
+    private func checkAndNotifyAlerts() async {
         guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
 
-        let (myEmail, shown) = await MainActor.run {
-            (SessionManager.shared.userEmail, AlertDeduplicator.shared.shownIds)
-        }
-
+        let myEmail = SessionManager.shared.userEmail
+        let shown = AlertDeduplicator.shared.shownIds
         let cutoff = Date().addingTimeInterval(-10 * 60)
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -93,7 +102,7 @@ final class BackgroundTaskManager: @unchecked Sendable {
             return !isMine && s != "cancelled" && !shown.contains($0.id) && date > cutoff
         }) else { return }
 
-        await MainActor.run { AlertDeduplicator.shared.markShown(a.id) }
+        AlertDeduplicator.shared.markShown(a.id)
         try? await APIClient.shared.markAlertRead(id: a.id)
 
         let nc = UNMutableNotificationContent()
@@ -125,7 +134,7 @@ final class BackgroundTaskManager: @unchecked Sendable {
         task.setTaskCompleted(success: true)
     }
 
-    // MARK: - App lifecycle hooks
+    // MARK: - App lifecycle
 
     func appDidEnterBackground() {
         DispatchQueue.main.async {
