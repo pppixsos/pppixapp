@@ -59,6 +59,14 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         LocationService.shared.warmUp()
 
         BackgroundTaskManager.shared.registerTasks()
+        // Ouvir pedido de verificação de alertas vindo do background task
+        NotificationCenter.default.addObserver(
+            forName: .pppixCheckAlertsInBackground,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { await BackgroundTaskManager.shared.checkAndNotifyAlerts() }
+        }
 
         // Quando usuário fizer login, tentar registrar FCM token se disponível
         NotificationCenter.default.addObserver(
