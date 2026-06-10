@@ -104,7 +104,7 @@ final class BackgroundTaskManager: @unchecked Sendable {
             task.setTaskCompleted(success: true)
         }
 
-        task.expirationHandler = {
+        task.expirationHandler = { [task] in
             taskOp.cancel()
             task.setTaskCompleted(success: false)
         }
