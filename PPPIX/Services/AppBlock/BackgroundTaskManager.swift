@@ -4,8 +4,8 @@ import UserNotifications
 
 /// Equivalente ao AppMonitorService.kt do Android.
 /// Mantém o app vivo via BGTaskScheduler + Silent Push + Background App Refresh.
-// NÃO usar @MainActor — BGTaskScheduler chama handlers em background thread
-final class BackgroundTaskManager {
+// Sendable para satisfazer Swift 6 strict concurrency
+final class BackgroundTaskManager: @unchecked Sendable {
 
     static let shared = BackgroundTaskManager()
     private init() {}
