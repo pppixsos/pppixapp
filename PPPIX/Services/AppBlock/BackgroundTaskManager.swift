@@ -70,7 +70,7 @@ final class BackgroundTaskManager: @unchecked Sendable {
         task.setTaskCompleted(success: true)
     }
 
-    func checkAndNotifyAlerts() async {
+    @MainActor func checkAndNotifyAlerts() async {
         guard SessionManager.shared.isLoggedIn else { return }
         guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
 
