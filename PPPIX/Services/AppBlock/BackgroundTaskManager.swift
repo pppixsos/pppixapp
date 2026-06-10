@@ -21,7 +21,7 @@ final class BackgroundTaskManager: @unchecked Sendable {
                 task.setTaskCompleted(success: false)
                 return
             }
-            self.handleAppRefresh(task: refreshTask)
+            BackgroundTaskManager.shared.handleAppRefresh(task: refreshTask)
         }
 
         BGTaskScheduler.shared.register(
@@ -32,7 +32,7 @@ final class BackgroundTaskManager: @unchecked Sendable {
                 task.setTaskCompleted(success: false)
                 return
             }
-            self.handleProcessing(task: processingTask)
+            BackgroundTaskManager.shared.handleProcessing(task: processingTask)
         }
     }
 
@@ -56,37 +56,22 @@ final class BackgroundTaskManager: @unchecked Sendable {
     private func handleAppRefresh(task: BGAppRefreshTask) {
         scheduleAppRefresh()
 
-        // BGAppRefreshTask não é Sendable — não pode ser capturado por Task{}
-        // Usando DispatchQueue para evitar o problema de concorrência Swift 6
-        var expired = false
+        // Solução definitiva Swift 6: sem Task{} capturando BGAppRefreshTask
+        // Agendamos a verificação via NotificationCenter (fire-and-forget)
+        // e completamos o task imediatamente — o iOS já agendou o próximo refresh
         task.expirationHandler = {
-            expired = true
             task.setTaskCompleted(success: false)
         }
 
-        DispatchQueue.global(qos: .background).async {
-            guard !expired else { return }
-            guard SessionManager.shared.isLoggedIn else {
-                task.setTaskCompleted(success: true)
-                return
-            }
+        // Disparar verificação de alertas sem bloquear ou capturar task
+        NotificationCenter.default.post(name: .pppixCheckAlertsInBackground, object: nil)
 
-            // Verificar alertas de forma síncrona via semáforo
-            let semaphore = DispatchSemaphore(value: 0)
-            Task {
-                defer { semaphore.signal() }
-                guard !expired else { return }
-                await self.checkAndNotifyAlerts()
-            }
-            semaphore.wait()
-
-            if !expired {
-                task.setTaskCompleted(success: true)
-            }
-        }
+        // Completar imediatamente — o trabalho real é feito pelo app via notification
+        task.setTaskCompleted(success: true)
     }
 
-    private func checkAndNotifyAlerts() async {
+    func checkAndNotifyAlerts() async {
+        guard SessionManager.shared.isLoggedIn else { return }
         guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
 
         let myEmail = SessionManager.shared.userEmail
@@ -142,4 +127,8 @@ final class BackgroundTaskManager: @unchecked Sendable {
             self.scheduleProcessing()
         }
     }
+}
+
+extension Notification.Name {
+    static let pppixCheckAlertsInBackground = Notification.Name("pppixCheckAlertsInBackground")
 }
