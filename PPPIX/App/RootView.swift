@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseMessaging
 import AudioToolbox
 import MapKit
 import UserNotifications
@@ -87,6 +88,16 @@ struct RootView: View {
                     }
                 }
             }
+            // IMPORTANTE: .onChange(of: scenePhase) NÃO dispara no valor
+            // inicial (cold launch já nasce .active), então os timers de
+            // polling de alerta e de reblock nunca eram iniciados até o
+            // app ir pra background e voltar pelo menos uma vez.
+            // Iniciamos aqui também para garantir que rodem desde o início.
+            pollAlertsOnce()
+            startAlertPolling()
+            #if !targetEnvironment(simulator)
+            startReblockChecking()
+            #endif
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
@@ -279,9 +290,38 @@ struct RootView: View {
     // antes só verificávamos ao sair para background ou abrir AppListView).
     private func startReblockChecking() {
         guard reblockCheckTimer == nil else { return }
+        var tickCount = 0
         reblockCheckTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
             Task { @MainActor in
                 ScreenTimeManager.shared.syncCheckAndReblock()
+            }
+            // Autocura: se por algum motivo o token FCM nunca foi gerado/
+            // registrado (ex: callback do Firebase falhou silenciosamente
+            // no cold start), tenta de novo a cada ~30s enquanto logado.
+            tickCount += 1
+            if tickCount % 6 == 0, SessionManager.shared.isLoggedIn {
+                if let token = SessionManager.shared.fcmToken, !token.isEmpty {
+                    Task { @MainActor in
+                        try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+                        AlertDiagnosticLog.shared.log("FCM re-registro periodico (token existente)")
+                    }
+                } else {
+                    AlertDiagnosticLog.shared.log("FCM token ausente — solicitando novo token ao Firebase")
+                    Messaging.messaging().token { token, error in
+                        if let token = token, !token.isEmpty {
+                            Task { @MainActor in
+                                AlertDiagnosticLog.shared.log("FCM token obtido (retry periodico): \(token.prefix(20))...")
+                                SessionManager.shared.fcmToken = token
+                                try? await APIClient.shared.registerFcmDevice(token: token, platform: "ios")
+                                AlertDiagnosticLog.shared.log("FCM registrado via retry periodico ✅")
+                            }
+                        } else {
+                            Task { @MainActor in
+                                AlertDiagnosticLog.shared.log("FCM retry periodico FALHOU: \(error?.localizedDescription ?? "sem token/erro")")
+                            }
+                        }
+                    }
+                }
             }
         }
     }
