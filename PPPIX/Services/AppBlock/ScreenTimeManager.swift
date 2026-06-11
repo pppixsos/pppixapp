@@ -112,6 +112,16 @@ final class ScreenTimeManager: ObservableObject {
         sharedDefaults?.set(until, forKey: "pppix_unlocked_until")
         sharedDefaults?.synchronize()
 
+        // Pede ao backend para enviar um push silencioso "reblock" daqui a
+        // ~5s a mais que o tempo de desbloqueio — garante o rebloqueio mesmo
+        // com o app fechado, sem depender da granularidade de minuto do
+        // DeviceActivityMonitor.
+        if SessionManager.shared.isLoggedIn {
+            Task {
+                try? await APIClient.shared.scheduleReblockPush(delaySeconds: reblockAfterSeconds + 5)
+            }
+        }
+
         // Agenda reblock via DispatchQueue (quando app está ativo)
         scheduleReblock(afterSeconds: reblockAfterSeconds)
 
