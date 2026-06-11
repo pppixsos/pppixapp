@@ -21,7 +21,7 @@ final class ScreenTimeManager: ObservableObject {
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
     static let selectionKey = "pppix_activity_selection"
 
-    private var reblockWorkItem: DispatchWorkItem?
+    private var reblockWorkItems: [DispatchWorkItem] = []
     private var bgTask: UIBackgroundTaskIdentifier = .invalid
 
     // MARK: - Autorização
@@ -160,14 +160,19 @@ final class ScreenTimeManager: ObservableObject {
     // 2. O timer de 20s expira E o app PPPIX já está em background
 
     private func scheduleReblock(afterSeconds seconds: Int) {
-        cancelReblock()
-        bgTask = UIApplication.shared.beginBackgroundTask(withName: "pppix.reblock") { [weak self] in
-            self?.applyShieldIfExpired()
+        // NAO cancelar reblocks pendentes de OUTROS apps — cada unlock
+        // tem seu proprio temporizador independente. Antes, desbloquear
+        // o App B cancelava o reblock agendado do App A, deixando A
+        // travado desbloqueado ate' B tambem ser desbloqueado.
+        if bgTask == .invalid {
+            bgTask = UIApplication.shared.beginBackgroundTask(withName: "pppix.reblock") { [weak self] in
+                self?.applyShieldIfExpired()
+            }
         }
         let workItem = DispatchWorkItem { [weak self] in
             self?.applyShieldIfExpired()
         }
-        reblockWorkItem = workItem
+        reblockWorkItems.append(workItem)
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(seconds), execute: workItem)
     }
 
@@ -214,8 +219,8 @@ final class ScreenTimeManager: ObservableObject {
     }
 
     private func cancelReblock() {
-        reblockWorkItem?.cancel()
-        reblockWorkItem = nil
+        reblockWorkItems.forEach { $0.cancel() }
+        reblockWorkItems.removeAll()
         if bgTask != .invalid {
             UIApplication.shared.endBackgroundTask(bgTask)
             bgTask = .invalid
@@ -225,24 +230,19 @@ final class ScreenTimeManager: ObservableObject {
     // Chamado quando o timer expira — só bloqueia se o desbloqueio já expirou
     private func applyShieldIfExpired() {
         guard !isCurrentlyUnlocked() else {
-            // Ainda dentro do tempo — cancelar
-            cancelReblock()
+            // Ainda dentro do tempo — nada a fazer (este timer especifico
+            // expirou antes do tempo de unlock — outro unlock estendeu o
+            // prazo). Nao chamar cancelReblock() aqui pois cancelaria
+            // timers de OUTROS apps tambem.
             return
         }
-        // Expirou — verificar se app PPPIX está em foreground
-        let state = UIApplication.shared.applicationState
-        if state == .active {
-            // PPPIX ainda em foreground — NÃO bloquear, retentar em 3s
-            let workItem = DispatchWorkItem { [weak self] in self?.applyShieldIfExpired() }
-            reblockWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: workItem)
-        } else {
-            // App em background — aplicar shield e limpar
-            sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
-            sharedDefaults?.synchronize()
-            applyShield()
-            cancelReblock()
-        }
+        // Expirou — aplica o shield (restaura TODOS os apps protegidos)
+        // independente do PPPIX estar em foreground ou background.
+        // O shield e' um overlay do sistema; reaplica-lo com o app aberto
+        // e' seguro e necessario (e' o caso mais comum de uso real).
+        sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
+        sharedDefaults?.synchronize()
+        applyShield()
     }
 
     // Flag: true quando o PPPIX acabou de abrir o app bancário
