@@ -151,7 +151,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in
             if SessionManager.shared.isLoggedIn {
                 do {
-                    try await APIClient.shared.registerFcmDevice(token: tokenStr, platform: "ios_apns")
+                    try await APIClient.shared.registerFcmDevice(token: tokenStr, platform: "ios")
                     AlertDiagnosticLog.shared.log("APNS token registrado no backend ✅")
                 } catch {
                     AlertDiagnosticLog.shared.log("APNS token registro erro: \(error)")
