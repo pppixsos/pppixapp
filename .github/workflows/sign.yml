@@ -12,46 +12,10 @@ jobs:
       - name: Write GoogleService-Info.plist
         run: |
           mkdir -p PPPIX/Resources
-          cat > PPPIX/Resources/GoogleService-Info.plist << 'PLISTEOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>CLIENT_ID</key>
-	<string>11117611081-c4ubusln48ed44n8d1rknc308ddfpqdf.apps.googleusercontent.com</string>
-	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.11117611081-c4ubusln48ed44n8d1rknc308ddfpqdf</string>
-	<key>API_KEY</key>
-	<string>AIzaSyBvK9bH3oWHpJmCKrIuJ0163jXPWp--JMA</string>
-	<key>GCM_SENDER_ID</key>
-	<string>496555012887</string>
-	<key>PLIST_VERSION</key>
-	<string>1</string>
-	<key>BUNDLE_ID</key>
-	<string>tech.pppix.app</string>
-	<key>PROJECT_ID</key>
-	<string>pppix-bf8ff</string>
-	<key>STORAGE_BUCKET</key>
-	<string>pppix-bf8ff.firebasestorage.app</string>
-	<key>IS_ADS_ENABLED</key>
-	<false/>
-	<key>IS_ANALYTICS_ENABLED</key>
-	<false/>
-	<key>IS_APPINVITE_ENABLED</key>
-	<true/>
-	<key>IS_GCM_ENABLED</key>
-	<true/>
-	<key>IS_SIGNIN_ENABLED</key>
-	<true/>
-	<key>GOOGLE_APP_ID</key>
-	<string>1:496555012887:ios:c85e1ce4122cedab54bd52</string>
-</dict>
-</plist>
-PLISTEOF
+          echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPCFET0NUWVBFIHBsaXN0IFBVQkxJQyAiLS8vQXBwbGUvL0RURCBQTElTVCAxLjAvL0VOIiAiaHR0cDovL3d3dy5hcHBsZS5jb20vRFREcy9Qcm9wZXJ0eUxpc3QtMS4wLmR0ZCI+CjxwbGlzdCB2ZXJzaW9uPSIxLjAiPgo8ZGljdD4KCTxrZXk+Q0xJRU5UX0lEPC9rZXk+Cgk8c3RyaW5nPjExMTE3NjExMDgxLWM0dWJ1c2xuNDhlZDQ0bjhkMXJrbmMzMDhkZGZwcWRmLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tPC9zdHJpbmc+Cgk8a2V5PlJFVkVSU0VEX0NMSUVOVF9JRDwva2V5PgoJPHN0cmluZz5jb20uZ29vZ2xldXNlcmNvbnRlbnQuYXBwcy4xMTExNzYxMTA4MS1jNHVidXNsbjQ4ZWQ0NG44ZDFya25jMzA4ZGRmcHFkZjwvc3RyaW5nPgoJPGtleT5BUElfS0VZPC9rZXk+Cgk8c3RyaW5nPkFJemFTeUJ2SzliSDNvV0hwSm1DS3JJdUowMTYzalhQV3AtLUpNQTwvc3RyaW5nPgoJPGtleT5HQ01fU0VOREVSX0lEPC9rZXk+Cgk8c3RyaW5nPjQ5NjU1NTAxMjg4Nzwvc3RyaW5nPgoJPGtleT5QTElTVF9WRVJTSU9OPC9rZXk+Cgk8c3RyaW5nPjE8L3N0cmluZz4KCTxrZXk+QlVORExFX0lEPC9rZXk+Cgk8c3RyaW5nPnRlY2gucHBwaXguYXBwPC9zdHJpbmc+Cgk8a2V5PlBST0pFQ1RfSUQ8L2tleT4KCTxzdHJpbmc+cHBwaXgtYmY4ZmY8L3N0cmluZz4KCTxrZXk+U1RPUkFHRV9CVUNLRVQ8L2tleT4KCTxzdHJpbmc+cHBwaXgtYmY4ZmYuZmlyZWJhc2VzdG9yYWdlLmFwcDwvc3RyaW5nPgoJPGtleT5JU19BRFNfRU5BQkxFRDwva2V5PgoJPGZhbHNlLz4KCTxrZXk+SVNfQU5BTFlUSUNTX0VOQUJMRUQ8L2tleT4KCTxmYWxzZS8+Cgk8a2V5PklTX0FQUElOVklURV9FTkFCTEVEPC9rZXk+Cgk8dHJ1ZS8+Cgk8a2V5PklTX0dDTV9FTkFCTEVEPC9rZXk+Cgk8dHJ1ZS8+Cgk8a2V5PklTX1NJR05JTl9FTkFCTEVEPC9rZXk+Cgk8dHJ1ZS8+Cgk8a2V5PkdPT0dMRV9BUFBfSUQ8L2tleT4KCTxzdHJpbmc+MTo0OTY1NTUwMTI4ODc6aW9zOmM4NWUxY2U0MTIyY2VkYWI1NGJkNTI8L3N0cmluZz4KPC9kaWN0Pgo8L3BsaXN0Pgo=' | base64 --decode > PPPIX/Resources/GoogleService-Info.plist
           echo "GoogleService-Info.plist escrito:"
           ls -la PPPIX/Resources/GoogleService-Info.plist
           /usr/libexec/PlistBuddy -c "Print :BUNDLE_ID" PPPIX/Resources/GoogleService-Info.plist
-
       - name: Select Xcode 26
         run: |
           if [ -d "/Applications/Xcode_26.0.1.app" ]; then
