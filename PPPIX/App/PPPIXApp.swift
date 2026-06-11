@@ -147,20 +147,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().apnsToken = deviceToken
         let tokenStr = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task { @MainActor in AlertDiagnosticLog.shared.log("APNS token OK: \(tokenStr.prefix(20))...") }
-        // Registrar APNS token diretamente no backend (para push sem Firebase)
-        Task { @MainActor in
-            if SessionManager.shared.isLoggedIn {
-                do {
-                    try await APIClient.shared.registerFcmDevice(token: tokenStr, platform: "ios")
-                    AlertDiagnosticLog.shared.log("APNS token registrado no backend ✅")
-                } catch {
-                    AlertDiagnosticLog.shared.log("APNS token registro erro: \(error)")
-                }
-            } else {
-                SessionManager.shared.pendingApnsToken = tokenStr
-                AlertDiagnosticLog.shared.log("APNS token guardado para após login")
-            }
-        }
+        // IMPORTANTE: NAO registrar o token APNS bruto (hex) no backend.
+        // O backend usa Firebase Admin SDK (messaging.send), que so aceita
+        // tokens FCM (formato "xxxx:APA91b..."), e REJEITA tokens APNS
+        // brutos com "not a valid FCM registration token". Registrar o
+        // token APNS aqui sobrescrevia o token FCM correto, fazendo TODOS
+        // os pushes falharem silenciosamente. O token FCM real e' obtido
+        // e registrado em fetchFCMTokenWithRetry() logo abaixo.
 
         // Tentar gerar FCM token com retry (Firebase precisa processar o APNS token)
         Self.fetchFCMTokenWithRetry(attempt: 1)
