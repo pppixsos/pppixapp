@@ -33,6 +33,7 @@ struct RootView: View {
     @State private var showAlertDetail: Int?  = nil
     @State private var emergencyAlert: Alert? = nil
     @State private var alertPollTimer: Timer? = nil
+    @State private var reblockCheckTimer: Timer? = nil
 
     // Inicializa com true se há notificação pendente (cold start instantâneo)
     @State private var showUnlockScreen: Bool = {
@@ -67,10 +68,10 @@ struct RootView: View {
             UnlockPasswordView(isPresented: $showUnlockScreen, onPPPIXAccess: {
                 showUnlockScreen = false
                 auth.isAuthenticated = true
-            })
+            }
         }
         .fullScreenCover(item: $emergencyAlert) { alert in
-            EmergencyAlertView(alert: alert, onDismiss: { emergencyAlert = nil })
+            EmergencyAlertView(alert: alert, onDismiss: { emergencyAlert = nil }
         }
         .onAppear {
             #if !targetEnvironment(simulator)
@@ -87,10 +88,11 @@ struct RootView: View {
                 }
             }
         }
-        .onChange(of: scenePhase, perform: { phase in
+        .onChange(of: scenePhase) { phase in
             switch phase {
             case .background:
                 stopAlertPolling()
+                stopReblockChecking()
                 BackgroundTaskManager.shared.appDidEnterBackground()
                 if AppDelegate.skipNextAuthReset {
                     AppDelegate.skipNextAuthReset = false
@@ -118,9 +120,12 @@ struct RootView: View {
                 }
                 pollAlertsOnce()
                 startAlertPolling()
+                #if !targetEnvironment(simulator)
+                startReblockChecking()
+                #endif
             default: break
             }
-        })
+        }
         .onReceive(NotificationCenter.default.publisher(for: .pppixForceOpenUnlockScreen)) { _ in
             guard !showUnlockScreen else { return }
             showUnlockScreen = true
@@ -179,7 +184,7 @@ struct RootView: View {
                 AlertDeduplicator.shared.markShown($0.id) // marcar antigos como vistos
             }
             return !isMine && s != "cancelled" && s != "cancel" && !shown.contains($0.id) && isRecent
-        })
+        }
         guard let a = candidate else {
             AlertDiagnosticLog.shared.log("RECEBER(\(source)): nenhum alerta novo")
             return
@@ -255,7 +260,7 @@ struct RootView: View {
     private func startAlertPolling() {
         guard SessionManager.shared.isLoggedIn else { return }
         guard alertPollTimer == nil else { return } // já está rodando
-        alertPollTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { _ in
+        alertPollTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
             Task { @MainActor in
                 guard SessionManager.shared.isLoggedIn else { return }
                 guard let alerts = try? await APIClient.shared.getReceivedAlerts() else { return }
@@ -267,6 +272,23 @@ struct RootView: View {
     private func stopAlertPolling() {
         alertPollTimer?.invalidate()
         alertPollTimer = nil
+    }
+
+    // Verifica periodicamente, com o app ABERTO, se a janela de desbloqueio
+    // expirou e reaplica o shield (cobre apps abertos no foreground —
+    // antes só verificávamos ao sair para background ou abrir AppListView).
+    private func startReblockChecking() {
+        guard reblockCheckTimer == nil else { return }
+        reblockCheckTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+            Task { @MainActor in
+                ScreenTimeManager.shared.syncCheckAndReblock()
+            }
+        }
+    }
+
+    private func stopReblockChecking() {
+        reblockCheckTimer?.invalidate()
+        reblockCheckTimer = nil
     }
 
     private func checkPasswordFlag() {
@@ -628,7 +650,7 @@ struct UnlockPasswordView: View {
             }
         }
         .onAppear { focused = true }
-        .fullScreenCover(isPresented: $showArrow, onDismiss: { isPresented = false }) {
+        .fullScreenCover(isPresented: $showArrow, onDismiss: { isPresented = false } {
             ArrowUnlockView(appName: unlockedApp, isPresented: $showArrow)
         }
     }
@@ -713,7 +735,7 @@ struct UnlockPasswordView: View {
                 AlertDiagnosticLog.shared.log("ENVIAR: \(connections.count) conexões, ids=\(recipientIds)")
 
                 let vehicles = (try? await APIClient.shared.getVehicles()) ?? []
-                let vehicle  = vehicles.first(where: { $0.is_active }) ?? vehicles.first
+                let vehicle  = vehicles.first(where: { $0.is_active } ?? vehicles.first
                 let vPayload = vehicle.map {
                     VehicleInfoPayload(model: $0.model, license_plate: $0.license_plate,
                                        color: $0.color, year: $0.year)
