@@ -206,6 +206,15 @@ final class APIClient {
         let _: EmptyResponse = try await post("fcm-devices/", body: body)
     }
 
+    /// Agenda push silencioso 'reblock' no backend, disparado N segundos
+    /// no futuro. Garante o rebloqueio mesmo com o app em background/fechado,
+    /// independente do DeviceActivityMonitor (que so tem granularidade de minuto).
+    struct ScheduleReblockRequest: Encodable { let delay_seconds: Int }
+    func scheduleReblockPush(delaySeconds: Int) async throws {
+        let body = ScheduleReblockRequest(delay_seconds: delaySeconds)
+        let _: EmptyResponse = try await post("fcm-devices/schedule_reblock/", body: body)
+    }
+
     // MARK: - HTTP Primitives
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
