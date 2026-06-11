@@ -44,7 +44,9 @@ final class ScreenTimeManager: ObservableObject {
     }
 
     func syncCheckAndReblock() {
-        guard isAuthorized, hasBlockedApps else { return }
+        guard isAuthorized else { return }
+        if hasBlockedApps == false { loadSavedSelection() }
+        guard hasBlockedApps else { return }
         if !isCurrentlyUnlocked() { applyShield() }
     }
 
@@ -94,6 +96,16 @@ final class ScreenTimeManager: ObservableObject {
         store.shield.applications = currentSelection.applicationTokens.isEmpty ? nil : currentSelection.applicationTokens
         store.shield.applicationCategories = currentSelection.categoryTokens.isEmpty ? nil : .specific(currentSelection.categoryTokens)
         store.shield.webDomains = currentSelection.webDomainTokens.isEmpty ? nil : currentSelection.webDomainTokens
+
+        // Reblock COMPLETO aplicado (todos os apps protegidos novamente).
+        // Limpa qualquer estado de "unlock parcial" de um app especifico —
+        // sem isso, se o usuario desbloqueou o App A e depois o App B,
+        // o reapplyShield() da extensao DeviceActivity podia restaurar
+        // um snapshot ANTIGO (so' com B desbloqueado) e deixar A
+        // permanentemente sem shield apos um reblock completo.
+        sharedDefaults?.removeObject(forKey: "pppix_shield_apps_before_unlock")
+        sharedDefaults?.removeObject(forKey: "pppix_single_app_token_data")
+        sharedDefaults?.synchronize()
     }
 
     func removeShield() {
