@@ -68,30 +68,39 @@ class ShieldActionExtension: ShieldActionDelegate {
     }
 
     // MARK: - Relock via DeviceActivity
+    // IMPORTANTE: DeviceActivitySchedule só tem granularidade de MINUTO.
+    // Componentes de "second" são ignorados pelo sistema — usar segundos
+    // faz o schedule nunca disparar (intervalStart == intervalEnd no mesmo minuto).
+    // Por isso arredondamos para o próximo minuto cheio + 1 minuto de folga.
     private func scheduleRelock(afterSeconds seconds: Double) {
-        let reblockDate = Date().addingTimeInterval(seconds)
+        let now = Date()
+        let reblockDate = now.addingTimeInterval(max(seconds, 60))
         sharedDefaults?.set(reblockDate.timeIntervalSince1970, forKey: "pppix_relock_scheduled_at")
         sharedDefaults?.synchronize()
 
         let center = DeviceActivityCenter()
-        center.stopMonitoring([.init("pppix.relock")])
+        let activityName = DeviceActivityName("pppix.relock")
+        center.stopMonitoring([activityName])
 
-        var startComps = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second], from: Date())
-        var endComps = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second], from: reblockDate)
+        var cal = Calendar.current
+        cal.timeZone = TimeZone.current
 
-        // Garantir diferença mínima
-        if startComps.second == endComps.second && startComps.minute == endComps.minute {
-            endComps.second = ((endComps.second ?? 0) + 5) % 60
-        }
+        // Início = minuto atual (sem segundos)
+        var startComps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: now)
+        startComps.second = 0
+
+        // Fim = minuto do reblock + 1 (garante pelo menos 1 minuto de diferença,
+        // já que o sistema arredonda/ignora segundos)
+        let endDate = cal.date(byAdding: .minute, value: 1, to: reblockDate) ?? reblockDate
+        var endComps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: endDate)
+        endComps.second = 0
 
         let schedule = DeviceActivitySchedule(
             intervalStart: startComps,
             intervalEnd: endComps,
             repeats: false
         )
-        try? center.startMonitoring(.init("pppix.relock"), during: schedule)
+        try? center.startMonitoring(activityName, during: schedule)
     }
 
     // MARK: - Notificação de unlock
