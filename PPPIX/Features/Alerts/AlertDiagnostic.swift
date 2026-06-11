@@ -5,7 +5,7 @@ import SwiftUI
 class AlertDiagnosticLog: ObservableObject {
     static let shared = AlertDiagnosticLog()
     private static let key = "pppix_diag_log"
-    private static let maxLines = 100
+    private static let maxLines = 500
 
     @Published var lines: [String] = []
 
