@@ -31,19 +31,29 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         UNUserNotificationCenter.current().delegate = self
         setupNotificationCategories()
 
-        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
-            FirebaseApp.configure()
-            Messaging.messaging().delegate = self
-            Task { @MainActor in AlertDiagnosticLog.shared.log("[FCM] FirebaseApp.configure() OK, delegate setado") }
-
-            // Tenta buscar o token FCM IMEDIATAMENTE no boot, em paralelo
-            // ao fluxo via APNS callback. Antes, so' tentavamos dentro de
-            // didRegisterForRemoteNotificationsWithDeviceToken — se aquele
-            // callback demorasse/falhasse, nunca havia uma segunda via.
-            Self.fetchFCMTokenWithRetry(attempt: 1)
-        } else {
-            Task { @MainActor in AlertDiagnosticLog.shared.log("[FCM] ERRO CRITICO: GoogleService-Info.plist NAO encontrado no bundle!") }
+        // Configuracao do Firebase 100% programatica — NAO depende do
+        // GoogleService-Info.plist estar presente no bundle do .ipa
+        // (que se mostrou nao-confiavel via xcodegen/CI). Valores
+        // copiados diretamente do projeto Firebase pppix-bf8ff.
+        if FirebaseApp.app() == nil {
+            let options = FirebaseOptions(
+                googleAppID: "1:496555012887:ios:c85e1ce4122cedab54bd52",
+                gcmSenderID: "496555012887"
+            )
+            options.apiKey = "AIzaSyBvK9bH3oWHpJmCKrIuJ0163jXPWp--JMA"
+            options.projectID = "pppix-bf8ff"
+            options.bundleID = "tech.pppix.app"
+            options.storageBucket = "pppix-bf8ff.firebasestorage.app"
+            FirebaseApp.configure(options: options)
         }
+        Messaging.messaging().delegate = self
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[FCM] FirebaseApp.configure() OK (programatico), delegate setado") }
+
+        // Tenta buscar o token FCM IMEDIATAMENTE no boot, em paralelo
+        // ao fluxo via APNS callback. Antes, so' tentavamos dentro de
+        // didRegisterForRemoteNotificationsWithDeviceToken — se aquele
+        // callback demorasse/falhasse, nunca havia uma segunda via.
+        Self.fetchFCMTokenWithRetry(attempt: 1)
 
         // Registrar para remote notifications IMEDIATAMENTE (sem aguardar permissão)
         // Firebase precisa do APNS token antes de gerar FCM token
