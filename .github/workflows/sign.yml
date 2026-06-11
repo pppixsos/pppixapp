@@ -93,7 +93,7 @@ jobs:
 
       - name: Convert sirene.mp3 to .caf for notification sound
         run: |
-          afconvert -f caff -d ima4 PPPIX/Resources/sirene.mp3 PPPIX/Resources/sirene.caf
+          afconvert -f caff -d LEI16@44100 -c 1 PPPIX/Resources/sirene.mp3 PPPIX/Resources/sirene.caf
           ls -la PPPIX/Resources/sirene.*
 
       - name: Resolve SPM
