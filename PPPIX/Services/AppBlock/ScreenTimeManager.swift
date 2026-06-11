@@ -48,8 +48,21 @@ final class ScreenTimeManager: ObservableObject {
         if !isCurrentlyUnlocked() { applyShield() }
     }
 
-    /// Força reblock imediato — chamado pela notificação UNCalendarNotificationTrigger
+    /// Força reblock imediato — chamado pela notificação push silenciosa
+    /// "action=reblock" (didReceiveRemoteNotification) ou pelo timer local.
+    ///
+    /// IMPORTANTE: quando o app e' acordado em background SO' por causa
+    /// deste push, isAuthorized/currentSelection ainda estao no valor
+    /// padrao (false/vazio) porque checkAuthorization() so' roda quando
+    /// uma View aparece. Por isso recarregamos o estado direto da fonte
+    /// (AuthorizationCenter + UserDefaults) ANTES do guard, ao inves de
+    /// depender do estado @Published ja carregado.
     func forceReblock() {
+        // Recarrega estado real, independente de a UI ja ter inicializado
+        let authNow = AuthorizationCenter.shared.authorizationStatus == .approved
+        isAuthorized = authNow
+        loadSavedSelection()
+
         // Limpar timestamp de unlock
         sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
         sharedDefaults?.synchronize()
@@ -59,7 +72,7 @@ final class ScreenTimeManager: ObservableObject {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_reblock_timer"])
         // Aplicar shield
-        guard isAuthorized, hasBlockedApps else { return }
+        guard authNow, hasBlockedApps else { return }
         applyShield()
     }
 
