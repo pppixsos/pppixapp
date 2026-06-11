@@ -34,6 +34,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
             FirebaseApp.configure()
             Messaging.messaging().delegate = self
+            Task { @MainActor in AlertDiagnosticLog.shared.log("[FCM] FirebaseApp.configure() OK, delegate setado") }
+
+            // Tenta buscar o token FCM IMEDIATAMENTE no boot, em paralelo
+            // ao fluxo via APNS callback. Antes, so' tentavamos dentro de
+            // didRegisterForRemoteNotificationsWithDeviceToken — se aquele
+            // callback demorasse/falhasse, nunca havia uma segunda via.
+            Self.fetchFCMTokenWithRetry(attempt: 1)
+        } else {
+            Task { @MainActor in AlertDiagnosticLog.shared.log("[FCM] ERRO CRITICO: GoogleService-Info.plist NAO encontrado no bundle!") }
         }
 
         // Registrar para remote notifications IMEDIATAMENTE (sem aguardar permissão)
@@ -162,8 +171,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     static func fetchFCMTokenWithRetry(attempt: Int) {
         let delays = [1.0, 3.0, 5.0, 10.0, 20.0]
         let delay = attempt <= delays.count ? delays[attempt - 1] : 30.0
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[FCM] Agendando solicitacao de token, tentativa \(attempt), delay=\(delay)s") }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            Task { @MainActor in AlertDiagnosticLog.shared.log("[FCM] Chamando Messaging.messaging().token (tentativa \(attempt))") }
             Messaging.messaging().token { token, error in
+                Task { @MainActor in AlertDiagnosticLog.shared.log("[FCM] Callback do token recebido (tentativa \(attempt)) - token=\(token != nil), error=\(error?.localizedDescription ?? "nil")") }
                 if let token = token, !token.isEmpty {
                     Task { @MainActor in
                         AlertDiagnosticLog.shared.log("FCM token gerado (tentativa \(attempt)): \(token.prefix(20))...")
