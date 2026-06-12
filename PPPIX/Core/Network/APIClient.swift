@@ -161,6 +161,32 @@ final class APIClient {
         let _: EmptyResponse = try await post("connections/", body: SendConnectionRequest(to_user_email: email))
     }
 
+    // MARK: - Contatos de Emergencia Externos (nome + telefone, sem conta no app)
+
+    struct ExternalContact: Codable, Identifiable {
+        let id: Int
+        let name: String
+        let phone: String
+        let created_at: String?
+    }
+
+    struct AddExternalContactRequest: Encodable {
+        let name: String
+        let phone: String
+    }
+
+    func fetchExternalContacts() async throws -> [ExternalContact] {
+        try await get("external-contacts/")
+    }
+
+    func addExternalContact(name: String, phone: String) async throws {
+        let _: ExternalContact = try await post("external-contacts/", body: AddExternalContactRequest(name: name, phone: phone))
+    }
+
+    func deleteExternalContact(id: Int) async throws {
+        try await delete("external-contacts/\(id)/")
+    }
+
     func acceptConnection(id: Int) async throws {
         let _: EmptyResponse = try await post("connections/\(id)/accept/", body: EmptyBody())
     }
