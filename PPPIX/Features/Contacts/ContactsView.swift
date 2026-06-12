@@ -6,6 +6,7 @@ struct ContactsView: View {
     @State private var accepted:  [Connection] = []
     @State private var received:  [Connection] = []  // convites QUE EU RECEBI
     @State private var sent:      [Connection] = []  // convites QUE EU ENVIEI
+    @State private var externalContacts: [APIClient.ExternalContact] = []  // sem conta, recebem so' via WhatsApp
     @State private var isLoading  = true
     @State private var showAddSheet = false
     @State private var errorMessage = ""
@@ -82,7 +83,17 @@ struct ContactsView: View {
                             }
                         }
 
-                        if accepted.isEmpty && received.isEmpty && sent.isEmpty {
+                        // CONTATOS EXTERNOS (sem conta — alertas via WhatsApp)
+                        if !externalContacts.isEmpty {
+                            sectionHeader("Contatos via WhatsApp", icon: "phone.fill", color: Color(hex: "#25D366"))
+                            ForEach(externalContacts) { contact in
+                                ExternalContactRow(contact: contact) {
+                                    Task { await deleteExternalContact(contact) }
+                                }
+                            }
+                        }
+
+                        if accepted.isEmpty && received.isEmpty && sent.isEmpty && externalContacts.isEmpty {
                             VStack(spacing: 12) {
                                 Image(systemName: "person.badge.plus")
                                     .font(.system(size: 48))
@@ -173,6 +184,7 @@ struct ContactsView: View {
             accepted = accResult
             received = merged
             sent     = snt
+            externalContacts = (try? await APIClient.shared.fetchExternalContacts()) ?? []
 
         } catch {
             errorMessage = "Erro ao carregar: \(error.localizedDescription)"
@@ -196,6 +208,47 @@ struct ContactsView: View {
             await loadContacts()
         } catch {
             errorMessage = "Erro ao remover contato."
+        }
+    }
+
+    private func deleteExternalContact(_ c: APIClient.ExternalContact) async {
+        do {
+            try await APIClient.shared.deleteExternalContact(id: c.id)
+            await loadContacts()
+        } catch {
+            errorMessage = "Erro ao remover contato."
+        }
+    }
+}
+
+// MARK: - External Contact Row (sem conta, WhatsApp)
+
+private struct ExternalContactRow: View {
+    let contact: APIClient.ExternalContact
+    let onDelete: () -> Void
+    @State private var showDeleteConfirm = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "phone.circle.fill")
+                .font(.system(size: 32))
+                .foregroundColor(Color(hex: "#25D366"))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(contact.name).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
+                Text(contact.phone).font(.caption).foregroundColor(Color(white: 0.5))
+                Text("Recebe alertas via WhatsApp").font(.caption2).foregroundColor(Color(hex: "#25D366"))
+            }
+            Spacer()
+            Button { showDeleteConfirm = true } label: {
+                Image(systemName: "trash").foregroundColor(Color(white: 0.4))
+            }
+        }
+        .padding(12)
+        .background(Color(white: 0.08))
+        .cornerRadius(12)
+        .confirmationDialog("Remover \(contact.name)?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Remover", role: .destructive, action: onDelete)
+            Button("Cancelar", role: .cancel) {}
         }
     }
 }
@@ -309,12 +362,21 @@ private struct ConnectionRow: View {
 
 // MARK: - Add Contact Sheet
 
+private enum ContactMethod {
+    case email, phone
+}
+
 private struct AddContactSheet: View {
     let myEmail: String
     let onSent: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var method: ContactMethod? = nil
+
     @State private var email = ""
+    @State private var contactName = ""
+    @State private var phone = ""
+
     @State private var isSending = false
     @State private var errorMessage = ""
 
@@ -322,32 +384,108 @@ private struct AddContactSheet: View {
         NavigationStack {
             ZStack {
                 Color(hex: "#0A0A12").ignoresSafeArea()
-                VStack(spacing: 24) {
-                    VStack(spacing: 8) {
-                        Image(systemName: "envelope.badge.fill").font(.system(size: 44))
-                            .foregroundColor(Color(hex: "#3366FF"))
-                        Text("Adicionar Contato").font(.title2.bold()).foregroundColor(.white)
-                        Text("A pessoa precisa ter o PPPIX instalado (iOS ou Android)")
-                            .font(.subheadline).foregroundColor(Color(white: 0.5))
-                            .multilineTextAlignment(.center)
+
+                if method == nil {
+                    // Tela de escolha: Email (pessoa com app) ou Telefone (sem app)
+                    VStack(spacing: 24) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "person.crop.circle.badge.plus").font(.system(size: 44))
+                                .foregroundColor(Color(hex: "#3366FF"))
+                            Text("Adicionar Contato de Emergência").font(.title2.bold()).foregroundColor(.white)
+                            Text("Essa pessoa já tem o PPPIX instalado?")
+                                .font(.subheadline).foregroundColor(Color(white: 0.5))
+                                .multilineTextAlignment(.center)
+                        }
+
+                        Button { method = .email } label: {
+                            optionRow(icon: "envelope.badge.fill",
+                                      title: "Sim, tem o PPPIX",
+                                      subtitle: "Adicionar pelo email — recebe alertas pelo app e WhatsApp")
+                        }
+
+                        Button { method = .phone } label: {
+                            optionRow(icon: "phone.badge.plus",
+                                      title: "Não, não tem o app",
+                                      subtitle: "Adicionar pelo nome e telefone — recebe alertas pelo WhatsApp")
+                        }
+
+                        Spacer()
                     }
-                    PPPIXTextField(title: "Email do Contato", placeholder: "email@exemplo.com",
-                                  text: $email, keyboardType: .emailAddress, autocapitalization: .never)
-                    if !errorMessage.isEmpty { ErrorBanner(message: errorMessage) }
-                    PPPIXButton(title: "Enviar Convite", isLoading: isSending) {
-                        Task { await sendInvite() }
+                    .padding(24)
+                } else if method == .email {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "envelope.badge.fill").font(.system(size: 44))
+                                .foregroundColor(Color(hex: "#3366FF"))
+                            Text("Adicionar por Email").font(.title2.bold()).foregroundColor(.white)
+                            Text("A pessoa precisa ter o PPPIX instalado (iOS ou Android)")
+                                .font(.subheadline).foregroundColor(Color(white: 0.5))
+                                .multilineTextAlignment(.center)
+                        }
+                        PPPIXTextField(title: "Email do Contato", placeholder: "email@exemplo.com",
+                                      text: $email, keyboardType: .emailAddress, autocapitalization: .never)
+                        if !errorMessage.isEmpty { ErrorBanner(message: errorMessage) }
+                        PPPIXButton(title: "Enviar Convite", isLoading: isSending) {
+                            Task { await sendInvite() }
+                        }
+                        Spacer()
                     }
-                    Spacer()
+                    .padding(24)
+                } else {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "phone.badge.plus").font(.system(size: 44))
+                                .foregroundColor(Color(hex: "#3366FF"))
+                            Text("Adicionar por Telefone").font(.title2.bold()).foregroundColor(.white)
+                            Text("Essa pessoa receberá os alertas de emergência via WhatsApp")
+                                .font(.subheadline).foregroundColor(Color(white: 0.5))
+                                .multilineTextAlignment(.center)
+                        }
+                        PPPIXTextField(title: "Nome do Contato", placeholder: "Ex: Maria Silva",
+                                      text: $contactName, autocapitalization: .words)
+                        PPPIXTextField(title: "Telefone (com DDD e país)", placeholder: "+5527999998888",
+                                      text: $phone, keyboardType: .phonePad)
+                        if !errorMessage.isEmpty { ErrorBanner(message: errorMessage) }
+                        PPPIXButton(title: "Adicionar Contato", isLoading: isSending) {
+                            Task { await addPhoneContact() }
+                        }
+                        Spacer()
+                    }
+                    .padding(24)
                 }
-                .padding(24)
             }
             .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancelar") { dismiss() }.foregroundColor(Color(white: 0.6))
+                    Button(method == nil ? "Cancelar" : "Voltar") {
+                        if method == nil {
+                            dismiss()
+                        } else {
+                            method = nil
+                            errorMessage = ""
+                        }
+                    }.foregroundColor(Color(white: 0.6))
                 }
             }
         }
+    }
+
+    private func optionRow(icon: String, title: String, subtitle: String) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon).font(.system(size: 28))
+                .foregroundColor(Color(hex: "#3366FF"))
+                .frame(width: 40)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline).foregroundColor(.white)
+                Text(subtitle).font(.caption).foregroundColor(Color(white: 0.5))
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").foregroundColor(Color(white: 0.4))
+        }
+        .padding(16)
+        .background(Color(white: 0.1))
+        .cornerRadius(12)
     }
 
     private func sendInvite() async {
@@ -368,6 +506,25 @@ private struct AddContactSheet: View {
             errorMessage = "Email não encontrado. Verifique se a pessoa tem o PPPIX."
         } catch {
             errorMessage = "Erro de conexão. Verifique sua internet."
+        }
+        isSending = false
+    }
+
+    private func addPhoneContact() async {
+        let trimmedName = contactName.trimmingCharacters(in: .whitespaces)
+        var trimmedPhone = phone.trimmingCharacters(in: .whitespaces)
+        trimmedPhone = trimmedPhone.filter { $0.isNumber || $0 == "+" }
+
+        if trimmedName.isEmpty { errorMessage = "Digite o nome do contato."; return }
+        if trimmedPhone.count < 8 { errorMessage = "Telefone inválido. Use o formato +5527999998888."; return }
+
+        isSending = true
+        do {
+            try await APIClient.shared.addExternalContact(name: trimmedName, phone: trimmedPhone)
+            onSent("\(trimmedName) adicionado(a) como contato de emergência!")
+            dismiss()
+        } catch {
+            errorMessage = "Erro ao adicionar contato. Verifique sua internet."
         }
         isSending = false
     }
