@@ -176,8 +176,16 @@ struct ContactsView: View {
                 $0.to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) != myLower
             }
 
-            // Tenta também o endpoint de recebidos dedicado e mescla sem duplicatas
-            let recvExtra = (try? await APIClient.shared.getReceivedConnectionRequests()) ?? []
+            // Tenta também o endpoint de recebidos dedicado e mescla sem duplicatas.
+            // IMPORTANTE: o fallback de getReceivedConnectionRequests() retorna
+            // TODAS as pendentes (enviadas E recebidas), pois o endpoint dedicado
+            // /connections/received/ nao existe no backend. Por isso filtramos
+            // por direcao aqui tambem, senao convites ENVIADOS por mim aparecem
+            // erroneamente como "Convite Recebido".
+            let recvExtraRaw = (try? await APIClient.shared.getReceivedConnectionRequests()) ?? []
+            let recvExtra = recvExtraRaw.filter {
+                $0.to_user_email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) == myLower
+            }
             let recvIds = Set(recv.map { $0.id })
             let merged = recv + recvExtra.filter { !recvIds.contains($0.id) }
 
