@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// Equivalente ao SessionManager.kt do Android.
+/// Gerencia a sessão do usuário.
 /// Tokens são salvos no Keychain (seguro). Demais dados no UserDefaults.
 @MainActor
 final class SessionManager: ObservableObject {
