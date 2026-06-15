@@ -74,7 +74,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             #endif
         }
 
-        // Esquenta o GPS logo que o app abre (igual FusedLocationClient do Android)
+        // Inicializa o GPS logo que o app abre
         LocationService.shared.warmUp()
 
         BackgroundTaskManager.shared.registerTasks()
@@ -329,7 +329,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in AlertDiagnosticLog.shared.log("RECEBER(FCM): tipo=\(alertType) de=\(senderEmail)") }
         Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] handleEmergencyPayload — type='\(alertType)' sender='\(senderEmail)' me='\(myEmail)'") }
 
-        // Filtra alertas enviados por mim mesmo (igual Android)
+        // Filtra alertas enviados por mim mesmo
         // Só filtra se myEmail está disponível (pode estar vazio em background)
         if !myEmail.isEmpty && !senderEmail.isEmpty &&
            senderEmail.lowercased() == myEmail.lowercased() {
@@ -339,7 +339,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             return false
         }
 
-        // Deve ter alert_type com conteúdo de emergência (igual Android)
+        // Deve ter alert_type com conteúdo de emergência
         guard !alertType.isEmpty else {
             AlertDiagnosticLog.shared.log("NOTIF: alertType vazio — ignorado")
             return false
