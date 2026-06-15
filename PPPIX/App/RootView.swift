@@ -172,7 +172,7 @@ struct RootView: View {
     }
 
     /// Busca alertas recebidos e exibe se houver algum não lido.
-    /// Equivalente ao onMessageReceived do Android: processa alertas recentes.
+    /// Processa alertas recentes recebidos via push.
     private func markShown(_ id: Int) {
         AlertDeduplicator.shared.markShown(id)
     }
@@ -345,7 +345,7 @@ struct RootView: View {
     }
 }
 
-// MARK: - Tela de Emergência Fullscreen (igual Android)
+// MARK: - Tela de Emergência Fullscreen
 struct EmergencyAlertView: View {
     let alert: Alert
     let onDismiss: () -> Void
