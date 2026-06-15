@@ -426,7 +426,7 @@ private struct AddContactSheet: View {
                             Image(systemName: "envelope.badge.fill").font(.system(size: 44))
                                 .foregroundColor(Color(hex: "#3366FF"))
                             Text("Adicionar por Email").font(.title2.bold()).foregroundColor(.white)
-                            Text("A pessoa precisa ter o PPPIX instalado (iOS ou Android)")
+                            Text("A pessoa precisa ter o PPPIX instalado")
                                 .font(.subheadline).foregroundColor(Color(white: 0.5))
                                 .multilineTextAlignment(.center)
                         }
