@@ -15,6 +15,11 @@ class PPPIXAuthState: ObservableObject {
     static let instance = PPPIXAuthState()
     private init() {}
     @Published var isAuthenticated = false
+    /// True enquanto o usuário está no meio do fluxo de cadastro passo-a-passo
+    /// (OnboardingFlowView). Mesmo após o login automático ser concluído
+    /// dentro do onboarding, mantemos essa flag ativa para impedir que o
+    /// RootView troque para a HomeView antes do fluxo terminar.
+    @Published var isOnboarding = false
 
     static var hasAppPassword: Bool {
         get {
@@ -58,7 +63,9 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if !session.isLoggedIn {
+            if auth.isOnboarding {
+                OnboardingFlowView(onFinished: { auth.isOnboarding = false })
+            } else if !session.isLoggedIn {
                 WelcomeGateView()
             } else {
                 HomeView()
