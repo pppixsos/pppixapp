@@ -6,7 +6,7 @@ import SwiftUI
 struct WelcomeGateView: View {
 
     @State private var goToLogin = false
-    @State private var goToCreateAccount = false
+    @ObservedObject private var auth = PPPIXAuthState.instance
 
     var body: some View {
         NavigationStack {
@@ -35,7 +35,7 @@ struct WelcomeGateView: View {
 
                     VStack(spacing: 12) {
                         PPPIXButton(title: "Criar minha conta") {
-                            goToCreateAccount = true
+                            auth.isOnboarding = true
                         }
 
                         Button {
@@ -52,7 +52,6 @@ struct WelcomeGateView: View {
                 .padding(.horizontal, 24)
             }
             .navigationDestination(isPresented: $goToLogin) { LoginView() }
-            .navigationDestination(isPresented: $goToCreateAccount) { OnboardingFlowView() }
         }
     }
 }
