@@ -84,6 +84,12 @@ final class APIClient {
         try await delete("vehicles/\(id)/")
     }
 
+    // MARK: - Exclusão de Conta
+
+    func deleteAccount() async throws {
+        try await delete("delete-account/")
+    }
+
     func setActiveVehicle(id: Int) async throws -> Vehicle {
         try await post("vehicles/\(id)/set_active/", body: EmptyBody())
     }
