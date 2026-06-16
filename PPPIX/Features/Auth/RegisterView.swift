@@ -1,254 +1,271 @@
-name: PPPIX
-options:
-  bundleIdPrefix: tech.pppix
-  deploymentTarget:
-    iOS: "16.0"
-  defaultConfig: Debug
-  xcodeVersion: "26.0"
-settings:
-  base:
-    MARKETING_VERSION: "1.6.2"
-    CURRENT_PROJECT_VERSION: "281"
-    SWIFT_VERSION: "6.0"
-    SWIFT_STRICT_CONCURRENCY: minimal
-    SWIFT_COMPILATION_MODE: singlefile
-    SWIFT_OPTIMIZE_OBJECT_LIFETIME: NO
-    SWIFT_WHOLE_MODULE_OPTIMIZATION: NO
-    GCC_OPTIMIZATION_LEVEL: 0
-    SWIFT_OPTIMIZATION_LEVEL: "-Onone"
-    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
-    TARGETED_DEVICE_FAMILY: "1"
-packages:
-  Firebase:
-    url: https://github.com/firebase/firebase-ios-sdk
-    from: "12.14.0"
-  GoogleSignIn:
-    url: https://github.com/google/GoogleSignIn-iOS
-    from: "8.0.0"
-targets:
-  PPPIX:
-    type: application
-    platform: iOS
-    deploymentTarget: "16.0"
-    bundleId: tech.pppix.app
-    sources:
-      - path: PPPIX/App
-        excludes:
-          - "**/*.storyboard"
-      - path: PPPIX/Core
-        excludes:
-          - "**/*.storyboard"
-      - path: PPPIX/Features
-        excludes:
-          - "**/*.storyboard"
-      - path: PPPIX/Services
-        excludes:
-          - "**/*.storyboard"
-      - path: PPPIX/Resources
-        excludes:
-          - "**/*.plist"
-          - "**/*.mp3"
-          - "**/*.entitlements"
-          - "**/*.storyboard"
-    resources:
-      - path: PPPIX/Resources/GoogleService-Info.plist
-        optional: true
-      - path: PPPIX/Resources/sirene.mp3
-        optional: true
-      - path: PPPIX/Resources/sirene.caf
-        optional: true
-    info:
-      path: PPPIX/Resources/Info.plist
-      properties:
-        CFBundleDisplayName: PPPIX
-        CFBundleIdentifier: tech.pppix.app
-        CFBundleShortVersionString: "$(MARKETING_VERSION)"
-        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        CFBundleIconName: AppIcon
-        UILaunchScreen:
-          UIColorName: ""
-        UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
-        UISupportedInterfaceOrientations~ipad:
-          - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationPortraitUpsideDown
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
-        UIBackgroundModes:
-          - fetch
-          - remote-notification
-          - processing
-        BGTaskSchedulerPermittedIdentifiers:
-          - tech.pppix.app.refresh
-          - tech.pppix.app.processing
-        NSLocationWhenInUseUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência."
-        NSLocationAlwaysAndWhenInUseUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano."
-        NSLocationAlwaysUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano."
-        NSFamilyControlsUsageDescription: "O PPPIX usa o Screen Time para proteger seus apps financeiros com senha."
-        CFBundleURLTypes:
-          - CFBundleURLName: tech.pppix.app
-            CFBundleURLSchemes:
-              - pppix
-          - CFBundleURLName: com.google.googleusercontent
-            CFBundleURLSchemes:
-              - com.googleusercontent.apps.11117611081-c4ubusln48ed44n8d1rknc308ddfpqdf
-    entitlements:
-      path: PPPIX/PPPIX.entitlements
-      properties:
-        aps-environment: production
-        com.apple.developer.family-controls: true
-        com.apple.developer.usernotifications.time-sensitive: true
-        com.apple.security.application-groups:
-          - group.tech.pppix.app
-        com.apple.developer.applesignin:
-          - Default
-    capabilities:
-      com.apple.developer.family-controls: {}
-      com.apple.developer.applesignin:
-          - Default
-      com.apple.developer.usernotifications.time-sensitive: {}
-      push-notifications: {}
-    dependencies:
-      - package: Firebase
-        product: FirebaseCore
-      - package: Firebase
-        product: FirebaseMessaging
-      - package: GoogleSignIn
-        product: GoogleSignIn
-      - package: GoogleSignIn
-        product: GoogleSignInSwift
-      - target: PPPIXBlockExtension
-        embed: true
-      - target: PPPIXShieldAction
-        embed: true
+import SwiftUI
 
+struct RegisterView: View {
 
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app
-        DEVELOPMENT_TEAM: K5SWZ92Z64
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-      configs:
-        Debug:
-          CODE_SIGN_STYLE: Automatic
-        Release:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
-          PROVISIONING_PROFILE_SPECIFIER: "PPPIX-Main"
-  PPPIXBlockExtension:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "16.0"
-    bundleId: tech.pppix.app.block
-    sources:
-      - path: PPPIXBlockExtension
-        excludes:
-          - "**/*.entitlements"
-    info:
-      path: PPPIXBlockExtension/Info.plist
-      properties:
-        CFBundleDisplayName: PPPIXBlock
-        CFBundleIdentifier: tech.pppix.app.block
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
-    entitlements:
-      path: PPPIXBlockExtension/PPPIXBlockExtension.entitlements
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.block
-        DEVELOPMENT_TEAM: K5SWZ92Z64
-      configs:
-        Debug:
-          CODE_SIGN_STYLE: Automatic
-        Release:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
-          PROVISIONING_PROFILE_SPECIFIER: "PPPIX-Block"
-  PPPIXActivityMonitor:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "16.0"
-    bundleId: tech.pppix.app.monitor
-    sources:
-      - path: PPPIXActivityMonitor
-        excludes:
-          - "**/*.entitlements"
-    info:
-      path: PPPIXActivityMonitor/Info.plist
-      properties:
-        CFBundleDisplayName: PPPIXMonitor
-        CFBundleIdentifier: tech.pppix.app.monitor
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PPPIXActivityMonitor
-    entitlements:
-      path: PPPIXActivityMonitor/PPPIXActivityMonitor.entitlements
-      properties:
-        com.apple.developer.family-controls: true
-        com.apple.security.application-groups:
-          - group.tech.pppix.app
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.monitor
-        DEVELOPMENT_TEAM: K5SWZ92Z64
-      configs:
-        Debug:
-          CODE_SIGN_STYLE: Automatic
-        Release:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
-          PROVISIONING_PROFILE_SPECIFIER: "PPPIX-Monitor"
-  PPPIXShieldAction:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "16.0"
-    bundleId: tech.pppix.app.shield
-    sources:
-      - path: PPPIXShieldAction
-        excludes:
-          - "**/*.entitlements"
-    info:
-      path: PPPIXShieldAction/Info.plist
-      properties:
-        CFBundleDisplayName: PPPIXShieldAction
-        CFBundleIdentifier: tech.pppix.app.shield
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-action-service
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldActionExtension
-    entitlements:
-      path: PPPIXShieldAction/PPPIXShieldAction.entitlements
-      properties:
-        com.apple.developer.family-controls: true
-        com.apple.security.application-groups:
-          - group.tech.pppix.app
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.pppix.app.shield
-        DEVELOPMENT_TEAM: K5SWZ92Z64
-      configs:
-        Debug:
-          CODE_SIGN_STYLE: Automatic
-        Release:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution: Carlos Roberto Junqueira (K5SWZ92Z64)"
-          PROVISIONING_PROFILE_SPECIFIER: "PPPIX-Shield"
-schemes:
-  PPPIX:
-    build:
-      targets:
-        PPPIX: all
-    run:
-      config: Debug
-    archive:
-      config: Release
-  PPPIX-Full:
-    build:
-      targets:
-        PPPIX: all
-        PPPIXBlockExtension: all
-        PPPIXShieldAction: all
-    run:
-      config: Debug
-    archive:
-      config: Release
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var email = ""
+    @State private var cpf = ""
+    @State private var phone = ""
+    @State private var birthDate = ""
+    @State private var cep = ""
+    @State private var password = ""
+    @State private var passwordConfirm = ""
+    @State private var showPassword = false
+    @State private var showPasswordConfirm = false
+    @State private var isLoading = false
+    @State private var errorMessage = ""
+    @State private var successMessage = ""
+
+    var body: some View {
+        ZStack {
+            Color(hex: "#0A0A12").ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 8) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 48))
+                            .foregroundColor(Color(hex: "#3366FF"))
+                        Text("Criar Conta")
+                            .font(.title2.bold())
+                            .foregroundColor(.white)
+                    }
+                    .padding(.top, 20)
+
+                    // Personal data
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Dados Pessoais")
+
+                        HStack(spacing: 12) {
+                            PPPIXTextField(title: "Nome", placeholder: "João", text: $firstName)
+                            PPPIXTextField(title: "Sobrenome", placeholder: "Silva", text: $lastName)
+                        }
+
+                        PPPIXTextField(
+                            title: "CPF",
+                            placeholder: "000.000.000-00",
+                            text: $cpf,
+                            keyboardType: .numberPad,
+                            onChange: { cpf = formatCPF($0) }
+                        )
+
+                        PPPIXTextField(
+                            title: "Telefone",
+                            placeholder: "(11) 99999-9999",
+                            text: $phone,
+                            keyboardType: .phonePad,
+                            onChange: { phone = formatPhone($0) }
+                        )
+
+                        PPPIXTextField(
+                            title: "Data de Nascimento",
+                            placeholder: "DD/MM/AAAA",
+                            text: $birthDate,
+                            keyboardType: .numberPad,
+                            onChange: { birthDate = formatDate($0) }
+                        )
+
+                        PPPIXTextField(
+                            title: "CEP",
+                            placeholder: "00000-000",
+                            text: $cep,
+                            keyboardType: .numberPad,
+                            onChange: { cep = formatCEP($0) }
+                        )
+                    }
+
+                    // Account data
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Dados de Acesso")
+
+                        PPPIXTextField(
+                            title: "Email",
+                            placeholder: "seu@email.com",
+                            text: $email,
+                            keyboardType: .emailAddress,
+                            autocapitalization: .never
+                        )
+
+                        PPPIXSecureField(
+                            title: "Senha",
+                            placeholder: "Mínimo 8 caracteres",
+                            text: $password,
+                            showPassword: $showPassword
+                        )
+
+                        PPPIXSecureField(
+                            title: "Confirmar Senha",
+                            placeholder: "Repita sua senha",
+                            text: $passwordConfirm,
+                            showPassword: $showPasswordConfirm
+                        )
+                    }
+
+                    // Messages
+                    if !errorMessage.isEmpty {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundColor(Color(hex: "#FF4444"))
+                            .multilineTextAlignment(.center)
+                    }
+
+                    if !successMessage.isEmpty {
+                        Text(successMessage)
+                            .font(.footnote)
+                            .foregroundColor(Color(hex: "#44FF88"))
+                            .multilineTextAlignment(.center)
+                    }
+
+                    // Submit
+                    PPPIXButton(title: "Criar Conta", isLoading: isLoading) {
+                        Task { await register() }
+                    }
+
+                    Button("Já tenho conta") { dismiss() }
+                        .font(.subheadline)
+                        .foregroundColor(Color(hex: "#3366FF"))
+
+                    Spacer(minLength: 40)
+                }
+                .padding(.horizontal, 24)
+            }
+        }
+        .navigationBarBackButtonHidden(false)
+        .navigationTitle("")
+    }
+
+    // MARK: - Register
+
+    private func register() async {
+        guard validateFields() else { return }
+
+        isLoading = true
+        errorMessage = ""
+
+        let rawCPF   = cpf.filter(\.isNumber)
+        let rawPhone  = phone.filter(\.isNumber)
+        let rawBirth  = birthDate // ex: "23/05/1990" → converter para "1990-05-23"
+        let rawCEP    = cep.filter(\.isNumber)
+
+        let body = RegisterRequest(
+            email: email.trimmingCharacters(in: .whitespaces).lowercased(),
+            username: email.trimmingCharacters(in: .whitespaces).lowercased(),
+            first_name: firstName.trimmingCharacters(in: .whitespaces),
+            last_name: lastName.trimmingCharacters(in: .whitespaces),
+            password: password,
+            password_confirm: passwordConfirm,
+            profile: ProfileData(
+                cpf: rawCPF,
+                phone: rawPhone,
+                birth_date: convertDateToISO(rawBirth),
+                cep: rawCEP
+            )
+        )
+
+        do {
+            try await APIClient.shared.register(body: body)
+            successMessage = "Conta criada! Fazendo login..."
+
+            // Auto login
+            let loginResp = try await APIClient.shared.login(
+                email: body.email, password: password
+            )
+            SessionManager.shared.saveTokens(access: loginResp.access, refresh: loginResp.refresh)
+            let me = try await APIClient.shared.getMe()
+            SessionManager.shared.saveUserInfo(id: me.id, email: me.email, name: me.fullName)
+
+        } catch APIError.badRequest(let msg) {
+            errorMessage = msg
+        } catch {
+            errorMessage = "Erro ao criar conta. Tente novamente."
+        }
+
+        isLoading = false
+    }
+
+    private func validateFields() -> Bool {
+        if firstName.trimmingCharacters(in: .whitespaces).isEmpty {
+            errorMessage = "Informe seu nome."; return false
+        }
+        if email.trimmingCharacters(in: .whitespaces).isEmpty || !email.contains("@") {
+            errorMessage = "Email inválido."; return false
+        }
+        if cpf.filter(\.isNumber).count != 11 {
+            errorMessage = "CPF deve ter 11 dígitos."; return false
+        }
+        if password.count < 8 {
+            errorMessage = "Senha deve ter pelo menos 8 caracteres."; return false
+        }
+        if password != passwordConfirm {
+            errorMessage = "As senhas não coincidem."; return false
+        }
+        return true
+    }
+
+    // MARK: - Masks
+
+    private func formatCPF(_ raw: String) -> String {
+        let digits = raw.filter(\.isNumber).prefix(11)
+        var result = ""
+        for (i, c) in digits.enumerated() {
+            if i == 3 || i == 6 { result += "." }
+            if i == 9 { result += "-" }
+            result.append(c)
+        }
+        return result
+    }
+
+    private func formatPhone(_ raw: String) -> String {
+        let digits = raw.filter(\.isNumber).prefix(11)
+        var result = ""
+        for (i, c) in digits.enumerated() {
+            if i == 0 { result += "(" }
+            if i == 2 { result += ") " }
+            if digits.count == 11 && i == 7 { result += "-" }
+            if digits.count < 11  && i == 6 { result += "-" }
+            result.append(c)
+        }
+        return result
+    }
+
+    private func formatDate(_ raw: String) -> String {
+        let digits = raw.filter(\.isNumber).prefix(8)
+        var result = ""
+        for (i, c) in digits.enumerated() {
+            if i == 2 || i == 4 { result += "/" }
+            result.append(c)
+        }
+        return result
+    }
+
+    private func formatCEP(_ raw: String) -> String {
+        let digits = raw.filter(\.isNumber).prefix(8)
+        var result = ""
+        for (i, c) in digits.enumerated() {
+            if i == 5 { result += "-" }
+            result.append(c)
+        }
+        return result
+    }
+
+    private func convertDateToISO(_ ddMMyyyy: String) -> String {
+        // "23/05/1990" → "1990-05-23"
+        let parts = ddMMyyyy.split(separator: "/")
+        guard parts.count == 3 else { return ddMMyyyy }
+        return "\(parts[2])-\(parts[1])-\(parts[0])"
+    }
+}
+
+private struct SectionHeader: View {
+    let title: String
+    var body: some View {
+        Text(title)
+            .font(.footnote.bold())
+            .foregroundColor(Color(white: 0.5))
+            .textCase(.uppercase)
+    }
+}
