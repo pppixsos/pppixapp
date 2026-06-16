@@ -11,7 +11,6 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var isSocialLoading = false
     @State private var errorMessage = ""
-    @State private var showRegister = false
     @State private var showForgotPassword = false
 
     var body: some View {
@@ -82,7 +81,7 @@ struct LoginView: View {
                             .font(.subheadline).foregroundColor(Color(hex: "#3366FF"))
 
                         Button {
-                            showRegister = true
+                            PPPIXAuthState.instance.isOnboarding = true
                         } label: {
                             HStack(spacing: 4) {
                                 Text("Não tem conta?").foregroundColor(Color(white: 0.6))
@@ -95,7 +94,6 @@ struct LoginView: View {
                     .padding(.horizontal, 24)
                 }
             }
-            .navigationDestination(isPresented: $showRegister) { OnboardingFlowView() }
             .sheet(isPresented: $showForgotPassword) { ForgotPasswordView() }
         }
     }
