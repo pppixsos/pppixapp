@@ -59,7 +59,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if !session.isLoggedIn {
-                LoginView()
+                WelcomeGateView()
             } else {
                 HomeView()
             }
