@@ -28,6 +28,7 @@ final class SessionManager: ObservableObject {
         static let monitorActive = "pppix_monitor_active"
         static let permAsked    = "pppix_permissions_asked"
         static let pwdConfigured = "pppix_passwords_configured"
+        static let deviceSetupCompleted = "pppix_device_setup_completed"
 
         // Keychain
         static let accessToken  = "pppix_access_token"
@@ -157,6 +158,17 @@ final class SessionManager: ObservableObject {
         set { defaults.set(newValue, forKey: Key.pwdConfigured) }
     }
 
+    /// True quando este dispositivo específico já passou pelo fluxo de
+    /// configuração local (permissões do iOS) ao menos uma vez para a
+    /// conta atualmente logada. Diferente de `arePasswordsConfigured`,
+    /// que reflete se a CONTA (no servidor) já tem as 3 senhas — pode ser
+    /// true mesmo num dispositivo novo, caso a pessoa já tenha configurado
+    /// tudo em outro aparelho antes.
+    var hasCompletedDeviceSetup: Bool {
+        get { defaults.bool(forKey: Key.deviceSetupCompleted) }
+        set { defaults.set(newValue, forKey: Key.deviceSetupCompleted) }
+    }
+
     // MARK: - Logout
 
     func clearSession() {
@@ -182,6 +194,12 @@ final class SessionManager: ObservableObject {
         // Preserva configurações de bloqueio
         blockedApps = blocked
         werePermissionsAsked = permAsked
+
+        // Reseta a flag em memória do fluxo de novo-dispositivo, já que
+        // a próxima conta a logar neste aparelho pode ser outra pessoa.
+        Task { @MainActor in
+            PPPIXAuthState.instance.hasCompletedDeviceSetupThisSession = false
+        }
 
         // Recarrega estado
         userId    = 0
