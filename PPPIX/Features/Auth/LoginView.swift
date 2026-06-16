@@ -95,7 +95,7 @@ struct LoginView: View {
                     .padding(.horizontal, 24)
                 }
             }
-            .navigationDestination(isPresented: $showRegister) { RegisterView() }
+            .navigationDestination(isPresented: $showRegister) { OnboardingFlowView() }
             .sheet(isPresented: $showForgotPassword) { ForgotPasswordView() }
         }
     }
