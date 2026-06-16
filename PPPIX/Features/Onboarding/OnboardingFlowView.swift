@@ -57,6 +57,8 @@ enum OnboardingStep: Int, CaseIterable {
 /// veículo (opcional) → contatos de emergência → bloqueio de apps → home.
 struct OnboardingFlowView: View {
 
+    let onFinished: () -> Void
+
     @StateObject private var data = OnboardingData()
     @State private var step: OnboardingStep = .nameEmail
     @State private var accountCreated = false
@@ -177,7 +179,8 @@ struct OnboardingFlowView: View {
 
     private func finishOnboarding() {
         // Login já foi finalizado em OnboardingCreatePasswordStep.
-        // SessionManager.isLoggedIn = true já dispara a troca de RootView
-        // para HomeView automaticamente — nada mais a fazer aqui.
+        // Agora liberamos a flag de onboarding — o RootView então
+        // reavalia o gate e mostra a HomeView normalmente, já logado.
+        onFinished()
     }
 }
