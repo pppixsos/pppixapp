@@ -249,8 +249,25 @@ final class PermissionsViewModel: ObservableObject {
     }
 
     func requestLocationAlways() {
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
+        let status = locationManager.authorizationStatus
+        if status == .notDetermined {
+            // Ainda não pediu nada — primeiro pede o "When In Use" (passo obrigatório
+            // do iOS antes de poder solicitar "Always").
+            locationManager.requestWhenInUseAuthorization()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                self.locationManager.requestAlwaysAuthorization()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.checkLocation() }
+            }
+        } else if status == .authorizedWhenInUse {
+            // iOS só mostra o diálogo de upgrade para "Always" quando já há
+            // "When In Use" concedido.
+            locationManager.requestAlwaysAuthorization()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.checkLocation() }
+        } else {
+            // Já negado ou em estado que exige ajuste manual.
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
         }
     }
 
