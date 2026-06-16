@@ -22,6 +22,7 @@ struct OnboardingPermissionsStep: View {
         let status: PermissionStatus
         let errorMessage: String
         let actionLabel: String
+        let hint: String?
         let onGrant: () -> Void
     }
 
@@ -29,26 +30,29 @@ struct OnboardingPermissionsStep: View {
         var list: [Item] = [
             Item(icon: "bell.badge.fill", color: Color(hex: "#FF6600"),
                  title: "Notificações", description: "Para receber alertas de emergência dos seus contatos.",
-                 status: viewModel.notificationsStatus, errorMessage: "", actionLabel: "Permitir",
+                 status: viewModel.notificationsStatus, errorMessage: "", actionLabel: "Permitir", hint: nil,
                  onGrant: { Task { await viewModel.requestNotifications() } }),
             Item(icon: "location.fill", color: Color(hex: "#3366FF"),
                  title: "Localização", description: "Envia sua posição GPS no alerta de emergência.",
                  status: viewModel.locationStatus, errorMessage: "", actionLabel: "Permitir",
+                 hint: "Um aviso do iOS vai aparecer no topo da tela — toque em \"Permitir\" nele.",
                  onGrant: { viewModel.requestLocation() }),
             Item(icon: "location.fill.viewfinder", color: Color(hex: "#0099FF"),
                  title: "Localização em Background", description: "Permite enviar posição mesmo com a tela bloqueada.",
-                 status: viewModel.locationBgStatus, errorMessage: "", actionLabel: "Ajustes",
+                 status: viewModel.locationBgStatus, errorMessage: "", actionLabel: "Permitir",
+                 hint: "Se nada aparecer, toque novamente — o iOS às vezes pede em duas etapas.",
                  onGrant: { viewModel.requestLocationAlways() }),
         ]
         #if !targetEnvironment(simulator)
         list.append(Item(icon: "hourglass", color: Color(hex: "#6633FF"),
              title: "Screen Time", description: "Necessário para bloquear apps financeiros com senha.",
-             status: viewModel.screenTimeStatus, errorMessage: viewModel.screenTimeError, actionLabel: "Permitir",
+             status: viewModel.screenTimeStatus, errorMessage: viewModel.screenTimeError, actionLabel: "Permitir", hint: nil,
              onGrant: { Task { await viewModel.requestScreenTime() } }))
         #endif
         list.append(Item(icon: "arrow.clockwise.circle.fill", color: Color(hex: "#FF9900"),
              title: "Atualização em Segundo Plano", description: "Mantém o app funcionando mesmo fechado.",
              status: viewModel.backgroundRefreshStatus, errorMessage: "", actionLabel: "Ajustes",
+             hint: "Você será levado às Configurações do iPhone. Ative e volte para o app.",
              onGrant: {
                  if let url = URL(string: UIApplication.openSettingsURLString) {
                      UIApplication.shared.open(url)
@@ -79,6 +83,14 @@ struct OnboardingPermissionsStep: View {
                 } else {
                     PPPIXButton(title: item.actionLabel) { item.onGrant() }
 
+                    if let hint = item.hint {
+                        Text(hint)
+                            .font(.caption)
+                            .foregroundColor(Color(white: 0.45))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
+                    }
+
                     if !item.errorMessage.isEmpty {
                         ErrorBanner(message: item.errorMessage)
                     }
@@ -100,6 +112,11 @@ struct OnboardingPermissionsStep: View {
             }
         }
         .onAppear { viewModel.checkAll() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            // Usuário pode ter ido nas Configurações do iOS e voltado —
+            // reavalia o status real de cada permissão.
+            viewModel.checkAll()
+        }
         .onChange(of: item.status) { _ in
             // Avança automaticamente um instante depois de conceder
             if item.status == .granted {
