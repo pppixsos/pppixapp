@@ -6,6 +6,9 @@ struct ProfileView: View {
     @State private var isLoadingFresh = false
     @State private var showLogoutConfirm = false
     @State private var showDiagnostic = false
+    @State private var showDeleteAccountConfirm = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError = ""
 
     var body: some View {
         ZStack {
@@ -57,15 +60,35 @@ struct ProfileView: View {
                                 title: "Política de Privacidade",
                                 url: "https://privacidade.pppix.online/ios"
                             )
-                            Divider().overlay(Color(white: 0.1))
-                            ProfileLinkRow(
-                                icon: "trash.fill",
-                                title: "Excluir Minha Conta",
-                                url: "https://excluir-conta.pppix.online",
-                                color: Color(hex: "#FF4444")
-                            )
                         }
                     }
+
+                    // Excluir conta
+                    Button {
+                        showDeleteAccountConfirm = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash.fill")
+                                .foregroundColor(Color(hex: "#FF4444"))
+                                .font(.system(size: 14))
+                            Text("Excluir Minha Conta")
+                                .font(.subheadline)
+                                .foregroundColor(Color(hex: "#FF4444"))
+                            Spacer()
+                            if isDeletingAccount {
+                                ProgressView().tint(Color(hex: "#FF4444")).scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(Color(white: 0.3))
+                            }
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(Color(white: 0.05))
+                        .cornerRadius(10)
+                    }
+                    .disabled(isDeletingAccount)
 
                     // Versão
                     Text("PPPIX iOS v1.0.0")
@@ -121,6 +144,23 @@ struct ProfileView: View {
         } message: {
             Text("Deseja sair da sua conta PPPIX?")
         }
+        .confirmationDialog(
+            "Excluir conta permanentemente?",
+            isPresented: $showDeleteAccountConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Excluir minha conta", role: .destructive) {
+                Task { await deleteAccount() }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Essa ação é irreversível. Seus dados pessoais (nome, email, CPF, telefone, veículos e contatos) serão removidos permanentemente. Você será desconectado e não poderá mais acessar essa conta.")
+        }
+        .alert("Erro ao excluir conta", isPresented: .constant(!deleteAccountError.isEmpty)) {
+            Button("OK") { deleteAccountError = "" }
+        } message: {
+            Text(deleteAccountError)
+        }
     }
 
     // MARK: - Actions
@@ -134,6 +174,18 @@ struct ProfileView: View {
 
     private func logout() {
         SessionManager.shared.clearSession()
+    }
+
+    private func deleteAccount() async {
+        isDeletingAccount = true
+        do {
+            try await APIClient.shared.deleteAccount()
+            isDeletingAccount = false
+            SessionManager.shared.clearSession()
+        } catch {
+            isDeletingAccount = false
+            deleteAccountError = "Não foi possível excluir sua conta agora. Verifique sua internet e tente novamente."
+        }
     }
 }
 
