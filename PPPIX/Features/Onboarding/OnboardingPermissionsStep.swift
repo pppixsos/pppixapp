@@ -1,0 +1,121 @@
+import SwiftUI
+import CoreLocation
+import UserNotifications
+#if !targetEnvironment(simulator)
+import FamilyControls
+#endif
+
+/// Lista de permissões apresentadas uma a uma durante o onboarding,
+/// reaproveitando o PermissionsViewModel já existente no app (mesma
+/// lógica usada na tela de Permissões acessível pela Home).
+struct OnboardingPermissionsStep: View {
+    let onNext: () -> Void
+
+    @StateObject private var viewModel = PermissionsViewModel()
+    @State private var currentIndex = 0
+
+    private struct Item {
+        let icon: String
+        let color: Color
+        let title: String
+        let description: String
+        let status: PermissionStatus
+        let errorMessage: String
+        let actionLabel: String
+        let onGrant: () -> Void
+    }
+
+    private var items: [Item] {
+        var list: [Item] = [
+            Item(icon: "bell.badge.fill", color: Color(hex: "#FF6600"),
+                 title: "Notificações", description: "Para receber alertas de emergência dos seus contatos.",
+                 status: viewModel.notificationsStatus, errorMessage: "", actionLabel: "Permitir",
+                 onGrant: { Task { await viewModel.requestNotifications() } }),
+            Item(icon: "location.fill", color: Color(hex: "#3366FF"),
+                 title: "Localização", description: "Envia sua posição GPS no alerta de emergência.",
+                 status: viewModel.locationStatus, errorMessage: "", actionLabel: "Permitir",
+                 onGrant: { viewModel.requestLocation() }),
+            Item(icon: "location.fill.viewfinder", color: Color(hex: "#0099FF"),
+                 title: "Localização em Background", description: "Permite enviar posição mesmo com a tela bloqueada.",
+                 status: viewModel.locationBgStatus, errorMessage: "", actionLabel: "Ajustes",
+                 onGrant: { viewModel.requestLocationAlways() }),
+        ]
+        #if !targetEnvironment(simulator)
+        list.append(Item(icon: "hourglass", color: Color(hex: "#6633FF"),
+             title: "Screen Time", description: "Necessário para bloquear apps financeiros com senha.",
+             status: viewModel.screenTimeStatus, errorMessage: viewModel.screenTimeError, actionLabel: "Permitir",
+             onGrant: { Task { await viewModel.requestScreenTime() } }))
+        #endif
+        list.append(Item(icon: "arrow.clockwise.circle.fill", color: Color(hex: "#FF9900"),
+             title: "Atualização em Segundo Plano", description: "Mantém o app funcionando mesmo fechado.",
+             status: viewModel.backgroundRefreshStatus, errorMessage: "", actionLabel: "Ajustes",
+             onGrant: {
+                 if let url = URL(string: UIApplication.openSettingsURLString) {
+                     UIApplication.shared.open(url)
+                 }
+             }))
+        return list
+    }
+
+    var body: some View {
+        let item = items[min(currentIndex, items.count - 1)]
+
+        OnboardingStepShell(
+            icon: item.icon,
+            iconColor: item.color,
+            title: item.title,
+            subtitle: item.description,
+            stepIndex: 4,
+            totalSteps: 13
+        ) {
+            VStack(spacing: 18) {
+                if item.status == .granted {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(Color(hex: "#44FF88"))
+                        Text("Permissão concedida").foregroundColor(Color(hex: "#44FF88"))
+                    }
+                    .font(.subheadline.bold())
+                    .padding(.vertical, 14)
+                } else {
+                    PPPIXButton(title: item.actionLabel) { item.onGrant() }
+
+                    if !item.errorMessage.isEmpty {
+                        ErrorBanner(message: item.errorMessage)
+                    }
+                }
+
+                Button(item.status == .granted ? "Continuar" : "Pular por agora") {
+                    advance()
+                }
+                .font(.subheadline.weight(item.status == .granted ? .bold : .regular))
+                .foregroundColor(item.status == .granted ? .white : Color(white: 0.5))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, item.status == .granted ? 14 : 0)
+                .background(item.status == .granted ? Color(hex: "#3366FF") : Color.clear)
+                .cornerRadius(12)
+
+                Text("\(currentIndex + 1) de \(items.count)")
+                    .font(.caption)
+                    .foregroundColor(Color(white: 0.4))
+            }
+        }
+        .onAppear { viewModel.checkAll() }
+        .onChange(of: item.status) { _ in
+            // Avança automaticamente um instante depois de conceder
+            if item.status == .granted {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    if currentIndex < items.count - 1 { advance() }
+                }
+            }
+        }
+    }
+
+    private func advance() {
+        if currentIndex < items.count - 1 {
+            currentIndex += 1
+        } else {
+            SessionManager.shared.werePermissionsAsked = true
+            onNext()
+        }
+    }
+}
