@@ -178,9 +178,10 @@ struct OnboardingFlowView: View {
     }
 
     private func finishOnboarding() {
-        // Login já foi finalizado em OnboardingCreatePasswordStep.
-        // Agora liberamos a flag de onboarding — o RootView então
-        // reavalia o gate e mostra a HomeView normalmente, já logado.
+        // Login já foi finalizado em OnboardingCreatePasswordStep, e o
+        // cadastro já passou por permissões/senhas/etc — portanto este
+        // dispositivo já está com a configuração local completa.
+        PPPIXAuthState.instance.hasCompletedDeviceSetupThisSession = true
         onFinished()
     }
 }
