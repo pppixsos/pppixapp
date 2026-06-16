@@ -13,13 +13,30 @@ extension Int: @retroactive Identifiable {
 @MainActor
 class PPPIXAuthState: ObservableObject {
     static let instance = PPPIXAuthState()
-    private init() {}
+    private init() {
+        // Usuários que já usavam o app antes desta atualização (sessão já
+        // ativa, permissões e senhas já configuradas neste mesmo aparelho)
+        // não devem ser forçados a repetir o fluxo — só dispositivos
+        // genuinamente novos passam pelo DeviceSetupFlowView.
+        let alreadyHadEverything = SessionManager.shared.werePermissionsAsked
+            && SessionManager.shared.arePasswordsConfigured
+        if alreadyHadEverything && !SessionManager.shared.hasCompletedDeviceSetup {
+            SessionManager.shared.hasCompletedDeviceSetup = true
+        }
+        hasCompletedDeviceSetupThisSession = SessionManager.shared.hasCompletedDeviceSetup
+    }
     @Published var isAuthenticated = false
     /// True enquanto o usuário está no meio do fluxo de cadastro passo-a-passo
     /// (OnboardingFlowView). Mesmo após o login automático ser concluído
     /// dentro do onboarding, mantemos essa flag ativa para impedir que o
     /// RootView troque para a HomeView antes do fluxo terminar.
     @Published var isOnboarding = false
+    /// Espelha SessionManager.hasCompletedDeviceSetup, mas como propriedade
+    /// @Published para que o RootView recomponha ao terminar o
+    /// DeviceSetupFlowView (UserDefaults sozinho não dispara SwiftUI).
+    @Published var hasCompletedDeviceSetupThisSession: Bool {
+        didSet { SessionManager.shared.hasCompletedDeviceSetup = hasCompletedDeviceSetupThisSession }
+    }
 
     static var hasAppPassword: Bool {
         get {
@@ -67,6 +84,8 @@ struct RootView: View {
                 OnboardingFlowView(onFinished: { auth.isOnboarding = false })
             } else if !session.isLoggedIn {
                 WelcomeGateView()
+            } else if !auth.hasCompletedDeviceSetupThisSession {
+                DeviceSetupFlowView(onFinished: { auth.hasCompletedDeviceSetupThisSession = true })
             } else {
                 HomeView()
             }
