@@ -13,6 +13,7 @@ struct OnboardingPermissionsStep: View {
 
     @StateObject private var viewModel = PermissionsViewModel()
     @State private var currentIndex = 0
+    @State private var hasInteracted: Set<Int> = []
 
     private struct Item {
         let icon: String
@@ -30,28 +31,28 @@ struct OnboardingPermissionsStep: View {
         var list: [Item] = [
             Item(icon: "bell.badge.fill", color: Color(hex: "#FF6600"),
                  title: "Notificações", description: "Para receber alertas de emergência dos seus contatos.",
-                 status: viewModel.notificationsStatus, errorMessage: "", actionLabel: "Permitir", hint: nil,
+                 status: viewModel.notificationsStatus, errorMessage: "", actionLabel: "Continuar", hint: nil,
                  onGrant: { Task { await viewModel.requestNotifications() } }),
             Item(icon: "location.fill", color: Color(hex: "#3366FF"),
                  title: "Localização", description: "Envia sua posição GPS no alerta de emergência.",
-                 status: viewModel.locationStatus, errorMessage: "", actionLabel: "Permitir",
-                 hint: "Um aviso do iOS vai aparecer no topo da tela — toque em \"Permitir\" nele.",
+                 status: viewModel.locationStatus, errorMessage: "", actionLabel: "Continuar",
+                 hint: "Um aviso do iOS vai aparecer no topo da tela — escolha sua preferência nele.",
                  onGrant: { viewModel.requestLocation() }),
             Item(icon: "location.fill.viewfinder", color: Color(hex: "#0099FF"),
                  title: "Localização em Background", description: "Permite enviar posição mesmo com a tela bloqueada.",
-                 status: viewModel.locationBgStatus, errorMessage: "", actionLabel: "Permitir",
+                 status: viewModel.locationBgStatus, errorMessage: "", actionLabel: "Continuar",
                  hint: "Se nada aparecer, toque novamente — o iOS às vezes pede em duas etapas.",
                  onGrant: { viewModel.requestLocationAlways() }),
         ]
         #if !targetEnvironment(simulator)
         list.append(Item(icon: "hourglass", color: Color(hex: "#6633FF"),
              title: "Screen Time", description: "Necessário para bloquear apps financeiros com senha.",
-             status: viewModel.screenTimeStatus, errorMessage: viewModel.screenTimeError, actionLabel: "Permitir", hint: nil,
+             status: viewModel.screenTimeStatus, errorMessage: viewModel.screenTimeError, actionLabel: "Continuar", hint: nil,
              onGrant: { Task { await viewModel.requestScreenTime() } }))
         #endif
         list.append(Item(icon: "arrow.clockwise.circle.fill", color: Color(hex: "#FF9900"),
              title: "Atualização em Segundo Plano", description: "Mantém o app funcionando mesmo fechado.",
-             status: viewModel.backgroundRefreshStatus, errorMessage: "", actionLabel: "Ajustes",
+             status: viewModel.backgroundRefreshStatus, errorMessage: "", actionLabel: "Ir para Ajustes",
              hint: "Você será levado às Configurações do iPhone. Ative e volte para o app.",
              onGrant: {
                  if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -81,7 +82,10 @@ struct OnboardingPermissionsStep: View {
                     .font(.subheadline.bold())
                     .padding(.vertical, 14)
                 } else {
-                    PPPIXButton(title: item.actionLabel) { item.onGrant() }
+                    PPPIXButton(title: item.actionLabel) {
+                        hasInteracted.insert(currentIndex)
+                        item.onGrant()
+                    }
 
                     if let hint = item.hint {
                         Text(hint)
@@ -96,15 +100,21 @@ struct OnboardingPermissionsStep: View {
                     }
                 }
 
-                Button(item.status == .granted ? "Continuar" : "Pular por agora") {
-                    advance()
+                // O avanço só fica disponível depois que o usuário já
+                // interagiu com o pedido (concedido OU já tocou no botão
+                // que aciona o diálogo nativo do iOS) — nunca antes disso,
+                // conforme exigido pela Apple (Guideline 5.1.1).
+                if item.status == .granted || hasInteracted.contains(currentIndex) {
+                    Button(item.status == .granted ? "Continuar" : "Próximo") {
+                        advance()
+                    }
+                    .font(.subheadline.weight(item.status == .granted ? .bold : .medium))
+                    .foregroundColor(item.status == .granted ? .white : Color(white: 0.7))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, item.status == .granted ? 14 : 10)
+                    .background(item.status == .granted ? Color(hex: "#3366FF") : Color.clear)
+                    .cornerRadius(12)
                 }
-                .font(.subheadline.weight(item.status == .granted ? .bold : .regular))
-                .foregroundColor(item.status == .granted ? .white : Color(white: 0.5))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, item.status == .granted ? 14 : 0)
-                .background(item.status == .granted ? Color(hex: "#3366FF") : Color.clear)
-                .cornerRadius(12)
 
                 Text("\(currentIndex + 1) de \(items.count)")
                     .font(.caption)
