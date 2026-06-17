@@ -235,6 +235,10 @@ struct LoginView: View {
         } catch {
             SessionManager.shared.saveUserInfo(id: 0, email: email, name: email)
         }
+        // Por decisão de produto, todo login (mesmo repetido no mesmo
+        // dispositivo, na mesma execução do app) deve revisar permissões,
+        // senhas, veículo e apps protegidos novamente.
+        PPPIXAuthState.instance.hasCompletedDeviceSetupThisSession = false
         await registerPushTokens()
     }
 
