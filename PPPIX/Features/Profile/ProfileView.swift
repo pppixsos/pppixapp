@@ -5,7 +5,6 @@ struct ProfileView: View {
     @ObservedObject private var session = SessionManager.shared
     @State private var isLoadingFresh = false
     @State private var showLogoutConfirm = false
-    @State private var showDiagnostic = false
     @State private var showDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError = ""
@@ -47,36 +46,7 @@ struct ProfileView: View {
                             ProfileInfoRow(label: "Nome", value: session.userName)
                             Divider().overlay(Color(white: 0.1))
                             ProfileInfoRow(label: "Email", value: session.userEmail)
-                            Divider().overlay(Color(white: 0.1))
-                            ProfileInfoRow(label: "ID", value: "\(session.userId)")
                         }
-                    }
-
-                    // Disfarce do app
-                    NavigationLink {
-                        AppDisguiseView()
-                    } label: {
-                        HStack {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(white: 0.1))
-                                    .frame(width: 32, height: 32)
-                                Image(systemName: "theatermasks.fill")
-                                    .foregroundColor(Color(hex: "#3366FF"))
-                                    .font(.system(size: 14))
-                            }
-                            Text("Disfarçar o App")
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(Color(white: 0.3))
-                        }
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 16)
-                        .background(Color(white: 0.05))
-                        .cornerRadius(10)
                     }
 
                     // Links
@@ -122,28 +92,6 @@ struct ProfileView: View {
                         .font(.caption)
                         .foregroundColor(Color(white: 0.2))
 
-                    // Diagnóstico de alertas
-                    Button {
-                        showDiagnostic = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "stethoscope")
-                                .foregroundColor(Color(hex: "#FF9900"))
-                                .font(.system(size: 14))
-                            Text("Diagnóstico de Alertas")
-                                .font(.subheadline)
-                                .foregroundColor(Color(hex: "#FF9900"))
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(Color(white: 0.3))
-                        }
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 16)
-                        .background(Color(white: 0.05))
-                        .cornerRadius(10)
-                    }
-
                     // Logout
                     PPPIXButton(title: "Sair da Conta", style: .destructive) {
                         showLogoutConfirm = true
@@ -164,7 +112,6 @@ struct ProfileView: View {
             }
         }
         .task { await loadFreshProfile() }
-        .sheet(isPresented: $showDiagnostic) { AlertDiagnosticView() }
         .confirmationDialog("Sair da Conta", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
             Button("Sair", role: .destructive) { logout() }
             Button("Cancelar", role: .cancel) {}
