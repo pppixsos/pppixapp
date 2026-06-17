@@ -22,7 +22,7 @@ struct AppDisguiseView: View {
                         Text("Disfarçar o App")
                             .font(.title2.bold())
                             .foregroundColor(.white)
-                        Text("Troque o ícone e o nome do PPPIX na Tela de Início por outro app comum. Você pode voltar ao original quando quiser.")
+                        Text("Troque apenas o ícone do PPPIX na Tela de Início por outro app comum. O nome continua aparecendo como \"PPPIX\" embaixo do ícone — essa é uma limitação do próprio iOS, sem solução possível. Você pode voltar ao ícone original quando quiser.")
                             .font(.subheadline)
                             .foregroundColor(Color(white: 0.55))
                             .multilineTextAlignment(.center)
