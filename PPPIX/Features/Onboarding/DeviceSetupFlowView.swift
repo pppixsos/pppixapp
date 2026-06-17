@@ -2,40 +2,36 @@ import SwiftUI
 
 /// Disparado após um LOGIN (não cadastro) quando detectamos que este é
 /// um dispositivo novo que ainda não passou pelo fluxo de configuração
-/// local (permissões do iOS, que são sempre por-aparelho). Se a conta já
-/// tiver as 3 senhas configuradas no servidor, pulamos essa etapa —
-/// só pedimos o que realmente falta neste dispositivo.
+/// local. Pede tudo que é configurado por-aparelho — permissões, as 3
+/// senhas, veículo, e seleção de apps protegidos — exatamente como no
+/// cadastro, mas SEM pedir novamente os dados pessoais (nome, email,
+/// telefone, CPF, CEP), que já existem na conta.
 struct DeviceSetupFlowView: View {
     let onFinished: () -> Void
 
     private enum Step {
-        case checking
         case permissions
         case bankPassword
         case ppixPassword
         case emergencyPassword
         case attemptsLimit
+        case vehicleAsk
+        case vehicleDetails
         case appBlocking
+        case disguise
         case done
     }
 
-    @State private var step: Step = .checking
+    @State private var step: Step = .permissions
     @StateObject private var data = OnboardingData()
-    @State private var passwordsAlreadyExist = false
 
     var body: some View {
         ZStack {
             Color(hex: "#0A0A12").ignoresSafeArea()
 
             switch step {
-            case .checking:
-                ProgressView().tint(.white)
-                    .onAppear { Task { await checkExistingPasswords() } }
-
             case .permissions:
-                OnboardingPermissionsStep(onNext: {
-                    step = passwordsAlreadyExist ? .appBlocking : .bankPassword
-                })
+                OnboardingPermissionsStep(onNext: { step = .bankPassword })
 
             case .bankPassword:
                 OnboardingSinglePasswordStep(
@@ -62,11 +58,30 @@ struct DeviceSetupFlowView: View {
                 OnboardingAttemptsLimitStep(
                     data: data,
                     onBack: { step = .emergencyPassword },
+                    onNext: { step = .vehicleAsk }
+                )
+
+            case .vehicleAsk:
+                OnboardingVehicleAskStep(
+                    onBack: { step = .attemptsLimit },
+                    onAnswer: { hasVehicle in
+                        data.wantsVehicle = hasVehicle
+                        step = hasVehicle ? .vehicleDetails : .appBlocking
+                    }
+                )
+
+            case .vehicleDetails:
+                OnboardingVehicleDetailsStep(
+                    data: data,
+                    onBack: { step = .vehicleAsk },
                     onNext: { step = .appBlocking }
                 )
 
             case .appBlocking:
-                OnboardingAppBlockingStep(onFinish: { step = .done })
+                OnboardingAppBlockingStep(onFinish: { step = .disguise })
+
+            case .disguise:
+                OnboardingDisguiseStep(onFinish: { step = .done })
 
             case .done:
                 Color.clear.onAppear {
@@ -75,12 +90,5 @@ struct DeviceSetupFlowView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: step)
-    }
-
-    private func checkExistingPasswords() async {
-        if let list = try? await APIClient.shared.getPasswords(), !list.isEmpty {
-            passwordsAlreadyExist = true
-        }
-        step = .permissions
     }
 }
