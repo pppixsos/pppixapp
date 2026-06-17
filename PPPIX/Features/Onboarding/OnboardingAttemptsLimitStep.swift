@@ -54,17 +54,36 @@ struct OnboardingAttemptsLimitStep: View {
             ))
             SessionManager.shared.arePasswordsConfigured = true
 
-            // Busca o ID recém-criado para salvar o limite de tentativas
-            if let list = try? await APIClient.shared.getPasswords(),
-               let settings = list.first,
-               let settingsId = settings.id {
-                try? await APIClient.shared.updatePasswordSettings(
-                    id: settingsId,
-                    body: PasswordAttemptsRequest(
-                        max_wrong_attempts: maxAttempts,
-                        reset_attempts_after_minutes: 60
+            // Busca o ID recém-criado para salvar o limite de tentativas.
+            // Algumas vezes o backend pode levar um instante para refletir
+            // o registro recém-criado — tenta algumas vezes antes de desistir.
+            var settingsId: Int?
+            for attempt in 0..<3 {
+                if let list = try? await APIClient.shared.getPasswords(),
+                   let settings = list.first,
+                   let id = settings.id {
+                    settingsId = id
+                    break
+                }
+                if attempt < 2 {
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                }
+            }
+
+            if let settingsId {
+                do {
+                    try await APIClient.shared.updatePasswordSettings(
+                        id: settingsId,
+                        body: PasswordAttemptsRequest(
+                            max_wrong_attempts: maxAttempts,
+                            reset_attempts_after_minutes: 60
+                        )
                     )
-                )
+                } catch {
+                    // As senhas já foram salvas com sucesso — o limite de
+                    // tentativas é um ajuste secundário. Não bloqueia o
+                    // fluxo do usuário; o valor padrão do backend é usado.
+                }
             }
 
             isSaving = false
@@ -73,7 +92,7 @@ struct OnboardingAttemptsLimitStep: View {
             errorMessage = msg
             isSaving = false
         } catch {
-            errorMessage = "Erro ao salvar senhas. Tente novamente."
+            errorMessage = "Erro ao salvar senhas. Verifique sua internet e tente novamente."
             isSaving = false
         }
     }
