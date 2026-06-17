@@ -52,6 +52,33 @@ struct ProfileView: View {
                         }
                     }
 
+                    // Disfarce do app
+                    NavigationLink {
+                        AppDisguiseView()
+                    } label: {
+                        HStack {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(white: 0.1))
+                                    .frame(width: 32, height: 32)
+                                Image(systemName: "theatermasks.fill")
+                                    .foregroundColor(Color(hex: "#3366FF"))
+                                    .font(.system(size: 14))
+                            }
+                            Text("Disfarçar o App")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(Color(white: 0.3))
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(Color(white: 0.05))
+                        .cornerRadius(10)
+                    }
+
                     // Links
                     PPPIXCard {
                         VStack(spacing: 0) {
