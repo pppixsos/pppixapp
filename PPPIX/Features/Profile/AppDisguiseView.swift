@@ -1,147 +1,77 @@
-import SwiftUI
+import UIKit
 
-/// Tela onde o usuário escolhe disfarçar o PPPIX como outro app (ícone +
-/// nome de exibição mudam juntos na Tela de Início) ou reverter ao
-/// ícone original.
-struct AppDisguiseView: View {
-    @StateObject private var manager = AppDisguiseManager.shared
-    @State private var isApplying = false
-    @State private var errorMessage = ""
-    @State private var showSuccessFor: String?
+/// Gerencia a troca do ícone (e nome de exibição associado) do app entre
+/// o ícone original do PPPIX e um conjunto de disfarces. Usa a API oficial
+/// `setAlternateIconName` da Apple — aprovada para uso em produção desde
+/// que a troca só ocorra por ação explícita do usuário dentro do app
+/// (Guideline 4.6) e seja possível reverter ao ícone original.
+enum AppDisguise: String, CaseIterable, Identifiable {
+    case calculator = "AppIcon-Calculator"
+    case notes = "AppIcon-Notes"
+    case flashlight = "AppIcon-Flashlight"
+    case weather = "AppIcon-Weather"
+    case compass = "AppIcon-Compass"
+    case converter = "AppIcon-Converter"
+    case timer = "AppIcon-Timer"
 
-    var body: some View {
-        ZStack {
-            Color(hex: "#0A0A12").ignoresSafeArea()
+    var id: String { rawValue }
 
-            ScrollView {
-                VStack(spacing: 20) {
-                    VStack(spacing: 8) {
-                        Image(systemName: "theatermasks.fill")
-                            .font(.system(size: 44))
-                            .foregroundColor(Color(hex: "#3366FF"))
-                        Text("Disfarçar o App")
-                            .font(.title2.bold())
-                            .foregroundColor(.white)
-                        Text("Troque o ícone e o nome do PPPIX na Tela de Início por outro app comum. Você pode voltar ao original quando quiser.")
-                            .font(.subheadline)
-                            .foregroundColor(Color(white: 0.55))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 12)
-                    }
-                    .padding(.top, 16)
-
-                    // Opção: ícone original
-                    DisguiseOptionRow(
-                        title: "PPPIX (Original)",
-                        subtitle: "Ícone e nome padrão do app",
-                        symbol: "shield.fill",
-                        symbolColor: Color(hex: "#3366FF"),
-                        isSelected: manager.currentDisguise == nil,
-                        isLoading: isApplying && showSuccessFor == "original"
-                    ) {
-                        apply(nil, key: "original")
-                    }
-
-                    Divider().overlay(Color(white: 0.1)).padding(.vertical, 4)
-
-                    ForEach(AppDisguise.allCases) { disguise in
-                        DisguiseOptionRow(
-                            title: disguise.displayName,
-                            subtitle: "O app aparecerá como \"\(disguise.displayName)\" na Tela de Início",
-                            symbol: disguise.sfSymbol,
-                            symbolColor: Color(hex: "#44CC88"),
-                            isSelected: manager.currentDisguise == disguise,
-                            isLoading: isApplying && showSuccessFor == disguise.rawValue
-                        ) {
-                            apply(disguise, key: disguise.rawValue)
-                        }
-                    }
-
-                    if !errorMessage.isEmpty {
-                        ErrorBanner(message: errorMessage)
-                            .padding(.top, 8)
-                    }
-
-                    Text("O iOS mostra um aviso ao trocar o ícone — isso é um comportamento padrão do sistema e não pode ser desativado.")
-                        .font(.caption)
-                        .foregroundColor(Color(white: 0.4))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 8)
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 32)
-            }
+    /// Nome de exibição que aparece embaixo do ícone na Tela de Início
+    /// quando este disfarce está ativo.
+    var displayName: String {
+        switch self {
+        case .calculator: return "Calculadora"
+        case .notes: return "Notas"
+        case .flashlight: return "Lanterna"
+        case .weather: return "Clima"
+        case .compass: return "Bússola"
+        case .converter: return "Conversor"
+        case .timer: return "Cronômetro"
         }
-        .navigationTitle("Disfarce do App")
-        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func apply(_ disguise: AppDisguise?, key: String) {
-        guard !isApplying else { return }
-        isApplying = true
-        showSuccessFor = key
-        errorMessage = ""
+    /// Nome do asset do ícone (igual ao rawValue) — usado para pré-visualização.
+    var previewAssetName: String { rawValue }
 
-        manager.apply(disguise) { success in
-            isApplying = false
-            showSuccessFor = nil
-            if !success {
-                errorMessage = "Não foi possível alterar o ícone agora. Tente novamente."
-            }
+    var sfSymbol: String {
+        switch self {
+        case .calculator: return "plusminus.circle.fill"
+        case .notes: return "note.text"
+        case .flashlight: return "flashlight.on.fill"
+        case .weather: return "cloud.sun.fill"
+        case .compass: return "safari.fill"
+        case .converter: return "dollarsign.circle.fill"
+        case .timer: return "timer"
         }
     }
 }
 
-private struct DisguiseOptionRow: View {
-    let title: String
-    let subtitle: String
-    let symbol: String
-    let symbolColor: Color
-    let isSelected: Bool
-    let isLoading: Bool
-    let onTap: () -> Void
+@MainActor
+final class AppDisguiseManager: ObservableObject {
+    static let shared = AppDisguiseManager()
+    private init() {
+        currentDisguise = AppDisguise(rawValue: UIApplication.shared.alternateIconName ?? "")
+    }
 
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(white: 0.1))
-                        .frame(width: 48, height: 48)
-                    Image(systemName: symbol)
-                        .font(.system(size: 22))
-                        .foregroundColor(symbolColor)
-                }
+    @Published private(set) var currentDisguise: AppDisguise?
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.white)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(Color(white: 0.5))
-                        .multilineTextAlignment(.leading)
-                }
+    var isDisguised: Bool { currentDisguise != nil }
 
-                Spacer()
-
-                if isLoading {
-                    ProgressView().tint(.white)
-                } else if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(Color(hex: "#44CC88"))
-                        .font(.system(size: 20))
+    /// Aplica um disfarce. Passe `nil` para voltar ao ícone original do PPPIX.
+    func apply(_ disguise: AppDisguise?, completion: @escaping (Bool) -> Void) {
+        guard UIApplication.shared.supportsAlternateIcons else {
+            completion(false)
+            return
+        }
+        UIApplication.shared.setAlternateIconName(disguise?.rawValue) { [weak self] error in
+            DispatchQueue.main.async {
+                if error == nil {
+                    self?.currentDisguise = disguise
+                    completion(true)
+                } else {
+                    completion(false)
                 }
             }
-            .padding(14)
-            .background(Color(hex: "#141422"))
-            .cornerRadius(14)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(isSelected ? Color(hex: "#44CC88").opacity(0.4) : Color.clear, lineWidth: 1.5)
-            )
         }
-        .buttonStyle(.plain)
     }
 }
