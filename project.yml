@@ -7,8 +7,8 @@ options:
   xcodeVersion: "26.0"
 settings:
   base:
-    MARKETING_VERSION: "1.7.4"
-    CURRENT_PROJECT_VERSION: "289"
+    MARKETING_VERSION: "1.7.5"
+    CURRENT_PROJECT_VERSION: "290"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     SWIFT_COMPILATION_MODE: singlefile
