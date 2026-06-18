@@ -190,7 +190,7 @@ private struct PermissionRow: View {
 enum PermissionStatus { case granted, pending, denied }
 
 @MainActor
-final class PermissionsViewModel: ObservableObject {
+final class PermissionsViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     @Published var notificationsStatus: PermissionStatus = .pending
     @Published var locationStatus: PermissionStatus = .pending
@@ -199,7 +199,18 @@ final class PermissionsViewModel: ObservableObject {
     @Published var backgroundRefreshStatus: PermissionStatus = .pending
     @Published var screenTimeError: String = ""
 
+    /// Quando true, ao receber a mudança de autorização "When In Use" via
+    /// delegate, solicitamos automaticamente o upgrade para "Always" — usado
+    /// pelo fluxo de Localização em Background, que precisa das duas etapas
+    /// em sequência sem depender de tempo fixo (asyncAfter).
+    private var pendingAlwaysUpgrade = false
+
     private let locationManager = CLLocationManager()
+
+    override init() {
+        super.init()
+        locationManager.delegate = self
+    }
 
     func checkAll() {
         checkNotifications()
@@ -244,29 +255,44 @@ final class PermissionsViewModel: ObservableObject {
     }
 
     func requestLocation() {
+        pendingAlwaysUpgrade = false
         locationManager.requestWhenInUseAuthorization()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.checkLocation() }
+        // O resultado chega via locationManagerDidChangeAuthorization(_:)
+        // abaixo — sem depender de tempo fixo, evitando estado inconsistente.
     }
 
     func requestLocationAlways() {
         let status = locationManager.authorizationStatus
         if status == .notDetermined {
-            // Ainda não pediu nada — primeiro pede o "When In Use" (passo obrigatório
-            // do iOS antes de poder solicitar "Always").
+            // Ainda não pediu nada — primeiro pede o "When In Use" (passo
+            // obrigatório do iOS antes de poder solicitar "Always"). O
+            // upgrade automático para "Always" acontece no callback do
+            // delegate, quando o "When In Use" for de fato concedido.
+            pendingAlwaysUpgrade = true
             locationManager.requestWhenInUseAuthorization()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                self.locationManager.requestAlwaysAuthorization()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.checkLocation() }
-            }
         } else if status == .authorizedWhenInUse {
             // iOS só mostra o diálogo de upgrade para "Always" quando já há
             // "When In Use" concedido.
+            pendingAlwaysUpgrade = false
             locationManager.requestAlwaysAuthorization()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.checkLocation() }
         } else {
             // Já negado ou em estado que exige ajuste manual.
+            pendingAlwaysUpgrade = false
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(url)
+            }
+        }
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        // Callback oficial da Apple para mudanças de autorização — chamado
+        // de forma confiável tanto na primeira concessão/negação quanto em
+        // qualquer alteração feita depois nas Configurações do iPhone.
+        Task { @MainActor in
+            checkLocation()
+            if pendingAlwaysUpgrade && manager.authorizationStatus == .authorizedWhenInUse {
+                pendingAlwaysUpgrade = false
+                manager.requestAlwaysAuthorization()
             }
         }
     }
