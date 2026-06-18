@@ -1,6 +1,9 @@
 import SwiftUI
 import CoreLocation
 import UserNotifications
+#if !targetEnvironment(simulator)
+import FamilyControls
+#endif
 
 struct PermissionsView: View {
 
@@ -288,12 +291,20 @@ final class PermissionsViewModel: NSObject, ObservableObject, CLLocationManagerD
         // Callback oficial da Apple para mudanças de autorização — chamado
         // de forma confiável tanto na primeira concessão/negação quanto em
         // qualquer alteração feita depois nas Configurações do iPhone.
-        Task { @MainActor in
-            checkLocation()
-            if pendingAlwaysUpgrade && manager.authorizationStatus == .authorizedWhenInUse {
-                pendingAlwaysUpgrade = false
-                manager.requestAlwaysAuthorization()
-            }
+        // CLAuthorizationStatus é um enum simples (Sendable), então é
+        // seguro extraí-lo aqui fora e só então saltar para o MainActor.
+        let newStatus = manager.authorizationStatus
+        Task { @MainActor [weak self] in
+            self?.handleAuthorizationChange(newStatus)
+        }
+    }
+
+    @MainActor
+    private func handleAuthorizationChange(_ status: CLAuthorizationStatus) {
+        checkLocation()
+        if pendingAlwaysUpgrade && status == .authorizedWhenInUse {
+            pendingAlwaysUpgrade = false
+            locationManager.requestAlwaysAuthorization()
         }
     }
 
@@ -311,7 +322,3 @@ final class PermissionsViewModel: NSObject, ObservableObject, CLLocationManagerD
         #endif
     }
 }
-
-#if !targetEnvironment(simulator)
-import FamilyControls
-#endif
