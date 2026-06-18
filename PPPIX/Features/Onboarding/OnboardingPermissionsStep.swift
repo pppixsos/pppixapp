@@ -127,17 +127,10 @@ struct OnboardingPermissionsStep: View {
             // reavalia o status real de cada permissão.
             viewModel.checkAll()
         }
-        .onChange(of: item.status) { _ in
-            // Avança automaticamente um instante depois de conceder
-            if item.status == .granted {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    if currentIndex < items.count - 1 { advance() }
-                }
-            }
-        }
     }
 
     private func advance() {
+        guard currentIndex < items.count else { return }
         if currentIndex < items.count - 1 {
             currentIndex += 1
         } else {
