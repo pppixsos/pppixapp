@@ -21,7 +21,7 @@ struct OnboardingContactsStep: View {
             title: "Contatos de emergência",
             subtitle: "Quem deve ser avisado se você precisar de ajuda? Adicione pelo menos 1 contato.",
             stepIndex: 10,
-            totalSteps: 13,
+            totalSteps: 12,
             onBack: onBack
         ) {
             VStack(spacing: 18) {
