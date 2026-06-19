@@ -71,7 +71,7 @@ struct OnboardingSinglePasswordStep: View {
             title: kind.title,
             subtitle: kind.explanation,
             stepIndex: stepIndex,
-            totalSteps: 13,
+            totalSteps: 12,
             onBack: onBack
         ) {
             VStack(spacing: 14) {
