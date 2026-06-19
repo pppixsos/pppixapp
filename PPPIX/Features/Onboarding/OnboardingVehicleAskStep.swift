@@ -11,7 +11,7 @@ struct OnboardingVehicleAskStep: View {
             title: "Você tem um veículo?",
             subtitle: "Se você for acionar um alerta de emergência, os dados do seu veículo ajudam quem for te socorrer a te encontrar.",
             stepIndex: 9,
-            totalSteps: 13,
+            totalSteps: 12,
             onBack: onBack
         ) {
             VStack(spacing: 12) {
