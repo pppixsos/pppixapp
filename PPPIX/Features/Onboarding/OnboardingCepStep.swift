@@ -14,7 +14,7 @@ struct OnboardingCepStep: View {
             title: "Onde você mora?",
             subtitle: "Seu CEP ajuda a calibrar o alerta de emergência para a sua região.",
             stepIndex: 2,
-            totalSteps: 13,
+            totalSteps: 12,
             onBack: onBack
         ) {
             VStack(spacing: 14) {
