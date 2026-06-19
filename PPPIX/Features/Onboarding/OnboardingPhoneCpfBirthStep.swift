@@ -14,7 +14,7 @@ struct OnboardingPhoneCpfBirthStep: View {
             title: "Seus dados de contato",
             subtitle: "Usamos isso para identificar você e, em caso de emergência, te localizar com precisão.",
             stepIndex: 1,
-            totalSteps: 13,
+            totalSteps: 12,
             onBack: onBack
         ) {
             VStack(spacing: 14) {
