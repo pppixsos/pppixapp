@@ -15,7 +15,7 @@ struct OnboardingVehicleDetailsStep: View {
             title: "Dados do seu veículo",
             subtitle: "Essas informações só são compartilhadas durante um alerta de emergência.",
             stepIndex: 9,
-            totalSteps: 13,
+            totalSteps: 12,
             onBack: onBack
         ) {
             VStack(spacing: 14) {
