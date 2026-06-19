@@ -18,7 +18,7 @@ struct OnboardingAttemptsLimitStep: View {
             title: "Limite de tentativas erradas",
             subtitle: "Se alguém errar a senha mais vezes que esse limite, um alerta é enviado automaticamente para seus contatos de emergência.",
             stepIndex: 8,
-            totalSteps: 13,
+            totalSteps: 12,
             onBack: onBack
         ) {
             VStack(spacing: 18) {
