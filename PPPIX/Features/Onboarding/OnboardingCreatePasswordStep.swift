@@ -17,7 +17,7 @@ struct OnboardingCreatePasswordStep: View {
             title: "Crie sua senha de acesso",
             subtitle: "Essa é a senha para entrar no app. Use pelo menos 8 caracteres.",
             stepIndex: 3,
-            totalSteps: 13,
+            totalSteps: 12,
             onBack: onBack
         ) {
             VStack(spacing: 14) {
