@@ -15,7 +15,7 @@ struct OnboardingNameEmailStep: View {
             title: "Como você se chama?",
             subtitle: "Vamos te conhecer primeiro. Use seu nome completo, como no documento.",
             stepIndex: 0,
-            totalSteps: 13
+            totalSteps: 12
         ) {
             VStack(spacing: 14) {
                 PPPIXTextField(title: "Nome", placeholder: "João", text: $data.firstName)
