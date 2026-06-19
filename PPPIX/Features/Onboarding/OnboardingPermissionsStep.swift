@@ -71,7 +71,7 @@ struct OnboardingPermissionsStep: View {
             title: item.title,
             subtitle: item.description,
             stepIndex: 4,
-            totalSteps: 13
+            totalSteps: 12
         ) {
             VStack(spacing: 18) {
                 if item.status == .granted {
