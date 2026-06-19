@@ -87,20 +87,6 @@ struct HomeView: View {
                                 color: Color(hex: "#00CC66"),
                                 destination: PermissionsView()
                             )
-                            HomeCard(
-                                icon: "theatermasks.fill",
-                                title: "Disfarce",
-                                subtitle: "Trocar ícone",
-                                color: Color(hex: "#9933FF"),
-                                destination: AppDisguiseView()
-                            )
-                            HomeCard(
-                                icon: "eye.slash.fill",
-                                title: "Ocultar App",
-                                subtitle: "Como esconder",
-                                color: Color(hex: "#666688"),
-                                destination: HideAppTutorialView()
-                            )
                         }
 
                         // Premium card oculto — app gratuito por enquanto
