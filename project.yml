@@ -8,7 +8,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "1.7.8"
-    CURRENT_PROJECT_VERSION: "293"
+    CURRENT_PROJECT_VERSION: "294"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     SWIFT_COMPILATION_MODE: singlefile
@@ -65,24 +65,6 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleIconName: AppIcon
-        CFBundleIcons:
-          CFBundlePrimaryIcon:
-            CFBundleIconName: AppIcon
-          CFBundleAlternateIcons:
-            AppIcon-Calculator:
-              CFBundleIconName: AppIcon-Calculator
-            AppIcon-Notes:
-              CFBundleIconName: AppIcon-Notes
-            AppIcon-Flashlight:
-              CFBundleIconName: AppIcon-Flashlight
-            AppIcon-Weather:
-              CFBundleIconName: AppIcon-Weather
-            AppIcon-Compass:
-              CFBundleIconName: AppIcon-Compass
-            AppIcon-Converter:
-              CFBundleIconName: AppIcon-Converter
-            AppIcon-Timer:
-              CFBundleIconName: AppIcon-Timer
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:
