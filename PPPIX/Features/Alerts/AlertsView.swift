@@ -127,12 +127,21 @@ struct AlertsView: View {
     private func cancelAlert(_ alert: Alert) async {
         do {
             try await APIClient.shared.patchAlertStatus(id: alert.id, status: "cancelled")
+            stopTrackingIfMatching(alert.id)
             await loadAlerts()
         } catch {
             // tenta mark_read como fallback
             try? await APIClient.shared.markAlertRead(id: alert.id)
+            stopTrackingIfMatching(alert.id)
             await loadAlerts()
         }
+    }
+
+    /// Para o rastreamento em tempo real apenas se o alerta cancelado for
+    /// o mesmo que está sendo rastreado no momento.
+    private func stopTrackingIfMatching(_ alertId: Int) {
+        guard LiveLocationTracker.shared.activeAlertId == alertId else { return }
+        LiveLocationTracker.shared.stop()
     }
 }
 
