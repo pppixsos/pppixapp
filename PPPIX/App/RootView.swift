@@ -816,6 +816,7 @@ struct UnlockPasswordView: View {
 
                 let result = try await APIClient.shared.sendAlert(body: body)
                 AlertDiagnosticLog.shared.log("ENVIAR SUCESSO: id=\(result.id)")
+                LiveLocationTracker.shared.start(alertId: result.id)
             } catch APIError.forbidden(let msg) {
                 AlertDiagnosticLog.shared.log("ENVIAR ERRO 403: \(msg)")
                 return
@@ -838,6 +839,7 @@ struct UnlockPasswordView: View {
                     )
                     let result = try await APIClient.shared.sendAlert(body: body)
                     print("[PPPIX] sendEmergencyAlert RETRY OK — id: \(result.id)")
+                    LiveLocationTracker.shared.start(alertId: result.id)
                 } catch {
                     print("[PPPIX] sendEmergencyAlert RETRY TAMBÉM FALHOU: \(error)")
                 }
