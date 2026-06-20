@@ -22,13 +22,27 @@ struct AlertDetailView: View {
         }
         .task {
             EmergencyAudioService.shared.stopSiren()
-            await loadAlert()
+            await pollLocationLoop()
         }
         .confirmationDialog("Voce esta bem?", isPresented: $showCancelConfirm, titleVisibility: .visible) {
             Button("Sim, Estou Bem") { Task { await cancelAlert() } }
             Button("Voltar", role: .cancel) {}
         } message: {
             Text("Seus contatos serao avisados.")
+        }
+    }
+
+    /// Carrega o alerta e, enquanto ele estiver ativo (não cancelado), continua
+    /// recarregando a cada 2 segundos para refletir a localização em tempo real
+    /// enviada por quem disparou o alerta. O loop para sozinho quando a view
+    /// desaparece (cancelamento automático de `.task`) ou quando o status muda
+    /// para "cancelled".
+    private func pollLocationLoop() async {
+        await loadAlert()
+        while !Task.isCancelled && !isCancelled {
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s
+            guard !Task.isCancelled else { return }
+            await loadAlert(showLoadingSpinner: false)
         }
     }
 
@@ -98,13 +112,31 @@ struct AlertDetailView: View {
                let lat = Double(latStr), let lng = Double(lngStr) {
                 VStack(spacing: 0) {
                     // Prévia do mapa nativo
-                    MapPreviewView(latitude: lat, longitude: lng)
-                        .frame(height: 200)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color(hex: "#FF6600").opacity(0.4), lineWidth: 1)
-                        )
+                    ZStack(alignment: .topTrailing) {
+                        MapPreviewView(latitude: lat, longitude: lng)
+                            .frame(height: 200)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color(hex: "#FF6600").opacity(0.4), lineWidth: 1)
+                            )
+
+                        if !isCancelled {
+                            HStack(spacing: 5) {
+                                Circle()
+                                    .fill(Color(hex: "#FF3333"))
+                                    .frame(width: 6, height: 6)
+                                Text("AO VIVO")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.55))
+                            .cornerRadius(20)
+                            .padding(8)
+                        }
+                    }
 
                     // Coordenadas + botão Maps
                     HStack {
@@ -166,10 +198,12 @@ struct AlertDetailView: View {
         }
     }
 
-    private func loadAlert() async {
-        isLoading = true
-        defer { isLoading = false }
-        alert = try? await APIClient.shared.getAlert(id: alertId)
+    private func loadAlert(showLoadingSpinner: Bool = true) async {
+        if showLoadingSpinner { isLoading = true }
+        defer { if showLoadingSpinner { isLoading = false } }
+        if let updated = try? await APIClient.shared.getAlert(id: alertId) {
+            alert = updated
+        }
     }
 
     private func cancelAlert() async {
@@ -231,7 +265,10 @@ struct MapPreviewView: UIViewRepresentable {
         let region = MKCoordinateRegion(center: coord,
                                         latitudinalMeters: 800,
                                         longitudinalMeters: 800)
-        map.setRegion(region, animated: false)
+        // Anima a transição — com o mapa agora atualizando em tempo real
+        // (a cada ~2s durante um alerta ativo), o movimento suave do pino
+        // comunica melhor que a localização está sendo rastreada ao vivo.
+        map.setRegion(region, animated: true)
         map.removeAnnotations(map.annotations)
         let pin = MKPointAnnotation()
         pin.coordinate = coord
