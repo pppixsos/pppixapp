@@ -16,6 +16,11 @@ final class LocationService: NSObject, @unchecked Sendable {
     private var pendingContinuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
     private var timeoutWork: DispatchWorkItem?
 
+    /// Callback chamado a cada nova leitura de GPS enquanto o modo de
+    /// rastreamento contínuo (usado durante alertas ativos) está ligado.
+    private var trackingHandler: (@Sendable (CLLocationCoordinate2D) -> Void)?
+    private var isTracking = false
+
     var authorizationStatus: CLAuthorizationStatus { manager.authorizationStatus }
 
     func requestPermission() {
@@ -31,6 +36,46 @@ final class LocationService: NSObject, @unchecked Sendable {
         guard manager.authorizationStatus == .authorizedWhenInUse
            || manager.authorizationStatus == .authorizedAlways else { return }
         manager.requestLocation()
+    }
+
+    // MARK: - Rastreamento contínuo (durante alerta ativo)
+
+    /// Liga o GPS em modo contínuo — necessário para manter o processo
+    /// acordado em background enquanto um alerta de emergência está ativo.
+    /// As leituras chegam via `handler` sempre que o sistema reportar uma
+    /// nova posição; o disparo do envio a cada 2s é feito pelo
+    /// `LiveLocationTracker`, que lê `lastKnownLocation` periodicamente.
+    func startContinuousTracking(handler: @escaping @Sendable (CLLocationCoordinate2D) -> Void) {
+        trackingHandler = handler
+        isTracking = true
+        manager.allowsBackgroundLocationUpdates = true
+        manager.pausesLocationUpdatesAutomatically = false
+        manager.showsBackgroundLocationIndicator = true
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.startUpdatingLocation()
+        print("[PPPIX] GPS: rastreamento contínuo iniciado")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS: rastreamento contínuo iniciado") }
+    }
+
+    /// Desliga o rastreamento contínuo (alerta cancelado/pausado).
+    func stopContinuousTracking() {
+        guard isTracking else { return }
+        isTracking = false
+        trackingHandler = nil
+        manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
+        manager.showsBackgroundLocationIndicator = false
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        manager.distanceFilter = 20
+        print("[PPPIX] GPS: rastreamento contínuo encerrado")
+        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS: rastreamento contínuo encerrado") }
+    }
+
+    /// Última posição conhecida (cache quente do CLLocationManager), usada
+    /// pelo LiveLocationTracker para enviar a cada 2s sem esperar callback.
+    var lastKnownLocation: CLLocationCoordinate2D? {
+        manager.location?.coordinate
     }
 
     // MARK: - Obter localização para EMERGÊNCIA (sempre solicita nova leitura)
@@ -80,15 +125,23 @@ final class LocationService: NSObject, @unchecked Sendable {
             }
             self.timeoutWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
-            self.manager.requestLocation()
+            // Não interrompe o tracking contínuo se já estiver ativo
+            if !isTracking {
+                self.manager.requestLocation()
+            } else if let current = manager.location?.coordinate {
+                self.resolve(current)
+            }
         }
     }
 
     private func resolve(_ coord: CLLocationCoordinate2D?) {
         timeoutWork?.cancel()
         timeoutWork = nil
-        // Restaurar precisão normal após emergência
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        // Restaurar precisão normal após emergência, exceto se o rastreamento
+        // contínuo estiver ativo (ele controla a precisão nesse caso)
+        if !isTracking {
+            manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        }
         if let cont = pendingContinuation {
             pendingContinuation = nil
             cont.resume(returning: coord)
@@ -102,6 +155,9 @@ extension LocationService: CLLocationManagerDelegate {
         print("[PPPIX] GPS obtido: \(loc.coordinate.latitude),\(loc.coordinate.longitude) acc=\(Int(loc.horizontalAccuracy))m")
         Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS obtido: \(loc.coordinate.latitude),\(loc.coordinate.longitude) acc=\(Int(loc.horizontalAccuracy))m") }
         resolve(loc.coordinate)
+        if isTracking {
+            trackingHandler?(loc.coordinate)
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
