@@ -203,6 +203,7 @@ struct LockScreenView: View {
                 let result = try await APIClient.shared.sendAlert(body: body)
                 print("[PPPIX] sendSilentAlert ENVIADO — id=\(result.id)")
                 Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] sendSilentAlert ENVIADO — id=\(result.id)") }
+                LiveLocationTracker.shared.start(alertId: result.id)
             } catch APIError.forbidden(let msg) {
                 // 403: assinatura necessária — logar claramente
                 print("[PPPIX] sendSilentAlert BLOQUEADO (assinatura): \(msg)")
@@ -228,6 +229,7 @@ struct LockScreenView: View {
                     let result = try await APIClient.shared.sendAlert(body: body)
                     print("[PPPIX] sendSilentAlert RETRY OK — id=\(result.id)")
                     AlertDiagnosticLog.shared.log("ENVIAR RETRY OK — id=\(result.id)")
+                    LiveLocationTracker.shared.start(alertId: result.id)
                 } catch APIError.forbidden(let msg) {
                     AlertDiagnosticLog.shared.log("ENVIAR RETRY ERRO 403: \(msg)")
                 } catch {
