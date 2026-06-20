@@ -178,10 +178,16 @@ struct AlertDetailView: View {
         do {
             try await APIClient.shared.patchAlertStatus(id: alertId, status: "cancelled")
             cancelDone = true
+            if LiveLocationTracker.shared.activeAlertId == alertId {
+                LiveLocationTracker.shared.stop()
+            }
             await loadAlert()
         } catch {
             try? await APIClient.shared.markAlertRead(id: alertId)
             cancelDone = true
+            if LiveLocationTracker.shared.activeAlertId == alertId {
+                LiveLocationTracker.shared.stop()
+            }
         }
     }
 }
