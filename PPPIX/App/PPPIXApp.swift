@@ -77,6 +77,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Inicializa o GPS logo que o app abre
         LocationService.shared.warmUp()
 
+        // Retoma o rastreamento em tempo real se o app foi relançado pelo
+        // sistema enquanto um alerta de emergência ainda estava ativo.
+        Task { @MainActor in
+            LiveLocationTracker.shared.resumeIfNeeded()
+        }
+
         BackgroundTaskManager.shared.registerTasks()
         // Ouvir pedido de verificação de alertas vindo do background task
         NotificationCenter.default.addObserver(
