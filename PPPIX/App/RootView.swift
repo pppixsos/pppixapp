@@ -366,10 +366,15 @@ struct RootView: View {
 
 // MARK: - Tela de Emergência Fullscreen
 struct EmergencyAlertView: View {
-    let alert: Alert
     let onDismiss: () -> Void
+    @State private var alert: Alert
     @State private var isCancelling = false
     @State private var cancelled = false
+
+    init(alert: Alert, onDismiss: @escaping () -> Void) {
+        self._alert = State(initialValue: alert)
+        self.onDismiss = onDismiss
+    }
 
     private var isSender: Bool {
         alert.sender_email.lowercased() == SessionManager.shared.userEmail.lowercased()
@@ -378,6 +383,8 @@ struct EmergencyAlertView: View {
     private var displayName: String {
         alert.sender_name.isEmpty ? alert.sender_email : alert.sender_name
     }
+
+    private var isCancelled: Bool { alert.status == "cancelled" || cancelled }
 
     var body: some View {
         ZStack {
@@ -416,9 +423,27 @@ struct EmergencyAlertView: View {
                     if alert.has_location, let latStr = alert.latitude, let lngStr = alert.longitude,
                        let lat = Double(latStr), let lng = Double(lngStr) {
                         VStack(spacing: 0) {
-                            MapPreviewView(latitude: lat, longitude: lng)
-                                .frame(height: 200)
-                                .cornerRadius(12)
+                            ZStack(alignment: .topTrailing) {
+                                MapPreviewView(latitude: lat, longitude: lng)
+                                    .frame(height: 200)
+                                    .cornerRadius(12)
+
+                                if !isCancelled {
+                                    HStack(spacing: 5) {
+                                        Circle()
+                                            .fill(Color(hex: "#FF3333"))
+                                            .frame(width: 6, height: 6)
+                                        Text("AO VIVO")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color.black.opacity(0.55))
+                                    .cornerRadius(20)
+                                    .padding(8)
+                                }
+                            }
                             HStack {
                                 Text("📍 \(latStr), \(lngStr)")
                                     .font(.caption)
@@ -555,6 +580,23 @@ struct EmergencyAlertView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
                 }
+            }
+        }
+        .task {
+            await pollLocationLoop()
+        }
+    }
+
+    /// Recarrega o alerta a cada 2s enquanto ele estiver ativo, para que o
+    /// mapa exiba a localização em tempo real enviada por quem disparou o
+    /// alerta de emergência. Para automaticamente quando a view some da
+    /// tela ou quando o alerta é cancelado.
+    private func pollLocationLoop() async {
+        while !Task.isCancelled && !isCancelled {
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s
+            guard !Task.isCancelled else { return }
+            if let updated = try? await APIClient.shared.getAlert(id: alert.id) {
+                alert = updated
             }
         }
     }
