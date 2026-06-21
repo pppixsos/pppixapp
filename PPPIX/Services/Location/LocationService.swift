@@ -39,23 +39,53 @@ final class LocationService: NSObject, @unchecked Sendable {
     }
 
     // MARK: - Rastreamento contínuo (durante alerta ativo)
+    //
+    // Usa `startUpdatingLocation()` contínuo (não `requestLocation()` em loop,
+    // que é projetado pela Apple para UMA leitura pontual e para de entregar
+    // updates logo em seguida — usá-lo repetidamente NÃO atualiza em tempo real).
 
-    /// Liga o GPS em modo contínuo — necessário para manter o processo
-    /// acordado em background enquanto um alerta de emergência está ativo.
-    /// As leituras chegam via `handler` sempre que o sistema reportar uma
-    /// nova posição; o disparo do envio a cada 2s é feito pelo
-    /// `LiveLocationTracker`, que lê `lastKnownLocation` periodicamente.
+    /// Liga o GPS em modo contínuo. As leituras chegam via `handler` sempre
+    /// que o sistema reportar uma nova posição; o disparo do envio a cada 2s
+    /// é feito pelo `LiveLocationTracker`, que aplica o throttle.
     func startContinuousTracking(handler: @escaping @Sendable (CLLocationCoordinate2D) -> Void) {
+        // Cancela qualquer leitura pontual pendente (getCurrentLocation) para
+        // não deixar o manager num estado intermediário inconsistente — uma
+        // continuation pendente de requestLocation() competindo com o modo
+        // contínuo era uma das causas da localização "travar".
+        timeoutWork?.cancel()
+        timeoutWork = nil
+        if let cont = pendingContinuation {
+            pendingContinuation = nil
+            cont.resume(returning: manager.location?.coordinate)
+        }
+
         trackingHandler = handler
         isTracking = true
-        manager.allowsBackgroundLocationUpdates = true
+
+        // CRÍTICO: só liga o modo background se a permissão "Sempre" foi de
+        // fato concedida. Setar allowsBackgroundLocationUpdates=true sem
+        // permissão Always (ou sem o background mode "location" no
+        // Info.plist) faz o CLLocationManager parar de entregar atualizações
+        // silenciosamente, sem nenhum erro — essa era a causa raiz do bug de
+        // "localização não atualiza nunca". Em foreground o GPS funciona
+        // normalmente mesmo sem essa flag.
+        let canUseBackground = manager.authorizationStatus == .authorizedAlways
+        manager.allowsBackgroundLocationUpdates = canUseBackground
         manager.pausesLocationUpdatesAutomatically = false
-        manager.showsBackgroundLocationIndicator = true
+        manager.showsBackgroundLocationIndicator = canUseBackground
+
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = kCLDistanceFilterNone
+
+        // Restart limpo: parar antes de iniciar de novo evita que o manager
+        // ignore startUpdatingLocation() por já considerar que está ativo
+        // (pode acontecer após um requestLocation() anterior).
+        manager.stopUpdatingLocation()
         manager.startUpdatingLocation()
-        print("[PPPIX] GPS: rastreamento contínuo iniciado")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS: rastreamento contínuo iniciado") }
+
+        let msg = "[PPPIX] GPS: rastreamento contínuo iniciado (background=\(canUseBackground), auth=\(manager.authorizationStatus.rawValue))"
+        print(msg)
+        Task { @MainActor in AlertDiagnosticLog.shared.log(msg) }
     }
 
     /// Desliga o rastreamento contínuo (alerta cancelado/pausado).
@@ -72,8 +102,7 @@ final class LocationService: NSObject, @unchecked Sendable {
         Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS: rastreamento contínuo encerrado") }
     }
 
-    /// Última posição conhecida (cache quente do CLLocationManager), usada
-    /// pelo LiveLocationTracker para enviar a cada 2s sem esperar callback.
+    /// Última posição conhecida (cache quente do CLLocationManager).
     var lastKnownLocation: CLLocationCoordinate2D? {
         manager.location?.coordinate
     }
@@ -93,6 +122,13 @@ final class LocationService: NSObject, @unchecked Sendable {
             return nil
         }
 
+        // Se o tracking contínuo já estiver ativo, usa a posição mais recente
+        // do cache em vez de competir com o modo contínuo por uma leitura
+        // pontual via requestLocation() (que pararia o streaming).
+        if isTracking, let current = manager.location?.coordinate {
+            return current
+        }
+
         // Cache muito recente (< 15s) com boa precisão — usar direto
         if let cached = manager.location,
            cached.timestamp.timeIntervalSinceNow > -15,
@@ -103,7 +139,7 @@ final class LocationService: NSObject, @unchecked Sendable {
             return cached.coordinate
         }
 
-        // Solicitar com melhor precisão para emergência
+        // Solicitar com melhor precisão (leitura pontual)
         manager.desiredAccuracy = kCLLocationAccuracyBest
         print("[PPPIX] GPS: solicitando localização de alta precisão...")
         Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS: solicitando localização de alta precisão...") }
@@ -125,12 +161,7 @@ final class LocationService: NSObject, @unchecked Sendable {
             }
             self.timeoutWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
-            // Não interrompe o tracking contínuo se já estiver ativo
-            if !isTracking {
-                self.manager.requestLocation()
-            } else if let current = manager.location?.coordinate {
-                self.resolve(current)
-            }
+            self.manager.requestLocation()
         }
     }
 
@@ -152,8 +183,9 @@ final class LocationService: NSObject, @unchecked Sendable {
 extension LocationService: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last, loc.horizontalAccuracy >= 0 else { return }
-        print("[PPPIX] GPS obtido: \(loc.coordinate.latitude),\(loc.coordinate.longitude) acc=\(Int(loc.horizontalAccuracy))m")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS obtido: \(loc.coordinate.latitude),\(loc.coordinate.longitude) acc=\(Int(loc.horizontalAccuracy))m") }
+        let msg = "[PPPIX] GPS obtido: \(loc.coordinate.latitude),\(loc.coordinate.longitude) acc=\(Int(loc.horizontalAccuracy))m tracking=\(isTracking)"
+        print(msg)
+        Task { @MainActor in AlertDiagnosticLog.shared.log(msg) }
         resolve(loc.coordinate)
         if isTracking {
             trackingHandler?(loc.coordinate)
@@ -161,9 +193,17 @@ extension LocationService: CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("[PPPIX] GPS erro: \(error.localizedDescription)")
-        Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS erro: \(error.localizedDescription)") }
+        let msg = "[PPPIX] GPS erro: \(error.localizedDescription) tracking=\(isTracking)"
+        print(msg)
+        Task { @MainActor in AlertDiagnosticLog.shared.log(msg) }
         resolve(manager.location?.coordinate)
+        // Se o erro ocorreu durante o tracking contínuo, tenta reiniciar —
+        // alguns erros (kCLErrorLocationUnknown) são temporários e a Apple
+        // recomenda simplesmente continuar tentando.
+        if isTracking {
+            manager.stopUpdatingLocation()
+            manager.startUpdatingLocation()
+        }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -171,7 +211,15 @@ extension LocationService: CLLocationManagerDelegate {
         print("[PPPIX] GPS auth mudou: \(s.rawValue)")
         Task { @MainActor in AlertDiagnosticLog.shared.log("[PPPIX] GPS auth mudou: \(s.rawValue)") }
         if s == .authorizedWhenInUse || s == .authorizedAlways {
-            manager.requestLocation()
+            if isTracking {
+                // Permissão mudou durante tracking ativo (ex: usuário foi em
+                // Ajustes e trocou para "Sempre") — reaplica a config.
+                manager.allowsBackgroundLocationUpdates = (s == .authorizedAlways)
+                manager.showsBackgroundLocationIndicator = (s == .authorizedAlways)
+                manager.startUpdatingLocation()
+            } else {
+                manager.requestLocation()
+            }
         }
     }
 }
