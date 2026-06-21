@@ -8,6 +8,7 @@ struct ProfileView: View {
     @State private var showDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError = ""
+    @State private var showDiagnostic = false
 
     var body: some View {
         ZStack {
@@ -87,6 +88,28 @@ struct ProfileView: View {
                     }
                     .disabled(isDeletingAccount)
 
+                    // Diagnóstico (debug de envio/recebimento de alertas)
+                    Button {
+                        showDiagnostic = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "stethoscope")
+                                .foregroundColor(Color(hex: "#44AAFF"))
+                                .font(.system(size: 14))
+                            Text("Diagnóstico")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(Color(white: 0.3))
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(Color(white: 0.05))
+                        .cornerRadius(10)
+                    }
+
                     // Versão
                     Text("PPPIX iOS v1.0.0")
                         .font(.caption)
@@ -112,6 +135,9 @@ struct ProfileView: View {
             }
         }
         .task { await loadFreshProfile() }
+        .sheet(isPresented: $showDiagnostic) {
+            AlertDiagnosticView()
+        }
         .confirmationDialog("Sair da Conta", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
             Button("Sair", role: .destructive) { logout() }
             Button("Cancelar", role: .cancel) {}
