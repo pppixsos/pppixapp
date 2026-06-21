@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import CoreLocation
 
 struct AlertDetailView: View {
 
@@ -257,22 +258,46 @@ struct MapPreviewView: UIViewRepresentable {
         map.isScrollEnabled = false
         map.isZoomEnabled = false
         map.isUserInteractionEnabled = false
+
+        // Cria o pino uma única vez; updateUIView só move sua coordenada,
+        // em vez de remover/recriar a cada atualização (isso é o que causava
+        // o "piscar" — o ícone sumir e reaparecer a cada 2 segundos).
+        let pin = MKPointAnnotation()
+        pin.title = "Localização"
+        map.addAnnotation(pin)
+
         return map
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
         let coord = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-        let region = MKCoordinateRegion(center: coord,
-                                        latitudinalMeters: 800,
-                                        longitudinalMeters: 800)
-        // Anima a transição — com o mapa agora atualizando em tempo real
-        // (a cada ~2s durante um alerta ativo), o movimento suave do pino
-        // comunica melhor que a localização está sendo rastreada ao vivo.
-        map.setRegion(region, animated: true)
-        map.removeAnnotations(map.annotations)
-        let pin = MKPointAnnotation()
-        pin.coordinate = coord
-        pin.title = "Localização"
-        map.addAnnotation(pin)
+
+        // Move o pino já existente — anima suavemente em vez de piscar.
+        if let pin = map.annotations.first as? MKPointAnnotation {
+            UIView.animate(withDuration: 0.5) {
+                pin.coordinate = coord
+            }
+        }
+
+        // Só recentraliza a câmera se a posição mudou o suficiente para
+        // valer a pena (evita "tremedeira" quando o GPS manda a mesma
+        // leitura, ou uma leitura quase idêntica, repetidamente).
+        let lastCenter = context.coordinator.lastCenter
+        let moved = lastCenter.map { CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+            .distance(from: CLLocation(latitude: coord.latitude, longitude: coord.longitude)) } ?? .greatestFiniteMagnitude
+
+        if moved > 5 { // só recentraliza se moveu mais de 5 metros
+            let region = MKCoordinateRegion(center: coord,
+                                            latitudinalMeters: 800,
+                                            longitudinalMeters: 800)
+            map.setRegion(region, animated: true)
+            context.coordinator.lastCenter = coord
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var lastCenter: CLLocationCoordinate2D?
     }
 }
