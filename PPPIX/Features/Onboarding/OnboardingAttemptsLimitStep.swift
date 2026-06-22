@@ -2,6 +2,8 @@ import SwiftUI
 
 struct OnboardingAttemptsLimitStep: View {
     @ObservedObject var data: OnboardingData
+    var preloadedMaxAttempts: Int = 3
+    var existingPasswordId: Int? = nil
     let onBack: () -> Void
     let onNext: () -> Void
 
@@ -40,6 +42,7 @@ struct OnboardingAttemptsLimitStep: View {
                 }
             }
         }
+        .onAppear { maxAttempts = preloadedMaxAttempts }
     }
 
     private func saveAndNext() async {
@@ -47,6 +50,7 @@ struct OnboardingAttemptsLimitStep: View {
         errorMessage = ""
 
         do {
+            // Salva/atualiza as senhas
             try await APIClient.shared.setPasswords(body: SetPasswordsRequest(
                 bank_password: data.bankPassword,
                 ppix_password: data.ppixPassword,
@@ -54,36 +58,31 @@ struct OnboardingAttemptsLimitStep: View {
             ))
             SessionManager.shared.arePasswordsConfigured = true
 
-            // Busca o ID recém-criado para salvar o limite de tentativas.
-            // Algumas vezes o backend pode levar um instante para refletir
-            // o registro recém-criado — tenta algumas vezes antes de desistir.
-            var settingsId: Int?
-            for attempt in 0..<3 {
-                if let list = try? await APIClient.shared.getPasswords(),
-                   let settings = list.first,
-                   let id = settings.id {
-                    settingsId = id
-                    break
-                }
-                if attempt < 2 {
-                    try? await Task.sleep(nanoseconds: 400_000_000)
+            // Obtém o ID do PasswordConfig (usa o existente se já tiver)
+            var settingsId: Int? = existingPasswordId
+            if settingsId == nil {
+                for attempt in 0..<3 {
+                    if let list = try? await APIClient.shared.getPasswords(),
+                       let settings = list.first,
+                       let id = settings.id {
+                        settingsId = id
+                        break
+                    }
+                    if attempt < 2 {
+                        try? await Task.sleep(nanoseconds: 400_000_000)
+                    }
                 }
             }
 
+            // Salva o limite de tentativas
             if let settingsId {
-                do {
-                    try await APIClient.shared.updatePasswordSettings(
-                        id: settingsId,
-                        body: PasswordAttemptsRequest(
-                            max_wrong_attempts: maxAttempts,
-                            reset_attempts_after_minutes: 60
-                        )
+                try? await APIClient.shared.updatePasswordSettings(
+                    id: settingsId,
+                    body: PasswordAttemptsRequest(
+                        max_wrong_attempts: maxAttempts,
+                        reset_attempts_after_minutes: 60
                     )
-                } catch {
-                    // As senhas já foram salvas com sucesso — o limite de
-                    // tentativas é um ajuste secundário. Não bloqueia o
-                    // fluxo do usuário; o valor padrão do backend é usado.
-                }
+                )
             }
 
             isSaving = false
