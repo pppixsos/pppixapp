@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingVehicleDetailsStep: View {
     @ObservedObject var data: OnboardingData
+    var existingVehicle: Vehicle? = nil
     let onBack: () -> Void
     let onNext: () -> Void
 
@@ -29,7 +30,8 @@ struct OnboardingVehicleDetailsStep: View {
 
                 if !errorMessage.isEmpty { ErrorBanner(message: errorMessage) }
 
-                PPPIXButton(title: "Salvar veículo", isLoading: isSaving) {
+                PPPIXButton(title: existingVehicle != nil ? "Atualizar veículo" : "Salvar veículo",
+                            isLoading: isSaving) {
                     Task { await saveAndNext() }
                 }
             }
@@ -51,10 +53,18 @@ struct OnboardingVehicleDetailsStep: View {
         isSaving = true
         errorMessage = ""
 
+        let body = VehicleRequest(
+            model: model, license_plate: plate,
+            color: color, year: year, is_active: true
+        )
+
         do {
-            _ = try await APIClient.shared.createVehicle(body: VehicleRequest(
-                model: model, license_plate: plate, color: color, year: year, is_active: true
-            ))
+            if let existing = existingVehicle, let id = existing.id {
+                // Atualiza veículo existente em vez de criar duplicata
+                _ = try await APIClient.shared.updateVehicle(id: id, body: body)
+            } else {
+                _ = try await APIClient.shared.createVehicle(body: body)
+            }
             isSaving = false
             onNext()
         } catch {
