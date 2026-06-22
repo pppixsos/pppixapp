@@ -1,15 +1,16 @@
 import SwiftUI
 
-/// Disparado após um LOGIN (não cadastro) quando detectamos que este é
-/// um dispositivo novo que ainda não passou pelo fluxo de configuração
-/// local. Pede tudo que é configurado por-aparelho — permissões, as 3
-/// senhas, veículo, e seleção de apps protegidos — exatamente como no
-/// cadastro, mas SEM pedir novamente os dados pessoais (nome, email,
-/// telefone, CPF, CEP), que já existem na conta.
+/// Disparado após um LOGIN quando este aparelho ainda não passou pelo
+/// setup local (primeiro login, ou após logout).
+///
+/// Busca os dados já existentes na conta (senhas, veículo, limite de
+/// tentativas) e pré-preenche o OnboardingData — o usuário só confirma
+/// e avança, em vez de redigitar tudo do zero.
 struct DeviceSetupFlowView: View {
     let onFinished: () -> Void
 
     private enum Step {
+        case loading       // buscando dados do servidor
         case permissions
         case bankPassword
         case ppixPassword
@@ -21,14 +22,23 @@ struct DeviceSetupFlowView: View {
         case done
     }
 
-    @State private var step: Step = .permissions
+    @State private var step: Step = .loading
     @StateObject private var data = OnboardingData()
+
+    // Dados existentes na conta, buscados no .loading
+    @State private var existingPasswordId: Int? = nil
+    @State private var existingVehicle: Vehicle? = nil
+    @State private var existingMaxAttempts: Int = 3
+    @State private var loadError = ""
 
     var body: some View {
         ZStack {
             Color(hex: "#0A0A12").ignoresSafeArea()
 
             switch step {
+            case .loading:
+                loadingView
+
             case .permissions:
                 OnboardingPermissionsStep(onNext: { step = .bankPassword })
 
@@ -56,6 +66,8 @@ struct DeviceSetupFlowView: View {
             case .attemptsLimit:
                 OnboardingAttemptsLimitStep(
                     data: data,
+                    preloadedMaxAttempts: existingMaxAttempts,
+                    existingPasswordId: existingPasswordId,
                     onBack: { step = .emergencyPassword },
                     onNext: { step = .vehicleAsk }
                 )
@@ -72,6 +84,7 @@ struct DeviceSetupFlowView: View {
             case .vehicleDetails:
                 OnboardingVehicleDetailsStep(
                     data: data,
+                    existingVehicle: existingVehicle,
                     onBack: { step = .vehicleAsk },
                     onNext: { step = .appBlocking }
                 )
@@ -80,11 +93,79 @@ struct DeviceSetupFlowView: View {
                 OnboardingAppBlockingStep(onFinish: { step = .done })
 
             case .done:
-                Color.clear.onAppear {
-                    onFinished()
-                }
+                Color.clear.onAppear { onFinished() }
             }
         }
         .animation(.easeInOut(duration: 0.25), value: step)
+        .task { await loadExistingData() }
+    }
+
+    // MARK: - Loading view
+
+    private var loadingView: some View {
+        VStack(spacing: 20) {
+            if loadError.isEmpty {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.4)
+                Text("Carregando seus dados...")
+                    .font(.subheadline)
+                    .foregroundColor(Color(white: 0.5))
+            } else {
+                Image(systemName: "wifi.slash")
+                    .font(.system(size: 36))
+                    .foregroundColor(Color(hex: "#FF4444"))
+                Text("Erro ao carregar dados")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                Text(loadError)
+                    .font(.caption)
+                    .foregroundColor(Color(white: 0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                PPPIXButton(title: "Tentar novamente") {
+                    loadError = ""
+                    Task { await loadExistingData() }
+                }
+                .padding(.horizontal, 40)
+            }
+        }
+    }
+
+    // MARK: - Carrega dados existentes da conta
+
+    private func loadExistingData() async {
+        do {
+            // Busca senhas e veículo em paralelo
+            async let passwordsTask = APIClient.shared.getPasswords()
+            async let vehiclesTask  = APIClient.shared.getVehicles()
+
+            let passwords = try await passwordsTask
+            let vehicles  = try await vehiclesTask
+
+            // Pré-preenche senhas
+            if let pw = passwords.first {
+                existingPasswordId = pw.id
+                data.bankPassword      = pw.bank_password_plain      ?? ""
+                data.ppixPassword      = pw.ppix_password_plain      ?? ""
+                data.emergencyPassword = pw.emergency_password_plain ?? ""
+                existingMaxAttempts    = pw.max_wrong_attempts        ?? 3
+            }
+
+            // Pré-preenche veículo ativo
+            if let active = vehicles.first(where: { $0.is_active }) ?? vehicles.first {
+                existingVehicle     = active
+                data.vehicleModel   = active.model
+                data.vehiclePlate   = active.license_plate
+                data.vehicleColor   = active.color
+                data.vehicleYear    = String(active.year)
+                data.wantsVehicle   = true
+            }
+
+            step = .permissions
+
+        } catch {
+            loadError = "Verifique sua conexão e tente novamente."
+        }
     }
 }
