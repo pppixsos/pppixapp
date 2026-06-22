@@ -136,12 +136,10 @@ struct DeviceSetupFlowView: View {
 
     private func loadExistingData() async {
         do {
-            // Busca senhas e veículo em paralelo
-            async let passwordsTask = APIClient.shared.getPasswords()
-            async let vehiclesTask  = APIClient.shared.getVehicles()
-
-            let passwords = try await passwordsTask
-            let vehicles  = try await vehiclesTask
+            // Busca senhas e veículo sequencialmente (APIClient é @MainActor,
+            // não compatível com async let nonisolated no Swift 6)
+            let passwords = try await APIClient.shared.getPasswords()
+            let vehicles  = try await APIClient.shared.getVehicles()
 
             // Pré-preenche senhas
             if let pw = passwords.first {
