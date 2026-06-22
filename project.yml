@@ -7,8 +7,8 @@ options:
   xcodeVersion: "26.0"
 settings:
   base:
-    MARKETING_VERSION: "1.8.3"
-    CURRENT_PROJECT_VERSION: "301"
+    MARKETING_VERSION: "1.8.4"
+    CURRENT_PROJECT_VERSION: "302"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     SWIFT_COMPILATION_MODE: singlefile
@@ -67,13 +67,11 @@ targets:
         CFBundleIconName: AppIcon
         UILaunchScreen:
           UIColorName: ""
+        UIRequiresFullScreen: true
+        UIDeviceFamily:
+          - 1
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        UISupportedInterfaceOrientations~ipad:
-          - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationPortraitUpsideDown
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         UIBackgroundModes:
           - fetch
           - remote-notification
