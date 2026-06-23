@@ -272,24 +272,26 @@ struct MapPreviewView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         let coord = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
 
-        // Move o pino já existente — anima suavemente em vez de piscar.
+        // Move o pino existente diretamente — o MapKit já anima internamente
+        // a transição da anotação quando a coordenada muda, não precisamos
+        // de UIView.animate (que não tem efeito em MKPointAnnotation.coordinate).
         if let pin = map.annotations.first as? MKPointAnnotation {
-            UIView.animate(withDuration: 0.5) {
-                pin.coordinate = coord
-            }
+            pin.coordinate = coord
         }
 
-        // Só recentraliza a câmera se a posição mudou o suficiente para
-        // valer a pena (evita "tremedeira" quando o GPS manda a mesma
-        // leitura, ou uma leitura quase idêntica, repetidamente).
+        // Só recentraliza a câmera se a posição mudou mais de 5 metros
         let lastCenter = context.coordinator.lastCenter
-        let moved = lastCenter.map { CLLocation(latitude: $0.latitude, longitude: $0.longitude)
-            .distance(from: CLLocation(latitude: coord.latitude, longitude: coord.longitude)) } ?? .greatestFiniteMagnitude
+        let moved = lastCenter.map {
+            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+                .distance(from: CLLocation(latitude: coord.latitude, longitude: coord.longitude))
+        } ?? .greatestFiniteMagnitude
 
-        if moved > 5 { // só recentraliza se moveu mais de 5 metros
-            let region = MKCoordinateRegion(center: coord,
-                                            latitudinalMeters: 800,
-                                            longitudinalMeters: 800)
+        if moved > 5 {
+            let region = MKCoordinateRegion(
+                center: coord,
+                latitudinalMeters: 800,
+                longitudinalMeters: 800
+            )
             map.setRegion(region, animated: true)
             context.coordinator.lastCenter = coord
         }
