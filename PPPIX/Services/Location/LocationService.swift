@@ -77,13 +77,15 @@ final class LocationService: NSObject, @unchecked Sendable {
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = kCLDistanceFilterNone
 
-        // Restart limpo: parar antes de iniciar de novo evita que o manager
-        // ignore startUpdatingLocation() por já considerar que está ativo
-        // (pode acontecer após um requestLocation() anterior).
-        manager.stopUpdatingLocation()
+        // NÃO fazemos stopUpdatingLocation() + startUpdatingLocation() aqui.
+        // Parar e reiniciar o GPS cria um gap de 1-3s onde nenhuma posição
+        // chega (o hardware precisa reconectar os satélites). Apenas mudar
+        // desiredAccuracy/distanceFilter enquanto o manager já está ativo
+        // é suficiente e não interrompe o stream.
+        // Se o manager não estava ativo, startUpdatingLocation() o inicia.
         manager.startUpdatingLocation()
 
-        let msg = "[PPPIX] GPS: rastreamento contínuo iniciado (background=\(canUseBackground), auth=\(manager.authorizationStatus.rawValue))"
+        let msg = "[GPS] tracking iniciado (background=\(canUseBackground), auth=\(manager.authorizationStatus.rawValue))"
         print(msg)
         Task { @MainActor in AlertDiagnosticLog.shared.log(msg) }
     }
