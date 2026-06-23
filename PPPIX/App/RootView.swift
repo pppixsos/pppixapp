@@ -599,6 +599,10 @@ struct EmergencyAlertView: View {
     /// alerta de emergência. Para automaticamente quando a view some da
     /// tela ou quando o alerta é cancelado.
     private func pollLocationLoop() async {
+        // Busca imediata — não dormir antes da primeira carga
+        if let updated = try? await APIClient.shared.getAlert(id: alert.id) {
+            alert = updated
+        }
         while !Task.isCancelled && !isCancelled {
             try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s
             guard !Task.isCancelled else { return }
