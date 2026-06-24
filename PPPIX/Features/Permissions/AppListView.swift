@@ -5,10 +5,18 @@ import FamilyControls
 
 struct AppListView: View {
     @ObservedObject private var manager = ScreenTimeManager.shared
+    @ObservedObject private var premium = PremiumManager.shared
     @State private var showPicker = false
     @State private var tempSelection = FamilyActivitySelection()
     @State private var showConfirm = false
     @State private var showRemoveConfirm = false
+    @State private var showPaywall = false
+
+    private var hasBlockedApp: Bool {
+        !manager.currentSelection.applicationTokens.isEmpty ||
+        !manager.currentSelection.categoryTokens.isEmpty
+    }
+    private var atLimit: Bool { !premium.isPremium && hasBlockedApp }
 
     var body: some View {
         ZStack {
@@ -32,6 +40,19 @@ struct AppListView: View {
                     showConfirm = true
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if atLimit {
+                PremiumBanner(
+                    message: "Quer bloquear mais aplicativos? Contrate o Premium",
+                    onTap: { showPaywall = true }
+                )
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+            }
+        }
+        .fullScreenCover(isPresented: $showPaywall) {
+            PremiumPaywallView(onClose: { showPaywall = false })
         }
         .confirmationDialog("Ativar proteção?", isPresented: $showConfirm, titleVisibility: .visible) {
             Button("Ativar Proteção") {
@@ -120,26 +141,36 @@ struct AppListView: View {
 
                 // Botão principal — abre FamilyActivityPicker
                 Button {
-                    tempSelection = manager.currentSelection
-                    showPicker = true
+                    if atLimit {
+                        showPaywall = true
+                    } else {
+                        tempSelection = manager.currentSelection
+                        showPicker = true
+                    }
                 } label: {
                     HStack(spacing: 14) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(LinearGradient(
-                                    colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing
-                                ))
+                                .fill(Color(white: atLimit ? 0.15 : 0.0))
                                 .frame(width: 34, height: 34)
-
+                            if !atLimit {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(LinearGradient(
+                                        colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing
+                                    ))
+                                    .frame(width: 34, height: 34)
+                            }
                             Image(systemName: "apps.iphone")
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white)
+                                .foregroundColor(atLimit ? Color(white: 0.3) : .white)
                         }
 
-                        Text(manager.hasBlockedApps ? "Alterar Apps Protegidos" : "Escolher Apps para Proteger")
+                        Text(atLimit
+                            ? "Plano Premium — Bloquear Mais Apps"
+                            : manager.hasBlockedApps ? "Alterar Apps Protegidos" : "Escolher Apps para Proteger")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(atLimit ? Color(white: 0.35) : .white)
 
                         Spacer()
 
