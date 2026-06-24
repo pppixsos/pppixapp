@@ -8,6 +8,10 @@ struct VehiclesView: View {
     @State private var vehicleToEdit: Vehicle? = nil
     @State private var successMessage = ""
     @State private var errorMessage = ""
+    @State private var showPaywall = false
+    @ObservedObject private var premium = PremiumManager.shared
+
+    private var atLimit: Bool { !premium.isPremium && vehicles.count >= PremiumManager.freeVehicleLimit }
 
     var body: some View {
         ZStack {
@@ -62,22 +66,28 @@ struct VehiclesView: View {
                 HStack {
                     Spacer()
                     Button {
-                        vehicleToEdit = nil
-                        showAddSheet = true
+                        if atLimit {
+                            showPaywall = true
+                        } else {
+                            vehicleToEdit = nil
+                            showAddSheet = true
+                        }
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 22, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(atLimit ? Color(white: 0.4) : .white)
                             .frame(width: 56, height: 56)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .background(Group {
+                                if atLimit {
+                                    Color(white: 0.15)
+                                } else {
+                                    LinearGradient(
+                                        colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing)
+                                }
+                            })
                             .clipShape(Circle())
-                            .shadow(color: Color(hex: "#3366FF").opacity(0.5), radius: 8)
+                            .shadow(color: atLimit ? .clear : Color(hex: "#3366FF").opacity(0.5), radius: 8)
                     }
                     .padding(.trailing, 24)
                     .padding(.bottom, 24)
@@ -86,10 +96,23 @@ struct VehiclesView: View {
         }
         .navigationTitle("Meus Veículos")
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if atLimit {
+                PremiumBanner(
+                    message: "Quer cadastrar mais veículos? Contrate o Premium",
+                    onTap: { showPaywall = true }
+                )
+                .padding(.horizontal, 20)
+                .padding(.bottom, 90)
+            }
+        }
         .sheet(isPresented: $showAddSheet) {
             AddVehicleSheet(vehicleToEdit: vehicleToEdit) { _ in
                 Task { await loadVehicles() }
             }
+        }
+        .fullScreenCover(isPresented: $showPaywall) {
+            PremiumPaywallView(onClose: { showPaywall = false })
         }
         .task { await loadVehicles() }
         .refreshable { await loadVehicles() }
