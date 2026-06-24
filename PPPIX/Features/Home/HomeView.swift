@@ -3,9 +3,11 @@ import SwiftUI
 struct HomeView: View {
 
     @ObservedObject private var session = SessionManager.shared
+    @ObservedObject private var premium = PremiumManager.shared
     @State private var showAlertDetail: Int? = nil
     @State private var showDisclaimer = false
     @State private var showInstallTutorial = false
+    @State private var showPremiumOffer = false
 
     private var firstName: String {
         session.userName.split(separator: " ").first.map(String.init) ?? "Usuário"
@@ -163,11 +165,17 @@ struct HomeView: View {
         .onAppear {
             if DisclaimerPopup.shouldShow {
                 showDisclaimer = true
+            } else if !premium.isPremium {
+                // Mostra oferta premium toda vez que abre o app (só para free)
+                showPremiumOffer = true
             }
         }
         .sheet(isPresented: $showDisclaimer) {
             DisclaimerPopupView(onAccept: { showDisclaimer = false })
                 .background(ClearSheetBackground())
+        }
+        .fullScreenCover(isPresented: $showPremiumOffer) {
+            PremiumPaywallView(onClose: { showPremiumOffer = false })
         }
         .sheet(isPresented: $showInstallTutorial) {
             InstallTutorialView()
