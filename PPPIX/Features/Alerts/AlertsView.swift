@@ -87,6 +87,8 @@ struct AlertsView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
+                    .frame(maxWidth: 700)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
