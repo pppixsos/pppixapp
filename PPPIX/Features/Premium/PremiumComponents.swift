@@ -161,7 +161,7 @@ struct PremiumPaywallView: View {
                                 title: "Anual",
                                 badge: "MELHOR VALOR",
                                 price: premium.yearlyProduct?.displayPrice ?? PremiumManager.yearlyPrice,
-                                subtitle: "equivale a \(premium.yearlyProduct == nil ? "R$ 13,32" : formatMonthly())/mês",
+                                subtitle: "equivale a \(formatMonthly())/mês",
                                 isSelected: selectedPlan == .yearly
                             )
 
@@ -358,10 +358,10 @@ struct PremiumPaywallView: View {
     }
 
     private func formatMonthly() -> String {
-        guard let yearly = premium.yearlyProduct,
-              let price = yearly.price as Decimal? else { return "R$ 13,32" }
-        let monthly = price / 12
-        return String(format: "R$ %.2f", NSDecimalNumber(decimal: monthly).doubleValue)
-            .replacingOccurrences(of: ".", with: ",")
+        guard let yearly = premium.yearlyProduct else { return "R$ 13,32" }
+        let monthlyDecimal = yearly.price / 12
+        // Usa o priceFormatStyle do produto para garantir a moeda correta
+        // (real brasileiro quando o produto está configurado em BRL)
+        return monthlyDecimal.formatted(yearly.priceFormatStyle)
     }
 }
