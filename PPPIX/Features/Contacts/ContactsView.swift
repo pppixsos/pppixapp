@@ -15,7 +15,13 @@ struct ContactsView: View {
     @ObservedObject private var premium = PremiumManager.shared
     private var myEmail: String { SessionManager.shared.userEmail }
 
-    private var totalContacts: Int { accepted.count + externalContacts.count }
+    // Conta TODOS os contatos — aceitos, pendentes enviados, pendentes recebidos
+    // e externos. No plano free a pessoa tem direito a 1 vaga total, seja ela
+    // ocupada por quem for. Se o convite não foi aceito, a vaga continua ocupada
+    // até que o contato seja removido.
+    private var totalContacts: Int {
+        accepted.count + externalContacts.count + sent.count + received.count
+    }
     private var atLimit: Bool { !premium.isPremium && totalContacts >= PremiumManager.freeContactLimit }
 
     var body: some View {
