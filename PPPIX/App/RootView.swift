@@ -999,23 +999,11 @@ struct ArrowUnlockView: View {
                 ScreenTimeManager.shared.isOpeningBankApp = true
             }
             #endif
-            // 0.8s: tempo para o FamilyControls processar o unlock
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            // Com .defer na ShieldActionExtension, o iOS retorna
+            // automaticamente ao app bancário assim que o shield é
+            // removido pelo unlockSingleApp. Só fechamos esta tela.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 isPresented = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    // Tenta abrir o banco via URL scheme (abre direto sem ir para Home)
-                    if let scheme = appURLScheme(for: bundleId),
-                       let url = URL(string: scheme),
-                       UIApplication.shared.canOpenURL(url) {
-                        UIApplication.shared.open(url, options: [:])
-                    } else {
-                        // Fallback: minimiza o PPPIX — usuário abre manualmente
-                        UIControl().sendAction(
-                            #selector(URLSessionTask.suspend),
-                            to: UIApplication.shared, for: nil
-                        )
-                    }
-                }
             }
         }
     }
