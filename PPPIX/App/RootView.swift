@@ -165,7 +165,11 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .pppixForceOpenUnlockScreen)) { _ in
             guard !showUnlockScreen else { return }
-            showUnlockScreen = true
+            // Pequeno delay para garantir que qualquer sheet/cover aberto
+            // na HomeView tenha tempo de fechar antes do unlock aparecer
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                showUnlockScreen = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openAlertDetail)) { notif in
             guard let id = notif.userInfo?["alert_id"] as? Int else { return }
