@@ -13,6 +13,9 @@ struct OnboardingStepShell<Content: View>: View {
     var onBack: (() -> Void)? = nil
     @ViewBuilder var content: () -> Content
 
+    // Largura máxima do conteúdo — limita em iPad para não ficar esticado
+    private let maxContentWidth: CGFloat = 560
+
     var body: some View {
         VStack(spacing: 0) {
             // Barra superior: voltar + progresso
@@ -71,6 +74,8 @@ struct OnboardingStepShell<Content: View>: View {
                     Spacer(minLength: 24)
                 }
                 .padding(.horizontal, 24)
+                .frame(maxWidth: maxContentWidth)
+                .frame(maxWidth: .infinity) // centraliza no iPad
             }
         }
     }
