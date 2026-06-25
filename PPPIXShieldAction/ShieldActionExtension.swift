@@ -28,14 +28,16 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        // Fechar o app bancário
-        completionHandler(.close)
+        // .defer mantém o app bancário "pausado" em vez de fechá-lo.
+        // Quando o PPPIX fizer o unlock via ManagedSettingsStore,
+        // o iOS retorna automaticamente ao app bancário — sem precisar
+        // de URL scheme, sem ir para a Home.
+        completionHandler(.defer)
 
         // Agendar relock via DeviceActivity (funciona com app fechado)
         scheduleRelock(afterSeconds: 30)
 
-        // Enviar notificação de unlock com delay curto
-        // O delay garante que o app bancário já foi fechado antes do banner aparecer
+        // Enviar notificação de unlock
         sendUnlockNotification()
     }
 
@@ -48,7 +50,7 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        completionHandler(.close)
+        completionHandler(.defer)
         scheduleRelock(afterSeconds: 30)
         sendUnlockNotification()
     }
@@ -62,7 +64,7 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        completionHandler(.close)
+        completionHandler(.defer)
         scheduleRelock(afterSeconds: 30)
         sendUnlockNotification()
     }
