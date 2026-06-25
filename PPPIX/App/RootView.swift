@@ -102,7 +102,7 @@ struct RootView: View {
         }
         .onAppear {
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.checkAuthorization()
+            if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.checkAuthorization() }
             #endif
             // Verificar se há alerta pendente (app aberto via tap na notificação)
             if let pendingId = AppDelegate.pendingAlertId {
@@ -137,7 +137,7 @@ struct RootView: View {
                     auth.isAuthenticated = false
                 }
                 #if !targetEnvironment(simulator)
-                ScreenTimeManager.shared.reblockOnBackground()
+                if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.reblockOnBackground() }
                 #endif
             case .active:
                 // Remover notificação de unlock ao ativar o app
@@ -319,7 +319,7 @@ struct RootView: View {
         var tickCount = 0
         reblockCheckTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
             Task { @MainActor in
-                ScreenTimeManager.shared.syncCheckAndReblock()
+                if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.syncCheckAndReblock() }
             }
             // Autocura: se por algum motivo o token FCM nunca foi gerado/
             // registrado (ex: callback do Firebase falhou silenciosamente
@@ -809,14 +809,14 @@ struct UnlockPasswordView: View {
 
         case "open_bank":
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
+            if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30) }
             #endif
             unlockedApp = appName
             showArrow = true
 
         case "open_bank_alert":
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
+            if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30) }
             #endif
             unlockedApp = appName
             showArrow = true
@@ -953,7 +953,7 @@ struct ArrowUnlockView: View {
             // Minimiza o PPPIX automaticamente após 1.5s mostrando a tela de desbloqueado
             AppDelegate.skipNextAuthReset = true
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.isOpeningBankApp = true
+            if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.isOpeningBankApp = true }
             #endif
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 isPresented = false
