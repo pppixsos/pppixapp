@@ -63,6 +63,8 @@ struct AlertDetailView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity)
             }
         }
         .navigationTitle("Detalhe do Alerta")
@@ -115,7 +117,7 @@ struct AlertDetailView: View {
                     // Prévia do mapa nativo
                     ZStack(alignment: .topTrailing) {
                         MapPreviewView(latitude: lat, longitude: lng)
-                            .frame(height: 200)
+                            .frame(height: UIDevice.current.userInterfaceIdiom == .pad ? 320 : 200)
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
