@@ -267,11 +267,6 @@ struct PremiumPaywallView: View {
         }
     }
 
-
-
-    @State private var showTerms = false
-    @State private var showPrivacy = false
-
     // MARK: - Plan card
 
     private func planCard(
