@@ -114,6 +114,8 @@ struct PasswordSetupView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
             }
         }
         .navigationTitle("Senhas")
