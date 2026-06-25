@@ -31,6 +31,43 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         UNUserNotificationCenter.current().delegate = self
         setupNotificationCategories()
 
+        // ═══════════════════════════════════════════════════════════════
+        // REBLOCK SÍNCRONO NO LAUNCH — Camada 1 de segurança
+        //
+        // Executa ANTES de qualquer async/Task/await.
+        // Garante que se o app foi fechado com unlock ativo e o timer
+        // expirou, o shield é reaplicado imediatamente ao abrir.
+        // Lê direto do UserDefaults e escreve no ManagedSettingsStore
+        // sem dependência de banco de dados ou rede.
+        // ═══════════════════════════════════════════════════════════════
+        #if !targetEnvironment(simulator)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
+            let unlockedUntil = defaults?.double(forKey: "pppix_unlocked_until") ?? 0
+            let now = Date().timeIntervalSince1970
+
+            // Se unlock expirou OU nunca houve unlock, reaplica o shield
+            if unlockedUntil < now {
+                let store = ManagedSettingsStore(named: .init("pppix"))
+                if let data = defaults?.data(forKey: "pppix_activity_selection"),
+                   let sel = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data),
+                   !sel.applicationTokens.isEmpty || !sel.categoryTokens.isEmpty {
+                    store.shield.applications = sel.applicationTokens.isEmpty ? nil : sel.applicationTokens
+                    store.shield.applicationCategories = sel.categoryTokens.isEmpty ? nil : .specific(sel.categoryTokens)
+                    store.shield.webDomains = sel.webDomainTokens.isEmpty ? nil : sel.webDomainTokens
+                    // Limpar flags de unlock
+                    defaults?.removeObject(forKey: "pppix_unlocked_until")
+                    defaults?.removeObject(forKey: "pppix_single_app_token_data")
+                    defaults?.synchronize()
+                    print("[PPPIX] Launch reblock: shield reaplicado (unlock expirado)")
+                }
+            } else {
+                print("[PPPIX] Launch: unlock ainda ativo por \(Int(unlockedUntil - now))s")
+            }
+        }
+        #endif
+        // ═══════════════════════════════════════════════════════════════
+
         // Configuracao do Firebase 100% programatica — NAO depende do
         // GoogleService-Info.plist estar presente no bundle do .ipa
         // (que se mostrou nao-confiavel via xcodegen/CI). Valores
