@@ -13,6 +13,17 @@ struct HomeView: View {
         session.userName.split(separator: " ").first.map(String.init) ?? "Usuário"
     }
 
+    // No iPad usa 3 colunas, no iPhone 2
+    private var gridColumns: [GridItem] {
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        let count = isIPad ? 3 : 2
+        return Array(repeating: GridItem(.flexible()), count: count)
+    }
+
+    private var maxContentWidth: CGFloat {
+        UIDevice.current.userInterfaceIdiom == .pad ? 700 : .infinity
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -44,11 +55,8 @@ struct HomeView: View {
                         }
                         .padding(.top, 8)
 
-                        // Grid de cards
-                        LazyVGrid(columns: [
-                            GridItem(.flexible()),
-                            GridItem(.flexible())
-                        ], spacing: 12) {
+                        // Grid de cards (3 colunas no iPad, 2 no iPhone)
+                        LazyVGrid(columns: gridColumns, spacing: 12) {
                             HomeCard(
                                 icon: "lock.shield.fill",
                                 title: "Senhas",
@@ -140,6 +148,8 @@ struct HomeView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
+                    .frame(maxWidth: maxContentWidth)
+                    .frame(maxWidth: .infinity)
                 }
             }
             .navigationTitle("")
