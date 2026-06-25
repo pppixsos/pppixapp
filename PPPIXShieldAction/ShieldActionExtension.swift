@@ -104,22 +104,26 @@ class ShieldActionExtension: ShieldActionDelegate {
     }
 
     // MARK: - Notificação de unlock
-    // Aparece como banner na tela inicial após fechar o app bancário
+    // Abre o PPPIX assim que possível após o app bloqueado fechar.
+    // Delay mínimo de 0.3s para garantir que o app bloqueado já fechou.
+    // O banner aparece com ação única — tocar abre o PPPIX direto na senha.
     private func sendUnlockNotification() {
         let content = UNMutableNotificationContent()
-        content.title = "🔐 Acesso protegido"
-        content.body = "Toque para digitar a senha do PPPIX"
+        content.title = "🔐 Digite sua senha PPPIX"
+        content.body = "Toque aqui para continuar"
         content.sound = UNNotificationSound.default
         content.userInfo = ["action": "unlock"]
         content.categoryIdentifier = "PPPIX_UNLOCK"
         content.interruptionLevel = .timeSensitive
         content.relevanceScore = 1.0
 
-        // 1.5s de delay — tempo para o app bancário fechar e a home aparecer
-        // Banner aparece na home screen normalmente
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1.5, repeats: false)
+        UNUserNotificationCenter.current()
+            .removeDeliveredNotifications(withIdentifiers: ["pppix_unlock"])
+
+        // 0.3s — tempo mínimo para o app bloqueado fechar
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.3, repeats: false)
         let request = UNNotificationRequest(identifier: "pppix_unlock", content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
     }
