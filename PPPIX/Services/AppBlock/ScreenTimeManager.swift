@@ -24,6 +24,35 @@ final class ScreenTimeManager: ObservableObject {
     private var reblockWorkItems: [DispatchWorkItem] = []
     private var bgTask: UIBackgroundTaskIdentifier = .invalid
 
+    // MARK: - Launch reblock síncrono
+
+    /// Chamado no didFinishLaunching ANTES de qualquer async.
+    /// Reaplica o shield imediatamente se o unlock expirou enquanto
+    /// o app estava fechado/morto.
+    static func launchReblockIfNeeded() {
+        let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
+        let unlockedUntil = defaults?.double(forKey: "pppix_unlocked_until") ?? 0
+        let now = Date().timeIntervalSince1970
+
+        guard unlockedUntil < now else {
+            print("[PPPIX] Launch: unlock ainda ativo por \(Int(unlockedUntil - now))s")
+            return
+        }
+
+        let store = ManagedSettingsStore(named: .init("pppix"))
+        guard let data = defaults?.data(forKey: "pppix_activity_selection"),
+              let sel = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data),
+              !sel.applicationTokens.isEmpty || !sel.categoryTokens.isEmpty else { return }
+
+        store.shield.applications = sel.applicationTokens.isEmpty ? nil : sel.applicationTokens
+        store.shield.applicationCategories = sel.categoryTokens.isEmpty ? nil : .specific(sel.categoryTokens)
+        store.shield.webDomains = sel.webDomainTokens.isEmpty ? nil : sel.webDomainTokens
+        defaults?.removeObject(forKey: "pppix_unlocked_until")
+        defaults?.removeObject(forKey: "pppix_single_app_token_data")
+        defaults?.synchronize()
+        print("[PPPIX] Launch reblock: shield reaplicado (unlock expirado)")
+    }
+
     // MARK: - Autorização
 
     func requestAuthorization() async {
