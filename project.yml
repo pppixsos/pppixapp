@@ -7,8 +7,8 @@ options:
   xcodeVersion: "26.0"
 settings:
   base:
-    MARKETING_VERSION: "1.9.4"
-    CURRENT_PROJECT_VERSION: "309"
+    MARKETING_VERSION: "1.9.5"
+    CURRENT_PROJECT_VERSION: "310"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     SWIFT_COMPILATION_MODE: singlefile
@@ -112,6 +112,7 @@ targets:
           - Default
       com.apple.developer.usernotifications.time-sensitive: {}
       push-notifications: {}
+      com.apple.InAppPurchase: {}
     dependencies:
       - package: Firebase
         product: FirebaseCore
