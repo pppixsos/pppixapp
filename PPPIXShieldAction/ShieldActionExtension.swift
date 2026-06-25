@@ -24,20 +24,30 @@ class ShieldActionExtension: ShieldActionDelegate {
             sharedDefaults?.set(tokenData, forKey: "pppix_single_app_token_data")
         }
 
+        // Tentar salvar o bundle ID do app — funciona dentro da extensão
+        // (Application.bundleIdentifier é acessível no contexto do shield)
+        let app = Application(token: application)
+        if let bundleId = app.bundleIdentifier {
+            sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
+            print("[ShieldAction] bundle ID salvo: \(bundleId)")
+        }
+
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        // .defer mantém o app bancário "pausado" em vez de fechá-lo.
-        // Quando o PPPIX fizer o unlock via ManagedSettingsStore,
-        // o iOS retorna automaticamente ao app bancário — sem precisar
-        // de URL scheme, sem ir para a Home.
-        completionHandler(.defer)
+        // .close fecha o app bloqueado e vai para a Home.
+        // O PPPIX abre via notificação, o usuário digita a senha,
+        // e o ArrowUnlockView minimiza o PPPIX — o iOS então
+        // mostra o app desbloqueado na Home para o usuário abrir.
+        // .defer não funcionou pois o iOS não retorna automaticamente
+        // ao app pausado quando o PPPIX minimiza.
+        completionHandler(.close)
 
-        // Agendar relock via DeviceActivity (funciona com app fechado)
+        // Agendar relock
         scheduleRelock(afterSeconds: 30)
 
-        // Enviar notificação de unlock
+        // Notificação de unlock
         sendUnlockNotification()
     }
 
@@ -50,7 +60,7 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        completionHandler(.defer)
+        completionHandler(.close)
         scheduleRelock(afterSeconds: 30)
         sendUnlockNotification()
     }
@@ -64,7 +74,7 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        completionHandler(.defer)
+        completionHandler(.close)
         scheduleRelock(afterSeconds: 30)
         sendUnlockNotification()
     }
