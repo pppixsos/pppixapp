@@ -70,7 +70,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         Task { @MainActor in
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.checkAuthorization()
+            // FamilyControls/ScreenTime só existe em iPhone — não chamar no iPad
+            // para evitar crash durante revisão da Apple em iPad
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                ScreenTimeManager.shared.checkAuthorization()
+            }
             #endif
         }
 
@@ -240,7 +244,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             completionHandler(.newData)
         } else if action == "reblock" {
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.forceReblock()
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                ScreenTimeManager.shared.forceReblock()
+            }
             #endif
             completionHandler(.newData)
         } else {
@@ -498,7 +504,9 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         case "reblock":
             // Reblock notificação — aplicar shield imediatamente
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.forceReblock()
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                ScreenTimeManager.shared.forceReblock()
+            }
             #endif
             completionHandler([])
         default:
@@ -530,7 +538,9 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         switch action {
         case "reblock":
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.forceReblock()
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                ScreenTimeManager.shared.forceReblock()
+            }
             #endif
         case "unlock":
             // Remover notificação de unlock imediatamente ao tocar
