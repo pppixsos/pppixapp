@@ -193,11 +193,23 @@ struct HomeView: View {
         }
         .sheet(item: $showAlertDetail) { alertId in AlertDetailView(alertId: alertId) }
         .onAppear {
+            // Nunca abrir popup de oferta/disclaimer se há tela de senha
+            // pendente — dois fullScreenCover simultâneos causam conflito no iOS
+            let unlockPending = UserDefaults(suiteName: "group.tech.pppix.app")?
+                .bool(forKey: "pppix_show_password_screen") ?? false
+            guard !unlockPending else { return }
+
             if DisclaimerPopup.shouldShow {
                 showDisclaimer = true
             } else if !premium.isPremium {
                 showPremiumOffer = true
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .pppixForceOpenUnlockScreen)) { _ in
+            // Fechar qualquer sheet/cover da HomeView para não conflitar
+            // com o fullScreenCover do UnlockPasswordView no RootView
+            showPremiumOffer = false
+            showDisclaimer = false
         }
         .sheet(isPresented: $showDisclaimer) {
             DisclaimerPopupView(onAccept: { showDisclaimer = false })
