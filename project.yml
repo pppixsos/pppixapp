@@ -7,8 +7,8 @@ options:
   xcodeVersion: "26.0"
 settings:
   base:
-    MARKETING_VERSION: "1.9.8"
-    CURRENT_PROJECT_VERSION: "313"
+    MARKETING_VERSION: "2.0.1"
+    CURRENT_PROJECT_VERSION: "316"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     SWIFT_COMPILATION_MODE: singlefile
@@ -89,6 +89,20 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano."
         NSLocationAlwaysUsageDescription: "O PPPIX usa sua localização para enviar alertas de emergência mesmo em segundo plano."
         NSFamilyControlsUsageDescription: "O PPPIX usa o Screen Time para proteger seus apps financeiros com senha."
+        LSApplicationQueriesSchemes:
+          - nubank
+          - itau
+          - bradesco
+          - bbapp
+          - caixa
+          - inter
+          - c6bank
+          - picpay
+          - mercadopago
+          - whatsapp
+          - instagram
+          - fb
+          - snssdk1233
         CFBundleURLTypes:
           - CFBundleURLName: tech.pppix.app
             CFBundleURLSchemes:
