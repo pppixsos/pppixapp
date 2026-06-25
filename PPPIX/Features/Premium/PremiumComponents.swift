@@ -40,6 +40,8 @@ struct PremiumPaywallView: View {
 
     @ObservedObject private var premium = PremiumManager.shared
     @State private var selectedPlan: PlanType = .yearly
+    @State private var showTerms = false
+    @State private var showPrivacy = false
     @State private var showError = false
 
     enum PlanType { case monthly, yearly }
@@ -228,13 +230,13 @@ struct PremiumPaywallView: View {
 
                             Text("·").foregroundColor(Color(white: 0.2))
 
-                            Button("Termos de Uso") {}
+                            Button("Termos de Uso") { showTerms = true }
                                 .font(.caption)
                                 .foregroundColor(Color(white: 0.4))
 
                             Text("·").foregroundColor(Color(white: 0.2))
 
-                            Button("Privacidade") {}
+                            Button("Privacidade") { showPrivacy = true }
                                 .font(.caption)
                                 .foregroundColor(Color(white: 0.4))
                         }
@@ -257,7 +259,18 @@ struct PremiumPaywallView: View {
         .onChange(of: premium.isPremium) { isPremium in
             if isPremium { onClose() }
         }
+        .sheet(isPresented: $showTerms) {
+            LegalDocumentView(title: "Termos de Uso", content: LegalDocument.termsOfUse)
+        }
+        .sheet(isPresented: $showPrivacy) {
+            LegalDocumentView(title: "Política de Privacidade", content: LegalDocument.privacyPolicy)
+        }
     }
+
+
+
+    @State private var showTerms = false
+    @State private var showPrivacy = false
 
     // MARK: - Plan card
 
