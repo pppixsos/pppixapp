@@ -132,6 +132,8 @@ struct RegisterView: View {
                     Spacer(minLength: 40)
                 }
                 .padding(.horizontal, 24)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
             }
         }
         .navigationBarBackButtonHidden(false)
