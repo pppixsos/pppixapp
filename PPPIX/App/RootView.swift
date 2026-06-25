@@ -999,17 +999,25 @@ struct ArrowUnlockView: View {
                 ScreenTimeManager.shared.isOpeningBankApp = true
             }
             #endif
-            // Com .defer na extensão, o app bloqueado fica pausado.
-            // Para o iOS retornar a ele, precisamos minimizar o PPPIX —
-            // o sistema então retoma o app que estava em .defer.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // Aguarda o FamilyControls processar o unlock
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 isPresented = false
-                // Minimiza o PPPIX — o iOS retorna ao app pausado (.defer)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    UIControl().sendAction(
-                        #selector(URLSessionTask.suspend),
-                        to: UIApplication.shared, for: nil
-                    )
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    // Tenta abrir o banco via URL scheme usando o bundle ID
+                    // salvo pela ShieldActionExtension (que tem acesso privilegiado)
+                    let savedBundleId = UserDefaults(suiteName: "group.tech.pppix.app")?
+                        .string(forKey: "pppix_target_bundle_id") ?? bundleId
+                    if let scheme = appURLScheme(for: savedBundleId),
+                       let url = URL(string: scheme),
+                       UIApplication.shared.canOpenURL(url) {
+                        UIApplication.shared.open(url, options: [:])
+                    } else {
+                        // Fallback: minimiza o PPPIX — banco aparece na Home
+                        UIControl().sendAction(
+                            #selector(URLSessionTask.suspend),
+                            to: UIApplication.shared, for: nil
+                        )
+                    }
                 }
             }
         }
