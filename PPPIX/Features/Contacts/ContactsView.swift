@@ -123,6 +123,8 @@ struct ContactsView: View {
                         Spacer(minLength: 80)
                     }
                     .padding(.horizontal, 20).padding(.top, 16)
+                    .frame(maxWidth: 680)
+                    .frame(maxWidth: .infinity)
                 }
             }
 
