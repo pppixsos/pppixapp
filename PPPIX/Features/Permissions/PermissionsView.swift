@@ -110,6 +110,8 @@ struct PermissionsView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
+                .frame(maxWidth: 600)
+                .frame(maxWidth: .infinity)
             }
         }
         .navigationTitle("Permissões")
