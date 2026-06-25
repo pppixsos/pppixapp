@@ -9,6 +9,8 @@ struct ProfileView: View {
     @State private var isDeletingAccount = false
     @State private var deleteAccountError = ""
     @State private var showDiagnostic = false
+    @State private var showTerms = false
+    @State private var showPrivacy = false
 
     var body: some View {
         ZStack {
@@ -115,6 +117,17 @@ struct ProfileView: View {
                         .font(.caption)
                         .foregroundColor(Color(white: 0.2))
 
+                    // Links legais
+                    HStack(spacing: 0) {
+                        Button("Termos de Uso") { showTerms = true }
+                            .font(.caption)
+                            .foregroundColor(Color(white: 0.35))
+                        Text(" · ").font(.caption).foregroundColor(Color(white: 0.2))
+                        Button("Política de Privacidade") { showPrivacy = true }
+                            .font(.caption)
+                            .foregroundColor(Color(white: 0.35))
+                    }
+
                     // Logout
                     PPPIXButton(title: "Sair da Conta", style: .destructive) {
                         showLogoutConfirm = true
@@ -139,6 +152,12 @@ struct ProfileView: View {
         .task { await loadFreshProfile() }
         .sheet(isPresented: $showDiagnostic) {
             AlertDiagnosticView()
+        }
+        .sheet(isPresented: $showTerms) {
+            LegalDocumentView(title: "Termos de Uso", content: LegalDocument.termsOfUse)
+        }
+        .sheet(isPresented: $showPrivacy) {
+            LegalDocumentView(title: "Política de Privacidade", content: LegalDocument.privacyPolicy)
         }
         .confirmationDialog("Sair da Conta", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
             Button("Sair", role: .destructive) { logout() }
