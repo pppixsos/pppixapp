@@ -705,6 +705,7 @@ struct UnlockPasswordView: View {
     @State private var isLoading    = false
     @State private var showArrow    = false
     @State private var unlockedApp  = ""
+    @State private var unlockedBundleId = ""
     @FocusState private var focused: Bool
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
@@ -763,7 +764,7 @@ struct UnlockPasswordView: View {
         }
         .onAppear { focused = true }
         .fullScreenCover(isPresented: $showArrow, onDismiss: { isPresented = false }) {
-            ArrowUnlockView(appName: unlockedApp, isPresented: $showArrow)
+            ArrowUnlockView(appName: unlockedApp, bundleId: unlockedBundleId, isPresented: $showArrow)
         }
     }
 
@@ -812,6 +813,7 @@ struct UnlockPasswordView: View {
             if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30) }
             #endif
             unlockedApp = appName
+            unlockedBundleId = bundleId
             showArrow = true
 
         case "open_bank_alert":
@@ -819,6 +821,7 @@ struct UnlockPasswordView: View {
             if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30) }
             #endif
             unlockedApp = appName
+            unlockedBundleId = bundleId
             showArrow = true
 
         default:
@@ -912,12 +915,52 @@ struct UnlockPasswordView: View {
             "com.zhiliaoapp.musically": "TikTok",
         ][bundleId] ?? "App"
     }
+
+    /// URL scheme para abrir o app bancário diretamente após o unlock
+    private func appURLScheme(for bundleId: String) -> String? {
+        [
+            "com.nubank.app":              "nubank://",
+            "com.itau.iphone":             "itau://",
+            "com.bradesco.app":            "bradesco://",
+            "com.bb.bolsodigital":         "bbapp://",
+            "com.caixa.app":              "caixa://",
+            "com.inter.Inter":             "inter://",
+            "com.c6bank.ios":             "c6bank://",
+            "com.picpay.ios":             "picpay://",
+            "com.mercadopago.ios":         "mercadopago://",
+            "net.whatsapp.WhatsApp":       "whatsapp://",
+            "com.burbn.instagram":         "instagram://",
+            "com.facebook.Facebook":       "fb://",
+            "com.zhiliaoapp.musically":    "snssdk1233://",
+        ][bundleId]
+    }
 }
 
 // MARK: - Tela pós-desbloqueio
 struct ArrowUnlockView: View {
     let appName: String
+    let bundleId: String
     @Binding var isPresented: Bool
+
+    private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
+
+    private func appURLScheme(for bundleId: String) -> String? {
+        [
+            "com.nubank.app":           "nubank://",
+            "com.itau.iphone":          "itau://",
+            "com.bradesco.app":         "bradesco://",
+            "com.bb.bolsodigital":      "bbapp://",
+            "com.caixa.app":           "caixa://",
+            "com.inter.Inter":          "inter://",
+            "com.c6bank.ios":          "c6bank://",
+            "com.picpay.ios":          "picpay://",
+            "com.mercadopago.ios":      "mercadopago://",
+            "net.whatsapp.WhatsApp":    "whatsapp://",
+            "com.burbn.instagram":      "instagram://",
+            "com.facebook.Facebook":    "fb://",
+            "com.zhiliaoapp.musically": "snssdk1233://",
+        ][bundleId]
+    }
 
     var body: some View {
         ZStack {
@@ -938,7 +981,7 @@ struct ArrowUnlockView: View {
                         Text("\(appName) Desbloqueado!")
                             .font(.title2.bold())
                             .foregroundColor(.white)
-                        Text("Toque no ícone do \(appName) na tela inicial para abri-lo.")
+                        Text("Abrindo \(appName)...")
                             .font(.subheadline)
                             .foregroundColor(Color(white: 0.45))
                             .multilineTextAlignment(.center)
@@ -950,16 +993,28 @@ struct ArrowUnlockView: View {
             }
         }
         .onAppear {
-            // Minimiza o PPPIX automaticamente após 1.5s mostrando a tela de desbloqueado
             AppDelegate.skipNextAuthReset = true
             #if !targetEnvironment(simulator)
-            if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.isOpeningBankApp = true }
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                ScreenTimeManager.shared.isOpeningBankApp = true
+            }
             #endif
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // 0.8s: tempo para o FamilyControls processar o unlock
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 isPresented = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    UIControl().sendAction(#selector(URLSessionTask.suspend),
-                                          to: UIApplication.shared, for: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    // Tenta abrir o banco via URL scheme (abre direto sem ir para Home)
+                    if let scheme = appURLScheme(for: bundleId),
+                       let url = URL(string: scheme),
+                       UIApplication.shared.canOpenURL(url) {
+                        UIApplication.shared.open(url, options: [:])
+                    } else {
+                        // Fallback: minimiza o PPPIX — usuário abre manualmente
+                        UIControl().sendAction(
+                            #selector(URLSessionTask.suspend),
+                            to: UIApplication.shared, for: nil
+                        )
+                    }
                 }
             }
         }
