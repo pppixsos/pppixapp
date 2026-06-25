@@ -42,7 +42,7 @@ class ShieldActionExtension: ShieldActionDelegate {
         // mostra o app desbloqueado na Home para o usuário abrir.
         // .defer não funcionou pois o iOS não retorna automaticamente
         // ao app pausado quando o PPPIX minimiza.
-        completionHandler(.close)
+        completionHandler(.defer)
 
         // Agendar relock
         scheduleRelock(afterSeconds: 30)
@@ -60,7 +60,7 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        completionHandler(.close)
+        completionHandler(.defer)
         scheduleRelock(afterSeconds: 30)
         sendUnlockNotification()
     }
@@ -74,7 +74,7 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        completionHandler(.close)
+        completionHandler(.defer)
         scheduleRelock(afterSeconds: 30)
         sendUnlockNotification()
     }
@@ -91,18 +91,16 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.synchronize()
 
         let center = DeviceActivityCenter()
-        let activityName = DeviceActivityName("pppix.relock")
-        center.stopMonitoring([activityName])
+        // Nome único por timestamp — evita que o segundo unlock cancele
+        // o DeviceActivity do primeiro app desbloqueado
+        let activityName = DeviceActivityName("pppix.relock.\(Int(reblockDate.timeIntervalSince1970))")
 
         var cal = Calendar.current
         cal.timeZone = TimeZone.current
 
-        // Início = minuto atual (sem segundos)
         var startComps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: now)
         startComps.second = 0
 
-        // Fim = minuto do reblock + 1 (garante pelo menos 1 minuto de diferença,
-        // já que o sistema arredonda/ignora segundos)
         let endDate = cal.date(byAdding: .minute, value: 1, to: reblockDate) ?? reblockDate
         var endComps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: endDate)
         endComps.second = 0
