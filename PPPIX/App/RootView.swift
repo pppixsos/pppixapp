@@ -999,13 +999,22 @@ struct ArrowUnlockView: View {
                 ScreenTimeManager.shared.isOpeningBankApp = true
             }
             #endif
-            // Com .defer na ShieldActionExtension, o iOS retorna
-            // automaticamente ao app bancário assim que o shield é
-            // removido pelo unlockSingleApp. Só fechamos esta tela.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            // Com .defer na extensão, o app bloqueado fica pausado.
+            // Para o iOS retornar a ele, precisamos minimizar o PPPIX —
+            // o sistema então retoma o app que estava em .defer.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 isPresented = false
+                // Minimiza o PPPIX — o iOS retorna ao app pausado (.defer)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    UIControl().sendAction(
+                        #selector(URLSessionTask.suspend),
+                        to: UIApplication.shared, for: nil
+                    )
+                }
             }
         }
+        .navigationBarHidden(true)
+        .navigationTitle("")
     }
 
 
