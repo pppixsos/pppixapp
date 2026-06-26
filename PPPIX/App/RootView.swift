@@ -102,7 +102,7 @@ struct RootView: View {
         }
         .onAppear {
             #if !targetEnvironment(simulator)
-            if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.checkAuthorization() }
+            ScreenTimeManager.shared.checkAuthorization()
             #endif
             // Verificar se há alerta pendente (app aberto via tap na notificação)
             if let pendingId = AppDelegate.pendingAlertId {
@@ -137,7 +137,9 @@ struct RootView: View {
                     auth.isAuthenticated = false
                 }
                 #if !targetEnvironment(simulator)
-                if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.reblockOnBackground() }
+                if !ScreenTimeManager.shared.isOpeningBankApp {
+                    ScreenTimeManager.shared.reblockOnBackground()
+                }
                 #endif
             case .active:
                 // Remover notificação de unlock ao ativar o app
@@ -323,7 +325,7 @@ struct RootView: View {
         var tickCount = 0
         reblockCheckTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
             Task { @MainActor in
-                if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.syncCheckAndReblock() }
+                ScreenTimeManager.shared.syncCheckAndReblock()
             }
             // Autocura: se por algum motivo o token FCM nunca foi gerado/
             // registrado (ex: callback do Firebase falhou silenciosamente
@@ -814,7 +816,7 @@ struct UnlockPasswordView: View {
 
         case "open_bank":
             #if !targetEnvironment(simulator)
-            if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30) }
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
             #endif
             unlockedApp = appName
             unlockedBundleId = bundleId
@@ -822,7 +824,7 @@ struct UnlockPasswordView: View {
 
         case "open_bank_alert":
             #if !targetEnvironment(simulator)
-            if UIDevice.current.userInterfaceIdiom == .phone { ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30) }
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
             #endif
             unlockedApp = appName
             unlockedBundleId = bundleId
@@ -999,30 +1001,14 @@ struct ArrowUnlockView: View {
         .onAppear {
             AppDelegate.skipNextAuthReset = true
             #if !targetEnvironment(simulator)
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                ScreenTimeManager.shared.isOpeningBankApp = true
-            }
+            ScreenTimeManager.shared.isOpeningBankApp = true
             #endif
-            // Aguarda o FamilyControls processar o unlock
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            // Com .defer na extensão o banco fica pausado em background.
+            // Apenas fechamos o ArrowUnlockView — o iOS retorna ao banco
+            // automaticamente pois o PPPIX vai para background.
+            // NÃO chamamos suspend() — isso mandaria para Home em vez do banco.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 isPresented = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    // Tenta abrir o banco via URL scheme usando o bundle ID
-                    // salvo pela ShieldActionExtension (que tem acesso privilegiado)
-                    let savedBundleId = UserDefaults(suiteName: "group.tech.pppix.app")?
-                        .string(forKey: "pppix_target_bundle_id") ?? bundleId
-                    if let scheme = appURLScheme(for: savedBundleId),
-                       let url = URL(string: scheme),
-                       UIApplication.shared.canOpenURL(url) {
-                        UIApplication.shared.open(url, options: [:])
-                    } else {
-                        // Fallback: minimiza o PPPIX — banco aparece na Home
-                        UIControl().sendAction(
-                            #selector(URLSessionTask.suspend),
-                            to: UIApplication.shared, for: nil
-                        )
-                    }
-                }
             }
         }
         .navigationBarHidden(true)
