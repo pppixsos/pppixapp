@@ -41,12 +41,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // sem dependência de banco de dados ou rede.
         // ═══════════════════════════════════════════════════════════════
         #if !targetEnvironment(simulator)
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            // Reblock síncrono no launch — Camada 1 de segurança
-            // Implementado no ScreenTimeManager para ter acesso aos imports
-            // de ManagedSettings e FamilyControls
-            ScreenTimeManager.launchReblockIfNeeded()
-        }
+        ScreenTimeManager.launchReblockIfNeeded()
         #endif
 
         // Configuracao do Firebase 100% programatica — NAO depende do
@@ -90,9 +85,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             #if !targetEnvironment(simulator)
             // FamilyControls/ScreenTime só existe em iPhone — não chamar no iPad
             // para evitar crash durante revisão da Apple em iPad
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                ScreenTimeManager.shared.checkAuthorization()
-            }
+            ScreenTimeManager.shared.checkAuthorization()
             #endif
         }
 
@@ -262,9 +255,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             completionHandler(.newData)
         } else if action == "reblock" {
             #if !targetEnvironment(simulator)
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                ScreenTimeManager.shared.forceReblock()
-            }
+            ScreenTimeManager.shared.forceReblock()
             #endif
             completionHandler(.newData)
         } else {
@@ -522,9 +513,7 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         case "reblock":
             // Reblock notificação — aplicar shield imediatamente
             #if !targetEnvironment(simulator)
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                ScreenTimeManager.shared.forceReblock()
-            }
+            ScreenTimeManager.shared.forceReblock()
             #endif
             completionHandler([])
         default:
@@ -556,9 +545,7 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
         switch action {
         case "reblock":
             #if !targetEnvironment(simulator)
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                ScreenTimeManager.shared.forceReblock()
-            }
+            ScreenTimeManager.shared.forceReblock()
             #endif
         case "unlock":
             // Remover notificação de unlock imediatamente ao tocar
