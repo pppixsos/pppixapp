@@ -23,9 +23,7 @@ struct AppListView: View {
     var body: some View {
         ZStack {
             Color(hex: "#0A0A12").ignoresSafeArea()
-            if isIPad {
-                iPadUnavailableView
-            } else if !manager.isAuthorized {
+            if !manager.isAuthorized {
                 unauthorizedView
             } else {
                 authorizedView
@@ -73,26 +71,6 @@ struct AppListView: View {
                     .removeObject(forKey: ScreenTimeManager.selectionKey)
             }
             Button("Cancelar", role: .cancel) {}
-        }
-    }
-
-    // MARK: - iPad: funcionalidade não disponível
-
-    private var iPadUnavailableView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            Image(systemName: "iphone.slash")
-                .font(.system(size: 64))
-                .foregroundColor(Color(white: 0.3))
-            Text("Disponível apenas no iPhone")
-                .font(.title3.bold())
-                .foregroundColor(.white)
-            Text("O bloqueio de aplicativos usa o Screen Time do iOS, que é exclusivo do iPhone. Para configurar os apps protegidos, abra o PPPIX no seu iPhone.")
-                .font(.subheadline)
-                .foregroundColor(Color(white: 0.5))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-            Spacer()
         }
     }
 
