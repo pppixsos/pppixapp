@@ -114,9 +114,9 @@ struct DeviceSetupFlowView: View {
     // MARK: - Carrega dados existentes da conta
 
     private func loadExistingData() async {
-        // Timeout de 8 segundos — se a API não responder, avança sem dados.
-        // NUNCA mostrar erro de rede para o usuário nesta tela.
-        await withTimeout(seconds: 8) {
+        // Timeout de 8 segundos via Task.sleep concorrente
+        // NUNCA mostrar erro de rede — sempre avança para o próximo passo
+        let loadTask = Task {
             do {
                 let passwords = try await APIClient.shared.getPasswords()
                 let vehicles  = try await APIClient.shared.getVehicles()
@@ -138,24 +138,26 @@ struct DeviceSetupFlowView: View {
                     data.wantsVehicle   = true
                 }
             } catch {
-                // Erro de rede — ignora e continua sem dados pré-carregados
                 print("[DeviceSetup] API indisponível, continuando sem dados: \(error)")
             }
         }
-        // Garante que sempre avança, independente do resultado
-        step = .permissions
-    }
 
-    /// Executa uma task com timeout — se exceder, cancela e retorna
-    private func withTimeout(seconds: Double, operation: @escaping () async -> Void) async {
+        // Aguarda no máximo 8 segundos
+        let timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+        }
+
+        // Espera o primeiro a terminar
         await withTaskGroup(of: Void.self) { group in
-            group.addTask { await operation() }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            }
-            // Espera o primeiro a terminar (operação ou timeout)
+            group.addTask { await loadTask.value }
+            group.addTask { await timeoutTask.value }
             await group.next()
             group.cancelAll()
+            loadTask.cancel()
+            timeoutTask.cancel()
         }
+
+        // Garante que sempre avança
+        step = .permissions
     }
 }
