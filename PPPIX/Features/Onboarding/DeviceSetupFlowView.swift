@@ -10,7 +10,7 @@ struct DeviceSetupFlowView: View {
     let onFinished: () -> Void
 
     private enum Step {
-        case loading       // buscando dados do servidor
+        case loading
         case permissions
         case bankPassword
         case ppixPassword
@@ -25,11 +25,9 @@ struct DeviceSetupFlowView: View {
     @State private var step: Step = .loading
     @StateObject private var data = OnboardingData()
 
-    // Dados existentes na conta, buscados no .loading
     @State private var existingPasswordId: Int? = nil
     @State private var existingVehicle: Vehicle? = nil
     @State private var existingMaxAttempts: Int = 3
-    @State private var loadError = ""
 
     var body: some View {
         ZStack {
@@ -100,70 +98,64 @@ struct DeviceSetupFlowView: View {
         .task { await loadExistingData() }
     }
 
-    // MARK: - Loading view
+    // MARK: - Loading view (nunca mostra erro — sempre avança)
 
     private var loadingView: some View {
         VStack(spacing: 20) {
-            if loadError.isEmpty {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.4)
-                Text("Carregando seus dados...")
-                    .font(.subheadline)
-                    .foregroundColor(Color(white: 0.5))
-            } else {
-                Image(systemName: "wifi.slash")
-                    .font(.system(size: 36))
-                    .foregroundColor(Color(hex: "#FF4444"))
-                Text("Erro ao carregar dados")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                Text(loadError)
-                    .font(.caption)
-                    .foregroundColor(Color(white: 0.5))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-                PPPIXButton(title: "Tentar novamente") {
-                    loadError = ""
-                    Task { await loadExistingData() }
-                }
-                .padding(.horizontal, 40)
-            }
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                .scaleEffect(1.4)
+            Text("Carregando...")
+                .font(.subheadline)
+                .foregroundColor(Color(white: 0.5))
         }
     }
 
     // MARK: - Carrega dados existentes da conta
 
     private func loadExistingData() async {
-        do {
-            // Busca senhas e veículo sequencialmente (APIClient é @MainActor,
-            // não compatível com async let nonisolated no Swift 6)
-            let passwords = try await APIClient.shared.getPasswords()
-            let vehicles  = try await APIClient.shared.getVehicles()
+        // Timeout de 8 segundos — se a API não responder, avança sem dados.
+        // NUNCA mostrar erro de rede para o usuário nesta tela.
+        await withTimeout(seconds: 8) {
+            do {
+                let passwords = try await APIClient.shared.getPasswords()
+                let vehicles  = try await APIClient.shared.getVehicles()
 
-            // Pré-preenche senhas
-            if let pw = passwords.first {
-                existingPasswordId = pw.id
-                data.bankPassword      = pw.bank_password_plain      ?? ""
-                data.ppixPassword      = pw.ppix_password_plain      ?? ""
-                data.emergencyPassword = pw.emergency_password_plain ?? ""
-                existingMaxAttempts    = pw.max_wrong_attempts        ?? 3
+                if let pw = passwords.first {
+                    existingPasswordId     = pw.id
+                    data.bankPassword      = pw.bank_password_plain      ?? ""
+                    data.ppixPassword      = pw.ppix_password_plain      ?? ""
+                    data.emergencyPassword = pw.emergency_password_plain ?? ""
+                    existingMaxAttempts    = pw.max_wrong_attempts        ?? 3
+                }
+
+                if let active = vehicles.first(where: { $0.is_active }) ?? vehicles.first {
+                    existingVehicle     = active
+                    data.vehicleModel   = active.model
+                    data.vehiclePlate   = active.license_plate
+                    data.vehicleColor   = active.color
+                    data.vehicleYear    = String(active.year)
+                    data.wantsVehicle   = true
+                }
+            } catch {
+                // Erro de rede — ignora e continua sem dados pré-carregados
+                print("[DeviceSetup] API indisponível, continuando sem dados: \(error)")
             }
+        }
+        // Garante que sempre avança, independente do resultado
+        step = .permissions
+    }
 
-            // Pré-preenche veículo ativo
-            if let active = vehicles.first(where: { $0.is_active }) ?? vehicles.first {
-                existingVehicle     = active
-                data.vehicleModel   = active.model
-                data.vehiclePlate   = active.license_plate
-                data.vehicleColor   = active.color
-                data.vehicleYear    = String(active.year)
-                data.wantsVehicle   = true
+    /// Executa uma task com timeout — se exceder, cancela e retorna
+    private func withTimeout(seconds: Double, operation: @escaping () async -> Void) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await operation() }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             }
-
-            step = .permissions
-
-        } catch {
-            loadError = "Verifique sua conexão e tente novamente."
+            // Espera o primeiro a terminar (operação ou timeout)
+            await group.next()
+            group.cancelAll()
         }
     }
 }
