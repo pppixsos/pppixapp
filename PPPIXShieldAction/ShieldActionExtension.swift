@@ -24,30 +24,18 @@ class ShieldActionExtension: ShieldActionDelegate {
             sharedDefaults?.set(tokenData, forKey: "pppix_single_app_token_data")
         }
 
-        // Tentar salvar o bundle ID do app — funciona dentro da extensão
-        // (Application.bundleIdentifier é acessível no contexto do shield)
-        let app = Application(token: application)
-        if let bundleId = app.bundleIdentifier {
-            sharedDefaults?.set(bundleId, forKey: "pppix_target_bundle_id")
-            print("[ShieldAction] bundle ID salvo: \(bundleId)")
-        }
-
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
 
-        // .close fecha o app bloqueado e vai para a Home.
-        // O PPPIX abre via notificação, o usuário digita a senha,
-        // e o ArrowUnlockView minimiza o PPPIX — o iOS então
-        // mostra o app desbloqueado na Home para o usuário abrir.
-        // .defer não funcionou pois o iOS não retorna automaticamente
-        // ao app pausado quando o PPPIX minimiza.
-        completionHandler(.defer)
+        // Fechar o app bancário
+        completionHandler(.close)
 
-        // Agendar relock
+        // Agendar relock via DeviceActivity (funciona com app fechado)
         scheduleRelock(afterSeconds: 30)
 
-        // Notificação de unlock
+        // Enviar notificação de unlock com delay curto
+        // O delay garante que o app bancário já foi fechado antes do banner aparecer
         sendUnlockNotification()
     }
 
@@ -60,8 +48,10 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        completionHandler(.defer)
-        scheduleRelock(afterSeconds: 30)
+        completionHandler(.close)
+        let savedSecs = UserDefaults(suiteName: "group.tech.pppix.app")?.integer(forKey: "pppix_reblock_seconds") ?? 30
+        let reblockSeconds = Double(min(180, max(30, savedSecs)))
+        scheduleRelock(afterSeconds: reblockSeconds)
         sendUnlockNotification()
     }
 
@@ -74,8 +64,10 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.set(true, forKey: "pppix_show_password_screen")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "pppix_password_request_time")
         sharedDefaults?.synchronize()
-        completionHandler(.defer)
-        scheduleRelock(afterSeconds: 30)
+        completionHandler(.close)
+        let savedSecs = UserDefaults(suiteName: "group.tech.pppix.app")?.integer(forKey: "pppix_reblock_seconds") ?? 30
+        let reblockSeconds = Double(min(180, max(30, savedSecs)))
+        scheduleRelock(afterSeconds: reblockSeconds)
         sendUnlockNotification()
     }
 
@@ -91,16 +83,18 @@ class ShieldActionExtension: ShieldActionDelegate {
         sharedDefaults?.synchronize()
 
         let center = DeviceActivityCenter()
-        // Nome único por timestamp — evita que o segundo unlock cancele
-        // o DeviceActivity do primeiro app desbloqueado
-        let activityName = DeviceActivityName("pppix.relock.\(Int(reblockDate.timeIntervalSince1970))")
+        let activityName = DeviceActivityName("pppix.relock")
+        center.stopMonitoring([activityName])
 
         var cal = Calendar.current
         cal.timeZone = TimeZone.current
 
+        // Início = minuto atual (sem segundos)
         var startComps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: now)
         startComps.second = 0
 
+        // Fim = minuto do reblock + 1 (garante pelo menos 1 minuto de diferença,
+        // já que o sistema arredonda/ignora segundos)
         let endDate = cal.date(byAdding: .minute, value: 1, to: reblockDate) ?? reblockDate
         var endComps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: endDate)
         endComps.second = 0
@@ -114,26 +108,22 @@ class ShieldActionExtension: ShieldActionDelegate {
     }
 
     // MARK: - Notificação de unlock
-    // Abre o PPPIX assim que possível após o app bloqueado fechar.
-    // Delay mínimo de 0.3s para garantir que o app bloqueado já fechou.
-    // O banner aparece com ação única — tocar abre o PPPIX direto na senha.
+    // Aparece como banner na tela inicial após fechar o app bancário
     private func sendUnlockNotification() {
         let content = UNMutableNotificationContent()
-        content.title = "🔐 Digite sua senha PPPIX"
-        content.body = "Toque aqui para continuar"
+        content.title = "🔐 Acesso protegido"
+        content.body = "Toque para digitar a senha do PPPIX"
         content.sound = UNNotificationSound.default
         content.userInfo = ["action": "unlock"]
         content.categoryIdentifier = "PPPIX_UNLOCK"
         content.interruptionLevel = .timeSensitive
         content.relevanceScore = 1.0
 
+        // 1.5s de delay — tempo para o app bancário fechar e a home aparecer
+        // Banner aparece na home screen normalmente
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: ["pppix_unlock"])
-        UNUserNotificationCenter.current()
-            .removeDeliveredNotifications(withIdentifiers: ["pppix_unlock"])
-
-        // 0.3s — tempo mínimo para o app bloqueado fechar
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.3, repeats: false)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1.5, repeats: false)
         let request = UNNotificationRequest(identifier: "pppix_unlock", content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
     }
