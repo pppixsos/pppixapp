@@ -14,29 +14,22 @@ extension Int: @retroactive Identifiable {
 class PPPIXAuthState: ObservableObject {
     static let instance = PPPIXAuthState()
     private init() {
-        // hasCompletedDeviceSetupThisSession é inicializado a partir do
-        // UserDefaults — persiste enquanto o app não for deslogado.
-        hasCompletedDeviceSetupThisSession = UserDefaults.standard.bool(
-            forKey: Self.deviceSetupKey
-        )
+        // hasCompletedDeviceSetupThisSession começa sempre false — todo
+        // login (mesmo no mesmo dispositivo) deve passar pelo fluxo de
+        // configuração novamente, por decisão de produto.
     }
-
-    private static let deviceSetupKey = "pppix_device_setup_completed"
-
     @Published var isAuthenticated = false
+    /// True enquanto o usuário está no meio do fluxo de cadastro passo-a-passo
+    /// (OnboardingFlowView). Mesmo após o login automático ser concluído
+    /// dentro do onboarding, mantemos essa flag ativa para impedir que o
+    /// RootView troque para a HomeView antes do fluxo terminar.
     @Published var isOnboarding = false
-
-    /// True após o setup de dispositivo ser concluído neste aparelho/conta.
-    /// Persiste entre aberturas do app (UserDefaults) — reseta no logout via
-    /// clearSession() que limpa todos os UserDefaults do bundle.
-    @Published var hasCompletedDeviceSetupThisSession: Bool = false {
-        didSet {
-            UserDefaults.standard.set(
-                hasCompletedDeviceSetupThisSession,
-                forKey: Self.deviceSetupKey
-            )
-        }
-    }
+    /// Controla se o fluxo de configuração (DeviceSetupFlowView) já foi
+    /// concluído NESTA sessão de login. Reseta sempre que o app reinicia
+    /// ou quando o usuário faz logout e loga de novo — por decisão de
+    /// produto, todo login deve passar pela revisão de permissões/senhas/
+    /// veículo/apps protegidos, mesmo no mesmo dispositivo.
+    @Published var hasCompletedDeviceSetupThisSession: Bool = false
 
     static var hasAppPassword: Bool {
         get {
@@ -137,9 +130,7 @@ struct RootView: View {
                     auth.isAuthenticated = false
                 }
                 #if !targetEnvironment(simulator)
-                if !ScreenTimeManager.shared.isOpeningBankApp {
-                    ScreenTimeManager.shared.reblockOnBackground()
-                }
+                ScreenTimeManager.shared.reblockOnBackground()
                 #endif
             case .active:
                 // Remover notificação de unlock ao ativar o app
@@ -167,11 +158,7 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .pppixForceOpenUnlockScreen)) { _ in
             guard !showUnlockScreen else { return }
-            // Pequeno delay para garantir que qualquer sheet/cover aberto
-            // na HomeView tenha tempo de fechar antes do unlock aparecer
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                showUnlockScreen = true
-            }
+            showUnlockScreen = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .openAlertDetail)) { notif in
             guard let id = notif.userInfo?["alert_id"] as? Int else { return }
@@ -379,15 +366,10 @@ struct RootView: View {
 
 // MARK: - Tela de Emergência Fullscreen
 struct EmergencyAlertView: View {
+    let alert: Alert
     let onDismiss: () -> Void
-    @State private var alert: Alert
     @State private var isCancelling = false
     @State private var cancelled = false
-
-    init(alert: Alert, onDismiss: @escaping () -> Void) {
-        self._alert = State(initialValue: alert)
-        self.onDismiss = onDismiss
-    }
 
     private var isSender: Bool {
         alert.sender_email.lowercased() == SessionManager.shared.userEmail.lowercased()
@@ -396,8 +378,6 @@ struct EmergencyAlertView: View {
     private var displayName: String {
         alert.sender_name.isEmpty ? alert.sender_email : alert.sender_name
     }
-
-    private var isCancelled: Bool { alert.status == "cancelled" || cancelled }
 
     var body: some View {
         ZStack {
@@ -436,27 +416,9 @@ struct EmergencyAlertView: View {
                     if alert.has_location, let latStr = alert.latitude, let lngStr = alert.longitude,
                        let lat = Double(latStr), let lng = Double(lngStr) {
                         VStack(spacing: 0) {
-                            ZStack(alignment: .topTrailing) {
-                                MapPreviewView(latitude: lat, longitude: lng)
-                                    .frame(height: 200)
-                                    .cornerRadius(12)
-
-                                if !isCancelled {
-                                    HStack(spacing: 5) {
-                                        Circle()
-                                            .fill(Color(hex: "#FF3333"))
-                                            .frame(width: 6, height: 6)
-                                        Text("AO VIVO")
-                                            .font(.system(size: 10, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 5)
-                                    .background(Color.black.opacity(0.55))
-                                    .cornerRadius(20)
-                                    .padding(8)
-                                }
-                            }
+                            MapPreviewView(latitude: lat, longitude: lng)
+                                .frame(height: 200)
+                                .cornerRadius(12)
                             HStack {
                                 Text("📍 \(latStr), \(lngStr)")
                                     .font(.caption)
@@ -595,27 +557,6 @@ struct EmergencyAlertView: View {
                 }
             }
         }
-        .task {
-            await pollLocationLoop()
-        }
-    }
-
-    /// Recarrega o alerta a cada 2s enquanto ele estiver ativo, para que o
-    /// mapa exiba a localização em tempo real enviada por quem disparou o
-    /// alerta de emergência. Para automaticamente quando a view some da
-    /// tela ou quando o alerta é cancelado.
-    private func pollLocationLoop() async {
-        // Busca imediata — não dormir antes da primeira carga
-        if let updated = try? await APIClient.shared.getAlert(id: alert.id) {
-            alert = updated
-        }
-        while !Task.isCancelled && !isCancelled {
-            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s
-            guard !Task.isCancelled else { return }
-            if let updated = try? await APIClient.shared.getAlert(id: alert.id) {
-                alert = updated
-            }
-        }
     }
 }
 
@@ -711,7 +652,6 @@ struct UnlockPasswordView: View {
     @State private var isLoading    = false
     @State private var showArrow    = false
     @State private var unlockedApp  = ""
-    @State private var unlockedBundleId = ""
     @FocusState private var focused: Bool
 
     private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
@@ -770,7 +710,7 @@ struct UnlockPasswordView: View {
         }
         .onAppear { focused = true }
         .fullScreenCover(isPresented: $showArrow, onDismiss: { isPresented = false }) {
-            ArrowUnlockView(appName: unlockedApp, bundleId: unlockedBundleId, isPresented: $showArrow)
+            ArrowUnlockView(appName: unlockedApp, isPresented: $showArrow)
         }
     }
 
@@ -816,18 +756,16 @@ struct UnlockPasswordView: View {
 
         case "open_bank":
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: ReblockSettings.current)
             #endif
             unlockedApp = appName
-            unlockedBundleId = bundleId
             showArrow = true
 
         case "open_bank_alert":
             #if !targetEnvironment(simulator)
-            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: 30)
+            ScreenTimeManager.shared.unlockSingleApp(reblockAfterSeconds: ReblockSettings.current)
             #endif
             unlockedApp = appName
-            unlockedBundleId = bundleId
             showArrow = true
 
         default:
@@ -878,7 +816,6 @@ struct UnlockPasswordView: View {
 
                 let result = try await APIClient.shared.sendAlert(body: body)
                 AlertDiagnosticLog.shared.log("ENVIAR SUCESSO: id=\(result.id)")
-                LiveLocationTracker.shared.start(alertId: result.id)
             } catch APIError.forbidden(let msg) {
                 AlertDiagnosticLog.shared.log("ENVIAR ERRO 403: \(msg)")
                 return
@@ -901,7 +838,6 @@ struct UnlockPasswordView: View {
                     )
                     let result = try await APIClient.shared.sendAlert(body: body)
                     print("[PPPIX] sendEmergencyAlert RETRY OK — id: \(result.id)")
-                    LiveLocationTracker.shared.start(alertId: result.id)
                 } catch {
                     print("[PPPIX] sendEmergencyAlert RETRY TAMBÉM FALHOU: \(error)")
                 }
@@ -921,52 +857,12 @@ struct UnlockPasswordView: View {
             "com.zhiliaoapp.musically": "TikTok",
         ][bundleId] ?? "App"
     }
-
-    /// URL scheme para abrir o app bancário diretamente após o unlock
-    private func appURLScheme(for bundleId: String) -> String? {
-        [
-            "com.nubank.app":              "nubank://",
-            "com.itau.iphone":             "itau://",
-            "com.bradesco.app":            "bradesco://",
-            "com.bb.bolsodigital":         "bbapp://",
-            "com.caixa.app":              "caixa://",
-            "com.inter.Inter":             "inter://",
-            "com.c6bank.ios":             "c6bank://",
-            "com.picpay.ios":             "picpay://",
-            "com.mercadopago.ios":         "mercadopago://",
-            "net.whatsapp.WhatsApp":       "whatsapp://",
-            "com.burbn.instagram":         "instagram://",
-            "com.facebook.Facebook":       "fb://",
-            "com.zhiliaoapp.musically":    "snssdk1233://",
-        ][bundleId]
-    }
 }
 
 // MARK: - Tela pós-desbloqueio
 struct ArrowUnlockView: View {
     let appName: String
-    let bundleId: String
     @Binding var isPresented: Bool
-
-    private let sharedDefaults = UserDefaults(suiteName: "group.tech.pppix.app")
-
-    private func appURLScheme(for bundleId: String) -> String? {
-        [
-            "com.nubank.app":           "nubank://",
-            "com.itau.iphone":          "itau://",
-            "com.bradesco.app":         "bradesco://",
-            "com.bb.bolsodigital":      "bbapp://",
-            "com.caixa.app":           "caixa://",
-            "com.inter.Inter":          "inter://",
-            "com.c6bank.ios":          "c6bank://",
-            "com.picpay.ios":          "picpay://",
-            "com.mercadopago.ios":      "mercadopago://",
-            "net.whatsapp.WhatsApp":    "whatsapp://",
-            "com.burbn.instagram":      "instagram://",
-            "com.facebook.Facebook":    "fb://",
-            "com.zhiliaoapp.musically": "snssdk1233://",
-        ][bundleId]
-    }
 
     var body: some View {
         ZStack {
@@ -987,7 +883,7 @@ struct ArrowUnlockView: View {
                         Text("\(appName) Desbloqueado!")
                             .font(.title2.bold())
                             .foregroundColor(.white)
-                        Text("Abrindo \(appName)...")
+                        Text("Toque no ícone do \(appName) na tela inicial para abri-lo.")
                             .font(.subheadline)
                             .foregroundColor(Color(white: 0.45))
                             .multilineTextAlignment(.center)
@@ -999,20 +895,19 @@ struct ArrowUnlockView: View {
             }
         }
         .onAppear {
+            // Minimiza o PPPIX automaticamente após 1.5s mostrando a tela de desbloqueado
             AppDelegate.skipNextAuthReset = true
             #if !targetEnvironment(simulator)
             ScreenTimeManager.shared.isOpeningBankApp = true
             #endif
-            // Com .defer na extensão o banco fica pausado em background.
-            // Apenas fechamos o ArrowUnlockView — o iOS retorna ao banco
-            // automaticamente pois o PPPIX vai para background.
-            // NÃO chamamos suspend() — isso mandaria para Home em vez do banco.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 isPresented = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    UIControl().sendAction(#selector(URLSessionTask.suspend),
+                                          to: UIApplication.shared, for: nil)
+                }
             }
         }
-        .navigationBarHidden(true)
-        .navigationTitle("")
     }
 
 
