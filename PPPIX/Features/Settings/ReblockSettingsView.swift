@@ -156,7 +156,7 @@ struct ReblockSettingsView: View {
 
 enum ReblockSettings {
     private static let key = "pppix_reblock_seconds"
-    private static let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
+    nonisolated(unsafe) private static let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
 
     static var current: Int {
         let v = defaults?.integer(forKey: key) ?? 0
