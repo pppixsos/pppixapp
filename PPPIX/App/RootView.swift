@@ -13,23 +13,29 @@ extension Int: @retroactive Identifiable {
 @MainActor
 class PPPIXAuthState: ObservableObject {
     static let instance = PPPIXAuthState()
-    private init() {
-        // hasCompletedDeviceSetupThisSession começa sempre false — todo
-        // login (mesmo no mesmo dispositivo) deve passar pelo fluxo de
-        // configuração novamente, por decisão de produto.
-    }
+    private static let setupKey = "pppix_device_setup_completed_v2"
+
+    private init() {}
+
     @Published var isAuthenticated = false
-    /// True enquanto o usuário está no meio do fluxo de cadastro passo-a-passo
-    /// (OnboardingFlowView). Mesmo após o login automático ser concluído
-    /// dentro do onboarding, mantemos essa flag ativa para impedir que o
-    /// RootView troque para a HomeView antes do fluxo terminar.
     @Published var isOnboarding = false
-    /// Controla se o fluxo de configuração (DeviceSetupFlowView) já foi
-    /// concluído NESTA sessão de login. Reseta sempre que o app reinicia
-    /// ou quando o usuário faz logout e loga de novo — por decisão de
-    /// produto, todo login deve passar pela revisão de permissões/senhas/
-    /// veículo/apps protegidos, mesmo no mesmo dispositivo.
-    @Published var hasCompletedDeviceSetupThisSession: Bool = false
+
+    /// True se o setup já foi concluído neste dispositivo.
+    /// Persiste no UserDefaults — só reseta no logout explícito.
+    /// Evita que o DeviceSetupFlowView apareça toda vez que o app
+    /// volta do background.
+    @Published var hasCompletedDeviceSetupThisSession: Bool = {
+        UserDefaults.standard.bool(forKey: setupKey)
+    }() {
+        didSet {
+            UserDefaults.standard.set(hasCompletedDeviceSetupThisSession, forKey: Self.setupKey)
+        }
+    }
+
+    /// Chame no logout para resetar o setup
+    func resetSetup() {
+        hasCompletedDeviceSetupThisSession = false
+    }
 
     static var hasAppPassword: Bool {
         get {
@@ -130,7 +136,15 @@ struct RootView: View {
                     auth.isAuthenticated = false
                 }
                 #if !targetEnvironment(simulator)
-                ScreenTimeManager.shared.reblockOnBackground()
+                // Só rebloqueia no background se o unlock já expirou.
+                // Se ainda está dentro do tempo configurado pelo usuário,
+                // deixa o timer/push silencioso cuidar do rebloqueio.
+                let unlockedUntil = UserDefaults(suiteName: "group.tech.pppix.app")?
+                    .double(forKey: "pppix_unlocked_until") ?? 0
+                let unlockStillActive = unlockedUntil > Date().timeIntervalSince1970
+                if !unlockStillActive {
+                    ScreenTimeManager.shared.reblockOnBackground()
+                }
                 #endif
             case .active:
                 // Remover notificação de unlock ao ativar o app
