@@ -18,7 +18,6 @@ struct DeviceSetupFlowView: View {
         case vehicleAsk
         case vehicleDetails
         case appBlocking
-        case disguise
         case done
     }
 
@@ -78,10 +77,8 @@ struct DeviceSetupFlowView: View {
                 )
 
             case .appBlocking:
-                OnboardingAppBlockingStep(onFinish: { step = .disguise })
+                OnboardingAppBlockingStep(onFinish: { step = .done })
 
-            case .disguise:
-                OnboardingDisguiseStep(onFinish: { step = .done })
 
             case .done:
                 Color.clear.onAppear {
