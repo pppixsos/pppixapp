@@ -24,7 +24,7 @@ final class ScreenTimeManager: ObservableObject {
     private var reblockWorkItems: [DispatchWorkItem] = []
     private var bgTask: UIBackgroundTaskIdentifier = .invalid
 
-    // MARK: - Launch reblock síncrono
+    // MARK: - Autorização
 
     /// Chamado no didFinishLaunching ANTES de qualquer async.
     /// Reaplica o shield imediatamente se o unlock expirou enquanto
@@ -33,17 +33,14 @@ final class ScreenTimeManager: ObservableObject {
         let defaults = UserDefaults(suiteName: "group.tech.pppix.app")
         let unlockedUntil = defaults?.double(forKey: "pppix_unlocked_until") ?? 0
         let now = Date().timeIntervalSince1970
-
         guard unlockedUntil < now else {
             print("[PPPIX] Launch: unlock ainda ativo por \(Int(unlockedUntil - now))s")
             return
         }
-
         let store = ManagedSettingsStore(named: .init("pppix"))
         guard let data = defaults?.data(forKey: "pppix_activity_selection"),
               let sel = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data),
               !sel.applicationTokens.isEmpty || !sel.categoryTokens.isEmpty else { return }
-
         store.shield.applications = sel.applicationTokens.isEmpty ? nil : sel.applicationTokens
         store.shield.applicationCategories = sel.categoryTokens.isEmpty ? nil : .specific(sel.categoryTokens)
         store.shield.webDomains = sel.webDomainTokens.isEmpty ? nil : sel.webDomainTokens
@@ -52,8 +49,6 @@ final class ScreenTimeManager: ObservableObject {
         defaults?.synchronize()
         print("[PPPIX] Launch reblock: shield reaplicado (unlock expirado)")
     }
-
-    // MARK: - Autorização
 
     func requestAuthorization() async {
         do {
@@ -89,16 +84,20 @@ final class ScreenTimeManager: ObservableObject {
     /// (AuthorizationCenter + UserDefaults) ANTES do guard, ao inves de
     /// depender do estado @Published ja carregado.
     func forceReblock() {
+        // Recarrega estado real, independente de a UI ja ter inicializado
         let authNow = AuthorizationCenter.shared.authorizationStatus == .approved
         isAuthorized = authNow
         loadSavedSelection()
 
+        // Limpar timestamp de unlock
         sharedDefaults?.removeObject(forKey: "pppix_unlocked_until")
         sharedDefaults?.synchronize()
+        // Cancelar reblock pendente
         cancelReblock()
-        // Não cancelar notificações de reblock individuais — cada uma
-        // tem ID único e será ignorada pelo PPPIXActivityMonitor se
-        // o timestamp já expirou
+        // Cancelar notificação de reblock
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: ["pppix_reblock_timer"])
+        // Aplicar shield
         guard authNow, hasBlockedApps else { return }
         applyShield()
     }
@@ -214,21 +213,23 @@ final class ScreenTimeManager: ObservableObject {
         let comps = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute, .second], from: reblockDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-        // Usar ID único por unlock para não cancelar notificação de outro app
-        let notifId = "pppix_reblock_\(Int(reblockDate.timeIntervalSince1970))"
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: ["pppix_reblock_timer"])
         UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: notifId, content: content, trigger: trigger))
+            UNNotificationRequest(identifier: "pppix_reblock_timer", content: content, trigger: trigger))
 
-        // 2. DeviceActivity com nome único por timestamp — evita que o
-        // segundo unlock cancele o monitor do primeiro app desbloqueado
+        // 2. DeviceActivity: intervalo começa AGORA e termina no tempo de reblock
+        // O intervalDidEnd da extensão aplica o shield sem precisar do app aberto
         let center = DeviceActivityCenter()
-        let activityName = DeviceActivityName("pppix.reblock.\(Int(reblockDate.timeIntervalSince1970))")
+        center.stopMonitoring([.init("pppix.reblock")])
 
+        // Usar dateComponents com second para precisão
         var startComps = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute, .second], from: Date())
         var endComps = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute, .second], from: reblockDate)
 
+        // Garantir que start != end
         if startComps == endComps {
             endComps.second = (endComps.second ?? 0) + 5
         }
@@ -238,7 +239,7 @@ final class ScreenTimeManager: ObservableObject {
             intervalEnd: endComps,
             repeats: false
         )
-        try? center.startMonitoring(activityName, during: schedule)
+        try? center.startMonitoring(.init("pppix.reblock"), during: schedule)
     }
 
     private func cancelReblock() {
