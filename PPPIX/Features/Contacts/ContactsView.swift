@@ -11,18 +11,7 @@ struct ContactsView: View {
     @State private var showAddSheet = false
     @State private var errorMessage = ""
     @State private var successMessage = ""
-    @State private var showPaywall = false
-    @ObservedObject private var premium = PremiumManager.shared
     private var myEmail: String { SessionManager.shared.userEmail }
-
-    // Conta TODOS os contatos — aceitos, pendentes enviados, pendentes recebidos
-    // e externos. No plano free a pessoa tem direito a 1 vaga total, seja ela
-    // ocupada por quem for. Se o convite não foi aceito, a vaga continua ocupada
-    // até que o contato seja removido.
-    private var totalContacts: Int {
-        accepted.count + externalContacts.count + sent.count + received.count
-    }
-    private var atLimit: Bool { !premium.isPremium && totalContacts >= PremiumManager.freeContactLimit }
 
     var body: some View {
         ZStack {
@@ -51,14 +40,6 @@ struct ContactsView: View {
                                 .multilineTextAlignment(.center)
                         }
                         if !errorMessage.isEmpty { ErrorBanner(message: errorMessage) }
-
-                        // Banner Premium — aparece quando atingiu o limite
-                        if atLimit {
-                            PremiumBanner(
-                                message: "Quer adicionar mais contatos de emergência? Contrate o Premium",
-                                onTap: { showPaywall = true }
-                            )
-                        }
 
                         // CONVITES RECEBIDOS (aguardando minha resposta)
                         if !received.isEmpty {
@@ -102,9 +83,9 @@ struct ContactsView: View {
                             }
                         }
 
-                        // CONTATOS EXTERNOS (sem conta — alertas via WhatsApp)
+                        // CONTATOS EXTERNOS (sem conta — alertas via WhatsApp e SMS)
                         if !externalContacts.isEmpty {
-                            sectionHeader("Contatos via WhatsApp", icon: "phone.fill", color: Color(hex: "#25D366"))
+                            sectionHeader("Contatos via WhatsApp e SMS", icon: "phone.fill", color: Color(hex: "#25D366"))
                             ForEach(externalContacts) { contact in
                                 ExternalContactRow(contact: contact) {
                                     Task { await deleteExternalContact(contact) }
@@ -129,8 +110,6 @@ struct ContactsView: View {
                         Spacer(minLength: 80)
                     }
                     .padding(.horizontal, 20).padding(.top, 16)
-                    .frame(maxWidth: 680)
-                    .frame(maxWidth: .infinity)
                 }
             }
 
@@ -138,28 +117,16 @@ struct ContactsView: View {
                 Spacer()
                 HStack {
                     Spacer()
-                    Button {
-                        if atLimit {
-                            showPaywall = true
-                        } else {
-                            showAddSheet = true
-                        }
-                    } label: {
+                    Button { showAddSheet = true } label: {
                         Image(systemName: "person.badge.plus")
                             .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(atLimit ? Color(white: 0.4) : .white)
+                            .foregroundColor(.white)
                             .frame(width: 56, height: 56)
-                            .background(Group {
-                                if atLimit {
-                                    Color(white: 0.15)
-                                } else {
-                                    LinearGradient(
-                                        colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
-                                        startPoint: .topLeading, endPoint: .bottomTrailing)
-                                }
-                            })
+                            .background(LinearGradient(
+                                colors: [Color(hex: "#3366FF"), Color(hex: "#6633FF")],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
                             .clipShape(Circle())
-                            .shadow(color: atLimit ? .clear : Color(hex: "#3366FF").opacity(0.5), radius: 8)
+                            .shadow(color: Color(hex: "#3366FF").opacity(0.5), radius: 8)
                     }
                     .padding(.trailing, 24).padding(.bottom, 24)
                 }
@@ -168,14 +135,11 @@ struct ContactsView: View {
         .navigationTitle("Contatos de Emergência")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAddSheet) {
-            AddContactSheet(myEmail: myEmail, allowWhatsApp: premium.isPremium) { msg in
+            AddContactSheet(myEmail: myEmail) { msg in
                 successMessage = msg
                 errorMessage = ""
                 Task { await loadContacts() }
             }
-        }
-        .fullScreenCover(isPresented: $showPaywall) {
-            PremiumPaywallView(onClose: { showPaywall = false })
         }
         .task { await loadContacts() }
         .refreshable { await loadContacts() }
@@ -280,7 +244,7 @@ private struct ExternalContactRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(contact.name).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
                 Text(contact.phone).font(.caption).foregroundColor(Color(white: 0.5))
-                Text("Recebe alertas via WhatsApp").font(.caption2).foregroundColor(Color(hex: "#25D366"))
+                Text("Recebe alertas via WhatsApp e SMS").font(.caption2).foregroundColor(Color(hex: "#25D366"))
             }
             Spacer()
             Button { showDeleteConfirm = true } label: {
@@ -412,7 +376,6 @@ private enum ContactMethod {
 
 private struct AddContactSheet: View {
     let myEmail: String
-    var allowWhatsApp: Bool = true
     let onSent: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -445,22 +408,13 @@ private struct AddContactSheet: View {
                         Button { method = .email } label: {
                             optionRow(icon: "envelope.badge.fill",
                                       title: "Sim, tem o PPPIX",
-                                      subtitle: "Adicionar pelo email — recebe alertas pelo app e WhatsApp",
-                                      locked: false)
+                                      subtitle: "Adicionar pelo email — recebe alertas pelo app, WhatsApp e SMS")
                         }
 
-                        if allowWhatsApp {
-                            Button { method = .phone } label: {
-                                optionRow(icon: "phone.badge.plus",
-                                          title: "Não, não tem o app",
-                                          subtitle: "Adicionar pelo nome e telefone — recebe alertas pelo WhatsApp",
-                                          locked: false)
-                            }
-                        } else {
+                        Button { method = .phone } label: {
                             optionRow(icon: "phone.badge.plus",
                                       title: "Não, não tem o app",
-                                      subtitle: "🔒 Premium — recebe alertas pelo WhatsApp",
-                                      locked: true)
+                                      subtitle: "Adicionar pelo nome e telefone — recebe alertas pelo WhatsApp e SMS")
                         }
 
                         Spacer()
@@ -491,7 +445,7 @@ private struct AddContactSheet: View {
                             Image(systemName: "phone.badge.plus").font(.system(size: 44))
                                 .foregroundColor(Color(hex: "#3366FF"))
                             Text("Adicionar por Telefone").font(.title2.bold()).foregroundColor(.white)
-                            Text("Essa pessoa receberá os alertas de emergência via WhatsApp")
+                            Text("Essa pessoa receberá os alertas de emergência via WhatsApp e SMS")
                                 .font(.subheadline).foregroundColor(Color(white: 0.5))
                                 .multilineTextAlignment(.center)
                         }
@@ -524,26 +478,22 @@ private struct AddContactSheet: View {
         }
     }
 
-    private func optionRow(icon: String, title: String, subtitle: String, locked: Bool = false) -> some View {
+    private func optionRow(icon: String, title: String, subtitle: String) -> some View {
         HStack(spacing: 16) {
             Image(systemName: icon).font(.system(size: 28))
-                .foregroundColor(locked ? Color(white: 0.3) : Color(hex: "#3366FF"))
+                .foregroundColor(Color(hex: "#3366FF"))
                 .frame(width: 40)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
-                    .foregroundColor(locked ? Color(white: 0.3) : .white)
-                Text(subtitle).font(.caption)
-                    .foregroundColor(locked ? Color(white: 0.25) : Color(white: 0.5))
+                Text(title).font(.headline).foregroundColor(.white)
+                Text(subtitle).font(.caption).foregroundColor(Color(white: 0.5))
                     .multilineTextAlignment(.leading)
             }
             Spacer()
-            Image(systemName: "chevron.right")
-                .foregroundColor(locked ? Color(white: 0.2) : Color(white: 0.4))
+            Image(systemName: "chevron.right").foregroundColor(Color(white: 0.4))
         }
         .padding(16)
-        .background(Color(white: locked ? 0.04 : 0.1))
+        .background(Color(white: 0.1))
         .cornerRadius(12)
-        .opacity(locked ? 0.7 : 1.0)
     }
 
     private func sendInvite() async {
