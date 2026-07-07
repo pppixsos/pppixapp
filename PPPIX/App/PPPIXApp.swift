@@ -31,15 +31,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         UNUserNotificationCenter.current().delegate = self
         setupNotificationCategories()
 
-        // ═══════════════════════════════════════════════════════════════
-        // REBLOCK SÍNCRONO NO LAUNCH — Camada 1 de segurança
-        //
-        // Executa ANTES de qualquer async/Task/await.
-        // Garante que se o app foi fechado com unlock ativo e o timer
-        // expirou, o shield é reaplicado imediatamente ao abrir.
-        // Lê direto do UserDefaults e escreve no ManagedSettingsStore
-        // sem dependência de banco de dados ou rede.
-        // ═══════════════════════════════════════════════════════════════
+        // ═══════════════════════════════════════════════════════
+        // REBLOCK SÍNCRONO — Camada 1 de segurança
+        // Executa ANTES de qualquer async. Se o unlock expirou
+        // enquanto o app estava fechado, reaplica o shield agora.
+        // ═══════════════════════════════════════════════════════
         #if !targetEnvironment(simulator)
         ScreenTimeManager.launchReblockIfNeeded()
         #endif
@@ -83,20 +79,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         Task { @MainActor in
             #if !targetEnvironment(simulator)
-            // FamilyControls/ScreenTime só existe em iPhone — não chamar no iPad
-            // para evitar crash durante revisão da Apple em iPad
             ScreenTimeManager.shared.checkAuthorization()
             #endif
         }
 
         // Inicializa o GPS logo que o app abre
         LocationService.shared.warmUp()
-
-        // Retoma o rastreamento em tempo real se o app foi relançado pelo
-        // sistema enquanto um alerta de emergência ainda estava ativo.
-        Task { @MainActor in
-            LiveLocationTracker.shared.resumeIfNeeded()
-        }
 
         BackgroundTaskManager.shared.registerTasks()
         // Ouvir pedido de verificação de alertas vindo do background task
