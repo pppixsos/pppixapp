@@ -8,7 +8,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "2.1.4"
-    CURRENT_PROJECT_VERSION: "336"
+    CURRENT_PROJECT_VERSION: "337"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     SWIFT_COMPILATION_MODE: singlefile
