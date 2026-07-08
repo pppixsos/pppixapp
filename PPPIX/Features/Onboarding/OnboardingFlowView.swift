@@ -49,6 +49,7 @@ enum OnboardingStep: Int, CaseIterable {
     case vehicleDetails
     case contacts
     case appBlocking
+    case disguise
     case done
 }
 
@@ -155,7 +156,10 @@ struct OnboardingFlowView: View {
                     )
 
                 case .appBlocking:
-                    OnboardingAppBlockingStep(onFinish: { advance(to: .done) })
+                    OnboardingAppBlockingStep(onFinish: { advance(to: .disguise) })
+
+                case .disguise:
+                    OnboardingDisguiseStep(onFinish: { advance(to: .done) })
 
                 case .done:
                     Color.clear.onAppear { finishOnboarding() }
