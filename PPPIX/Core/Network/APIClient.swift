@@ -54,6 +54,10 @@ final class APIClient {
         let _: EmptyResponse = try await post("passwords/set_passwords/", body: body)
     }
 
+    func updatePasswords(id: Int, body: SetPasswordsRequest) async throws {
+        let _: EmptyResponse = try await patch("passwords/\(id)/", body: body)
+    }
+
     func verifyPassword(body: VerifyPasswordRequest) async throws -> VerifyPasswordResponse {
         try await post("passwords/verify/", body: body)
     }
@@ -116,18 +120,6 @@ final class APIClient {
 
     func patchAlertStatus(id: Int, status: String) async throws {
         let _: EmptyResponse = try await patch("alerts/\(id)/", body: ["status": status])
-    }
-
-    func updateAlertLocation(id: Int, latitude: Double, longitude: Double) async throws {
-        struct LocationPatch: Encodable {
-            let latitude: String
-            let longitude: String
-        }
-        let body = LocationPatch(
-            latitude: String(format: "%.6f", latitude),
-            longitude: String(format: "%.6f", longitude)
-        )
-        let _: EmptyResponse = try await patch("alerts/\(id)/", body: body)
     }
 
     func markAlertRead(id: Int) async throws {
