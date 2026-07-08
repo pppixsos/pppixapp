@@ -2,8 +2,6 @@ import SwiftUI
 
 struct OnboardingAttemptsLimitStep: View {
     @ObservedObject var data: OnboardingData
-    var preloadedMaxAttempts: Int = 3
-    var existingPasswordId: Int? = nil
     let onBack: () -> Void
     let onNext: () -> Void
 
@@ -20,7 +18,7 @@ struct OnboardingAttemptsLimitStep: View {
             title: "Limite de tentativas erradas",
             subtitle: "Se alguém errar a senha mais vezes que esse limite, um alerta é enviado automaticamente para seus contatos de emergência.",
             stepIndex: 8,
-            totalSteps: 12,
+            totalSteps: 13,
             onBack: onBack
         ) {
             VStack(spacing: 18) {
@@ -42,7 +40,6 @@ struct OnboardingAttemptsLimitStep: View {
                 }
             }
         }
-        .onAppear { maxAttempts = preloadedMaxAttempts }
     }
 
     private func saveAndNext() async {
@@ -50,17 +47,39 @@ struct OnboardingAttemptsLimitStep: View {
         errorMessage = ""
 
         do {
-            // Salva/atualiza as senhas
-            try await APIClient.shared.setPasswords(body: SetPasswordsRequest(
-                bank_password: data.bankPassword,
-                ppix_password: data.ppixPassword,
-                emergency_password: data.emergencyPassword
-            ))
-            SessionManager.shared.arePasswordsConfigured = true
+            // Verifica se já existem senhas cadastradas
+            // Se sim, usa PATCH para atualizar; se não, usa POST para criar
+            let existing = try? await APIClient.shared.getPasswords()
+            let existingId = existing?.first?.id
 
-            // Obtém o ID do PasswordConfig (usa o existente se já tiver)
-            var settingsId: Int? = existingPasswordId
-            if settingsId == nil {
+            if let existingId {
+                // Já tem senhas — atualiza via PATCH
+                try await APIClient.shared.updatePasswordSettings(
+                    id: existingId,
+                    body: PasswordAttemptsRequest(
+                        max_wrong_attempts: maxAttempts,
+                        reset_attempts_after_minutes: 60
+                    )
+                )
+                // Atualiza as senhas também
+                try? await APIClient.shared.updatePasswords(
+                    id: existingId,
+                    body: SetPasswordsRequest(
+                        bank_password: data.bankPassword,
+                        ppix_password: data.ppixPassword,
+                        emergency_password: data.emergencyPassword
+                    )
+                )
+            } else {
+                // Não tem senhas — cria via POST
+                try await APIClient.shared.setPasswords(body: SetPasswordsRequest(
+                    bank_password: data.bankPassword,
+                    ppix_password: data.ppixPassword,
+                    emergency_password: data.emergencyPassword
+                ))
+
+                // Busca o ID recém-criado para salvar o limite de tentativas
+                var settingsId: Int?
                 for attempt in 0..<3 {
                     if let list = try? await APIClient.shared.getPasswords(),
                        let settings = list.first,
@@ -72,21 +91,22 @@ struct OnboardingAttemptsLimitStep: View {
                         try? await Task.sleep(nanoseconds: 400_000_000)
                     }
                 }
-            }
 
-            // Salva o limite de tentativas
-            if let settingsId {
-                try? await APIClient.shared.updatePasswordSettings(
-                    id: settingsId,
-                    body: PasswordAttemptsRequest(
-                        max_wrong_attempts: maxAttempts,
-                        reset_attempts_after_minutes: 60
+                if let settingsId {
+                    try? await APIClient.shared.updatePasswordSettings(
+                        id: settingsId,
+                        body: PasswordAttemptsRequest(
+                            max_wrong_attempts: maxAttempts,
+                            reset_attempts_after_minutes: 60
+                        )
                     )
-                )
+                }
             }
 
+            SessionManager.shared.arePasswordsConfigured = true
             isSaving = false
             onNext()
+
         } catch APIError.badRequest(let msg) {
             errorMessage = msg
             isSaving = false
